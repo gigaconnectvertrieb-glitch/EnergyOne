@@ -1,0 +1,6 @@
+.env
+.git
+__pycache__
+*.pyc
+agentur.db
+storage
