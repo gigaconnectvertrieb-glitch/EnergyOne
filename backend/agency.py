@@ -748,7 +748,7 @@ def run_coach_loop(user_content, e: Employee, s: Session):
                         tool_results.append({"type":"tool_result","tool_use_id":block.id,"content":json.dumps(result, default=str)})
                 messages.append({"role":"user","content":tool_results})
             if answer is None: answer="Die Anfrage war zu umfangreich für eine direkte Antwort, bitte präzisiere sie."
-        except Exception: answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
+        except Exception as ex: print(f"[COACH ERROR] {type(ex).__name__}: {ex}"); answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
     elif os.getenv("OPENAI_API_KEY") and isinstance(user_content, str):
         try:
             from openai import OpenAI
