@@ -580,7 +580,7 @@ def practice(data: PracticeIn, _: Employee = Depends(current)):
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
             from anthropic import Anthropic
-            result=Anthropic(api_key=anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-4-20250514"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
+            result=Anthropic(api_key=anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
             return {"source":"claude","answer":result.content[0].text}
         except Exception: pass
     key=os.getenv("OPENAI_API_KEY")
@@ -736,7 +736,7 @@ def run_coach_loop(user_content, e: Employee, s: Session):
             tools=ai_tools_for(e.role)
             answer=None
             for _ in range(5):
-                response=client.messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-4-20250514"),max_tokens=800,system=COACH_INSTRUCTIONS,messages=messages,tools=tools)
+                response=client.messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=800,system=COACH_INSTRUCTIONS,messages=messages,tools=tools)
                 if response.stop_reason!="tool_use":
                     answer="".join(b.text for b in response.content if b.type=="text")
                     break
