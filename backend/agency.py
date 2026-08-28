@@ -553,13 +553,14 @@ def create_training(data: TrainingIn, e: Employee = Depends(admin), s: Session =
 
 
 @app.post("/api/trainings/{training_id}/register")
-def register_training(training_id: int, e: Employee = Depends(current), s: Session = Depends(db)):
+def register_training(training_id: int, employee_id: Optional[int] = None, e: Employee = Depends(current), s: Session = Depends(db)):
+    target_id = employee_id if (employee_id and e.role=="admin") else e.id
     training=s.get(Training,training_id)
     if not training: raise HTTPException(404,"Schulung nicht gefunden")
-    if s.scalar(select(TrainingRegistration.id).where(TrainingRegistration.training_id==training_id,TrainingRegistration.employee_id==e.id)): raise HTTPException(409,"Bereits angemeldet")
+    if s.scalar(select(TrainingRegistration.id).where(TrainingRegistration.training_id==training_id,TrainingRegistration.employee_id==target_id)): raise HTTPException(409,"Bereits angemeldet")
     count=s.scalar(select(func.count(TrainingRegistration.id)).where(TrainingRegistration.training_id==training_id)) or 0
     if training.max_participants and count>=training.max_participants: raise HTTPException(409,"Schulung ausgebucht")
-    item=TrainingRegistration(training_id=training_id,employee_id=e.id);s.add(item);log(s,e,"Zu Schulung angemeldet",str(training_id));s.commit();return serialize(item)
+    item=TrainingRegistration(training_id=training_id,employee_id=target_id);s.add(item);log(s,e,"Zu Schulung angemeldet",str(training_id));s.commit();return serialize(item)
 
 
 PITCHES = [
