@@ -224,6 +224,7 @@ class ClosureIn(BaseModel):
     completed_on: date = Field(default_factory=date.today)
     expected_commission: float = Field(default=0, ge=0)
     note: str = ""
+    employee_id: Optional[int] = None
 class ReviewIn(BaseModel): status: str; note: str = ""; provider_id: Optional[int] = None; tariff_id: Optional[int] = None; bracket_id: Optional[int] = None
 class ProviderIn(BaseModel):
     name: str = Field(min_length=2, max_length=150)
@@ -317,8 +318,12 @@ def my_closures(e: Employee = Depends(current), s: Session = Depends(db)):
 
 @app.post("/api/employee/closures")
 def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session = Depends(db)):
-    if e.role in ("admin", "buchhaltung"): raise HTTPException(403, "Abschlüsse werden im Mitarbeiterportal eingereicht")
-    item=ClosureEntry(**data.model_dump(),employee_id=e.id);s.add(item);s.flush();log(s,e,"Abschluss eingereicht",str(item.id));s.commit();return serialize(item)
+    if e.role in ("admin", "buchhaltung"):
+        if not data.employee_id: raise HTTPException(422, "employee_id erforderlich, wenn Admin für einen Mitarbeiter einträgt")
+        owner_id = data.employee_id
+    else:
+        owner_id = e.id
+    item=ClosureEntry(**data.model_dump(exclude={"employee_id"}),employee_id=owner_id);s.add(item);s.flush();log(s,e,"Abschluss eingereicht",str(item.id));s.commit();return serialize(item)
 
 
 @app.get("/api/employee/performance-calendar")
@@ -606,7 +611,7 @@ AI_TOOLS_BASE = [
     {"name":"get_dashboard","description":"Zeigt die aktuellen Kennzahlen (Kunden, offene Aufgaben/Verträge/Rechnungen, Umsatz) für den eingeloggten Nutzer.","input_schema":{"type":"object","properties":{}}},
     {"name":"create_customer","description":"Legt einen neuen Kunden für den eingeloggten Mitarbeiter an.","input_schema":{"type":"object","properties":{"kind":{"type":"string","enum":["privat","firma"]},"first_name":{"type":"string"},"last_name":{"type":"string"},"company":{"type":"string"},"email":{"type":"string"},"phone":{"type":"string"},"postal_code":{"type":"string"},"street":{"type":"string"},"city":{"type":"string"},"usage_kwh":{"type":"number"}},"required":["kind","email","postal_code"]}},
     {"name":"create_task","description":"Legt eine Aufgabe für den eingeloggten Nutzer selbst an.","input_schema":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"},"due_date":{"type":"string","description":"ISO-Datum YYYY-MM-DD"}},"required":["title"]}},
-    {"name":"submit_closure","description":"Reicht eine eigene Abschluss-Meldung ein (nur für Mitarbeiter, nicht für Admins).","input_schema":{"type":"object","properties":{"customer_name":{"type":"string"},"contract_number":{"type":"string"},"product":{"type":"string"},"customer_kind":{"type":"string"},"usage_kwh":{"type":"number"},"note":{"type":"string"}},"required":["customer_name"]}},
+    {"name":"submit_closure","description":"Reicht eine Abschluss-Meldung ein. Mitarbeiter reichen ihre eigene ein; Admins müssen employee_id angeben (z.B. zum abendlichen Nachtragen für einen Mitarbeiter).","input_schema":{"type":"object","properties":{"customer_name":{"type":"string"},"contract_number":{"type":"string"},"product":{"type":"string"},"customer_kind":{"type":"string"},"usage_kwh":{"type":"number"},"note":{"type":"string"},"employee_id":{"type":"integer","description":"Nur für Admins erforderlich"}},"required":["customer_name"]}},
     {"name":"classify_document","description":"Ordnet ein gerade hochgeladenes Dokument ein (Kategorie, ggf. Ablaufdatum/Betrag). Wird nach dem Ansehen eines im Chat mitgeschickten Dokuments aufgerufen.","input_schema":{"type":"object","properties":{"document_id":{"type":"integer"},"category":{"type":"string","enum":["ausweis","bankkarte","gewerbeanmeldung","fuehrungszeugnis","rechnung","sonstiges"]},"expires_on":{"type":"string","description":"ISO-Datum, falls erkennbar (z.B. Gültigkeit Führungszeugnis)"},"amount":{"type":"number","description":"Betrag, falls es eine Rechnung/Beleg ist"},"note":{"type":"string"}},"required":["document_id","category"]}},
 ]
 AI_TOOLS_ADMIN = [
@@ -644,7 +649,7 @@ def run_ai_tool(tool_name: str, tool_input: dict, e: Employee, s: Session):
             data=TaskIn(title=tool_input["title"], description=tool_input.get("description",""), assignee_id=e.id, due_date=date.fromisoformat(tool_input["due_date"]) if tool_input.get("due_date") else None)
             result=create_task(data,e,s); log(s,e,"KI: Aufgabe angelegt",data.title); return result
         if tool_name=="submit_closure":
-            data=ClosureIn(customer_name=tool_input["customer_name"], contract_number=tool_input.get("contract_number"), product=tool_input.get("product","strom"), customer_kind=tool_input.get("customer_kind","privat"), usage_kwh=tool_input.get("usage_kwh",0), note=tool_input.get("note",""))
+            data=ClosureIn(customer_name=tool_input["customer_name"], contract_number=tool_input.get("contract_number"), product=tool_input.get("product","strom"), customer_kind=tool_input.get("customer_kind","privat"), usage_kwh=tool_input.get("usage_kwh",0), note=tool_input.get("note",""), employee_id=tool_input.get("employee_id"))
             result=submit_closure(data,e,s); log(s,e,"KI: Abschluss eingereicht",str(result.get("id"))); return result
         if tool_name=="search_tariffs":
             q=f"%{tool_input['query']}%"
