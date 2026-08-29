@@ -703,7 +703,7 @@ LANDING_JS = '''<script>document.addEventListener('click',function(e){var m=docu
 LANDING_CSS = '''*{box-sizing:border-box}
 body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2e;background:#fff}
 .lHeader{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;padding:14px 6%;background:rgba(13,19,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08)}
-.lLogo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:#fff}
+.lLogo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:#fff;text-decoration:none}
 .lLogo img{width:34px;height:auto}
 .lLoginWrap{position:relative}
 .lLoginBtn{background:linear-gradient(90deg,#f59e0b,#ea580c);color:#0d1320;border:0;padding:11px 22px;border-radius:999px;font-weight:700;cursor:pointer;font-size:14px;transition:transform .15s,opacity .15s}
@@ -782,7 +782,7 @@ body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2
 .profileList li:before{content:"✓";position:absolute;left:0;color:#16a34a;font-weight:800}'''
 
 LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
+<header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <section class="hero"><div class="heroWrap">
 <div>
 <h1>Ein Gesicht für Ihre <span>Energieberatung</span>. Kein Callcenter.</h1>
@@ -847,7 +847,7 @@ return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">${x.r
 </body></html>'''
 
 KARRIERE_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Karriere · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
+<header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <section class="careerHero">
 <h1>Verkaufen, ohne sich zu <span>verbiegen</span>.</h1>
 <p>Bei E1 Direktvertrieb arbeiten Sie eigenverantwortlich, werden persönlich von der Geschäftsführung begleitet und verdienen fair an dem, was Sie leisten. Kein Konzern, keine Warteschleifen, kein Kleingedrucktes.</p>
@@ -906,7 +906,7 @@ document.getElementById('applyResult').textContent='Danke! Wir melden uns bei Ih
 </body></html>'''
 
 IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
+<header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Impressum</h1>
 <h2>Angaben gemäß § 5 TMG</h2>
@@ -925,7 +925,7 @@ IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><
 </body></html>'''
 
 DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
+<header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Datenschutzerklärung</h1>
 <h2>1. Verantwortlicher</h2>
