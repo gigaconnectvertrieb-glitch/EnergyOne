@@ -268,9 +268,15 @@ def files(name:str):
     if not p.exists() or p.parent != STORAGE: raise HTTPException(404,"Datei nicht gefunden")
     return Response(p.read_bytes(),media_type="application/pdf")
 @app.get("/", response_class=HTMLResponse)
-def home(): return HTML
+def home(): return LANDING_HTML
+@app.get("/login", response_class=HTMLResponse)
+def employee_login_page(): return HTML
 @app.get("/admin", response_class=HTMLResponse)
 def admin_login_page(): return HTML_ADMIN
+@app.get("/impressum", response_class=HTMLResponse)
+def impressum_page(): return IMPRESSUM_HTML
+@app.get("/datenschutz", response_class=HTMLResponse)
+def datenschutz_page(): return DATENSCHUTZ_HTML
 
 CSS = '''*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto;margin:0;background:#f3f2fa;color:#1c1a2e}
 header{background:linear-gradient(100deg,#12102a,#221c4d 60%,#2d1f5e);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(20,10,60,.25);position:sticky;top:0;z-index:20}
@@ -333,9 +339,10 @@ tr:hover td{background:#faf9ff}
 .chatBar{display:flex;gap:6px;align-items:center}
 .chatBar input{flex:1;margin:0}
 .fileBtn{cursor:pointer;padding:10px 12px;border:1px solid #dcd9ec;border-radius:10px;background:#f6f5fb}
-.pageHead{margin-bottom:20px}
+.pageHead{margin-bottom:20px;padding-left:16px;border-left:4px solid var(--pageAccent,#7c3aed)}
 .pageHead h1{font-size:24px;margin:0 0 4px}
 .pageHead p{margin:0;color:#6b6885;font-size:13.5px}
+.grid .card{border-top:3px solid var(--kpiAccent,#7c3aed)}
 .empty{color:#8f8ca8;font-size:13.5px;padding:8px 0}
 .searchHit{display:inline-block;background:#f6f5fb;border:1px solid #e3e0f5;border-radius:10px;padding:6px 12px;margin:3px;cursor:pointer;font-size:13px;font-weight:600;color:#4b4768;transition:background .15s,color .15s}
 .searchHit:hover{background:#7c3aed;color:#fff}
@@ -364,7 +371,7 @@ NAV = '''<nav class="navcol">
 </nav>'''
 
 PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
-<div class="pageHead"><h1 id="dashTitle">Dashboard</h1><p id="dashSub">Deine Zahlen auf einen Blick.</p></div>
+<div class="pageHead" style="--pageAccent:#7c3aed"><h1 id="dashTitle">Dashboard</h1><p id="dashSub">Deine Zahlen auf einen Blick.</p></div>
 <div class="grid" id="kpis"></div>
 <div id="empDashboardExtra" class="hidden">
 <section><h2>Neuer Kunde</h2><input id="custName" placeholder="Name / Firma"><input id="mail" placeholder="E-Mail"><input id="cphone" placeholder="Telefon"><input id="plz" placeholder="PLZ"><input id="street" placeholder="Straße, Nr."><input id="city" placeholder="Ort"><input id="usage" placeholder="Verbrauch kWh" type="number"><select id="kind"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider"><option value="">Aktueller Anbieter (optional)</option></select><button id="custSubmitBtn" onclick="customer()">Anlegen</button></section>
@@ -381,7 +388,7 @@ PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
 </div>'''
 
 PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
-<div class="pageHead"><h1>Aufgaben</h1><p>Kunden, Termine und offene Aufgaben der Agentur.</p></div>
+<div class="pageHead" style="--pageAccent:#16a34a"><h1>Aufgaben</h1><p>Kunden, Termine und offene Aufgaben der Agentur.</p></div>
 <section><h2>Neuer Kunde</h2><input id="custName2" placeholder="Name / Firma"><input id="mail2" placeholder="E-Mail"><input id="cphone2" placeholder="Telefon"><input id="plz2" placeholder="PLZ"><input id="street2" placeholder="Straße, Nr."><input id="city2" placeholder="Ort"><input id="usage2" placeholder="Verbrauch kWh" type="number"><select id="kind2"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider2"><option value="">Aktueller Anbieter (optional)</option></select><select id="custStatus2" class="hidden"><option value="neu">Neu</option><option value="bearbeitung">In Bearbeitung</option><option value="abgeschlossen">Abgeschlossen</option><option value="storno">Storno</option><option value="klaerung">Klärungsbedarf</option></select><button id="custSubmitBtn2" onclick="customer2()">Anlegen</button></section>
 <section><h2>Kunden <button onclick="load()">Aktualisieren</button> <button onclick="downloadFile('/export/customers.csv','kunden.csv')">CSV exportieren</button></h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th><th></th></tr></thead><tbody id="customersAdmin"></tbody></table></section>
 <section><h2>Offene Aufgaben</h2><table><tbody id="tasks"></tbody></table></section>
@@ -389,20 +396,20 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 </div>'''
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
-<div class="pageHead"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
+<div class="pageHead" style="--pageAccent:#2563eb"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
 <section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
 <section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
 </div>'''
 
 PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
-<div class="pageHead"><h1>Loginzugänge</h1><p>TOTP-Zugang je Mitarbeiter neu einrichten und Generalschlüssel verwalten.</p></div>
+<div class="pageHead" style="--pageAccent:#dc2626"><h1>Loginzugänge</h1><p>TOTP-Zugang je Mitarbeiter neu einrichten und Generalschlüssel verwalten.</p></div>
 <section><h2>TOTP neu einrichten</h2><p><small>Setzt den Google-Authenticator-Schlüssel des gewählten Mitarbeiters zurück (z.B. bei Handy-Verlust).</small></p><select id="resetEmpId"></select><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
 <section><h2>Generalschlüssel</h2><p><small>Universeller Notfall-Zugang für alle Accounts. Nur persönlich/telefonisch weitergeben.</small></p><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
-<div class="pageHead"><h1>Provision</h1><p>Suche, Prüfung eingereichter Abschlüsse, Team- und Einzelprovision.</p></div>
+<div class="pageHead" style="--pageAccent:#d97706"><h1>Provision</h1><p>Suche, Prüfung eingereichter Abschlüsse, Team- und Einzelprovision.</p></div>
 <section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput2" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('2')"><div id="provSearchResults2"></div><div id="provCommissionResult2"></div></section>
 <section><h2>Abschlüsse prüfen</h2><p><small>Anbieter/Tarif zuweisen — die Provision wird automatisch nach Stufe des Mitarbeiters berechnet.</small></p><div id="pendingClosures"></div></section>
 <section><h2>Team-Provision Gesamt</h2><p><small>IST = abgeschlossene Verträge. Potenzial = wenn auch alle offenen Verträge abgeschlossen würden. "Details" zeigt, welche Aufträge noch offen sind.</small></p><div class="grid" id="teamProvisionKpi"></div><table><thead><tr><th>Mitarbeiter</th><th>IST-Provision</th><th>Offen</th><th>Potenzial</th><th></th></tr></thead><tbody id="teamProvisionList"></tbody></table></section>
@@ -411,7 +418,7 @@ PAGE_PROVISION = '''<div class="page" id="page-provision">
 </div>'''
 
 PAGE_BUCHHALTUNG = '''<div class="page" id="page-buchhaltung">
-<div class="pageHead"><h1>Buchhaltung</h1><p>Agentur-Unterlagen, Mitarbeiter-Abrechnungen und ablaufende Dokumente.</p></div>
+<div class="pageHead" style="--pageAccent:#475569"><h1>Buchhaltung</h1><p>Agentur-Unterlagen, Mitarbeiter-Abrechnungen und ablaufende Dokumente.</p></div>
 <section><h2>Unterlagen (Agentur)</h2><select id="docCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="docFile" type="file"><label>Ablaufdatum (optional) <input id="docExpires" type="date"></label><label>Betrag € (optional) <input id="docAmount" type="number"></label><button onclick="uploadDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="documentList"></tbody></table></section>
 <section><h2>Mitarbeiter-Abrechnung hochladen</h2><input id="abrEmpId" placeholder="Mitarbeiter-ID" type="number"><select id="abrCategory"><option value="abrechnung">Provisionsabrechnung</option><option value="lohnabrechnung">Lohnabrechnung</option></select><input id="abrFile" type="file"><label>Betrag € (optional) <input id="abrAmount" type="number"></label><button onclick="uploadStaffDocument()">Hochladen</button></section>
 <section><h2>Abrechnungen &amp; Unterlagen der Mitarbeiter</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Betrag</th><th></th></tr></thead><tbody id="staffDocsList"></tbody></table></section>
@@ -419,7 +426,7 @@ PAGE_BUCHHALTUNG = '''<div class="page" id="page-buchhaltung">
 </div>'''
 
 PAGE_ZIELE = '''<div class="page" id="page-ziele">
-<div class="pageHead"><h1>Ziele &amp; Incentives</h1><p>Zielerreichung, Teamziele und Prämien.</p></div>
+<div class="pageHead" style="--pageAccent:#ea580c"><h1>Ziele &amp; Incentives</h1><p>Zielerreichung, Teamziele und Prämien.</p></div>
 <section><h2>Zielerreichung</h2><div id="scoreCharts"></div></section>
 <section><h2>Teams gesamt</h2><div id="teamCharts"></div></section>
 <section><h2>Ziel anlegen</h2><input id="goalEmpId" placeholder="Mitarbeiter-ID" type="number"><label>Von <input id="goalStart" type="date"></label><label>Bis <input id="goalEnd" type="date"></label><input id="goalContracts" placeholder="Ziel-Verträge" type="number"><input id="goalRevenue" placeholder="Ziel-Provision €" type="number"><button onclick="createGoal()">Anlegen</button></section>
@@ -427,7 +434,7 @@ PAGE_ZIELE = '''<div class="page" id="page-ziele">
 </div>'''
 
 PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
-<div class="pageHead"><h1>Lernpfad &amp; KI</h1><p>Schulungen und dein persönlicher Vertriebscoach.</p></div>
+<div class="pageHead" style="--pageAccent:#0d9488"><h1>Lernpfad &amp; KI</h1><p>Schulungen und dein persönlicher Vertriebscoach.</p></div>
 <section><h2>Schulungen</h2><div id="trainingAdmin" class="hidden"><input id="trTitle" placeholder="Titel"><label>Start <input id="trStart" type="datetime-local"></label><label>Ende <input id="trEnd" type="datetime-local"></label><input id="trMax" placeholder="Max. Teilnehmer" type="number"><button onclick="createTraining()">Anlegen</button></div><div id="trainingList"></div></section>
 <section><h2>EnergyOne Vertriebscoach</h2><p><small>Dein Coach ist jetzt jederzeit über das Chat-Symbol unten rechts erreichbar.</small></p></section>
 </div>'''
@@ -462,7 +469,7 @@ let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'appl
 let d=await r.json();if(!r.ok)throw Error(d.detail);
 token=d.access_token;isAdmin=d.employee.role==='admin';myTier=d.employee.tier;
 localStorage.setItem('e1_token',token);
-who.innerHTML=d.employee.name+' · '+d.employee.role+' · '+tierBadge(d.employee.tier);
+who.innerHTML=d.employee.name+' · '+d.employee.role+(d.employee.role==='admin'?'':' · '+tierBadge(d.employee.tier));
 portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
 login.classList.add('fadeOut');await new Promise(res=>setTimeout(res,350));login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
@@ -475,7 +482,7 @@ token=saved;
 try{
 let me=await api('/me');
 isAdmin=me.role==='admin';myTier=me.tier;
-who.innerHTML=me.name+' · '+me.role+' · '+tierBadge(me.tier);
+who.innerHTML=me.name+' · '+me.role+(me.role==='admin'?'':' · '+tierBadge(me.tier));
 portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
 login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
@@ -628,5 +635,138 @@ __LOGIN__
 
 HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
 HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
+
+LANDING_CSS = '''*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2e;background:#fff}
+.lHeader{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px 6%;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid #eeecf7}
+.lLogo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px}
+.lLoginBtn{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;border:0;padding:11px 22px;border-radius:999px;font-weight:700;text-decoration:none;font-size:14px;transition:transform .15s,opacity .15s}
+.lLoginBtn:hover{opacity:.92;transform:translateY(-1px)}
+.hero{position:relative;overflow:hidden;padding:90px 6% 100px;text-align:center;background:radial-gradient(circle at 50% 0%,#1a1638,#0b0a1f 65%);color:#fff}
+.hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin:0 0 18px;line-height:1.15}
+.hero h1 span{background:linear-gradient(90deg,#a78bfa,#60a5fa);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:600px;margin:0 auto 34px;color:#c4c1e0;font-size:17px}
+.heroBtns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.heroBtns a{padding:14px 28px;border-radius:999px;font-weight:700;text-decoration:none;font-size:15px}
+.btnPrimary{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff}
+.btnGhost{border:1px solid #4b4780;color:#fff}
+.section{padding:80px 6%;max-width:1100px;margin:0 auto}
+.section h2{font-size:clamp(24px,3vw,32px);text-align:center;margin:0 0 12px}
+.section p.lead{text-align:center;color:#6b6885;max-width:560px;margin:0 auto 48px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px}
+.featCard{background:#f8f7fd;border-radius:18px;padding:30px;text-align:left;border-top:4px solid var(--accent,#7c3aed)}
+.featCard .ico{font-size:28px;margin-bottom:14px;width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--accentSoft,#ede9fe)}
+.featCard h3{margin:0 0 8px;font-size:17px}
+.featCard p{margin:0;color:#6b6885;font-size:14.5px}
+.ctaBand{background:linear-gradient(100deg,#12102a,#221c4d 60%,#2d1f5e);color:#fff;text-align:center;padding:70px 6%}
+.ctaBand h2{margin:0 0 10px}
+.ctaBand p{color:#c4c1e0;margin:0 0 28px}
+.lFooter{padding:40px 6%;text-align:center;color:#8f8ca8;font-size:13.5px;border-top:1px solid #eeecf7}
+.lFooter a{color:#6b6885;text-decoration:none;margin:0 10px}
+.lFooter a:hover{color:#7c3aed}
+.legal{max-width:720px;margin:0 auto;padding:70px 6% 100px}
+.legal h1{font-size:28px}
+.legal h2{font-size:18px;margin-top:32px}
+.legal a{color:#7c3aed}
+.heroWrap{display:grid;grid-template-columns:1.1fr .9fr;gap:50px;align-items:center;max-width:1100px;margin:0 auto;text-align:left}
+.heroWrap h1{text-align:left}
+.heroWrap p{margin:0 0 34px}
+.heroWrap .heroBtns{justify-content:flex-start}
+.heroArt{position:relative}
+@media(max-width:860px){.heroWrap{grid-template-columns:1fr;text-align:center}.heroWrap h1,.heroWrap p{text-align:center}.heroWrap .heroBtns{justify-content:center}.heroArt{display:none}}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:28px;counter-reset:step}
+.step{position:relative;padding:28px 24px 24px;background:#f8f7fd;border-radius:18px}
+.step .num{width:36px;height:36px;border-radius:50%;background:var(--stepGrad,linear-gradient(135deg,#7c3aed,#2563eb));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;margin-bottom:16px}
+.step h3{margin:0 0 8px;font-size:16px}
+.step p{margin:0;color:#6b6885;font-size:14.5px}
+.teamGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px}
+.teamCard{background:#f8f7fd;border-radius:20px;padding:30px;text-align:center}
+.avatar{width:76px;height:76px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px;background:var(--avatarGrad,linear-gradient(135deg,#7c3aed,#2563eb))}
+.teamCard h3{margin:0 0 4px}
+.teamCard .role{color:#7c3aed;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px}
+.teamCard p{color:#6b6885;font-size:14px;margin:0}
+.contactBand{background:#f8f7fd;border-radius:24px;padding:44px;display:flex;flex-wrap:wrap;gap:28px;justify-content:space-between;align-items:center}
+.contactBand a.tel{display:flex;align-items:center;gap:10px;font-weight:700;color:#1c1a2e;text-decoration:none;font-size:16px}
+.contactBand a.tel:hover{color:#7c3aed}'''
+
+LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<section class="hero"><div class="heroWrap">
+<div>
+<h1>Ein Gesicht für Ihre <span>Energieberatung</span> — kein Callcenter.</h1>
+<p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den Tarif, der wirklich passt — fair, transparent, ohne Druck.</p>
+<div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="/login">Mitarbeiter-Login</a></div>
+</div>
+<div class="heroArt"><svg viewBox="0 0 420 420" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="hg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient><radialGradient id="hg2" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#a78bfa" stop-opacity="0.5"/><stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/></radialGradient></defs><circle cx="210" cy="210" r="190" fill="url(#hg2)"/><circle cx="210" cy="210" r="130" fill="none" stroke="#3a3665" stroke-width="1.5" stroke-dasharray="4 8"/><circle cx="210" cy="210" r="95" fill="url(#hg1)" opacity="0.15"/><path d="M226 90 L150 230 H196 L184 330 L280 170 H228 L226 90 Z" fill="url(#hg1)"/><circle cx="90" cy="120" r="7" fill="#60a5fa"/><circle cx="340" cy="300" r="9" fill="#a78bfa"/><circle cx="330" cy="100" r="5" fill="#fff" opacity="0.6"/></svg></div>
+</div></section>
+<section class="section" id="leistungen">
+<h2>Warum Kund:innen uns vertrauen</h2>
+<p class="lead">Wir sind kein Konzern ohne Gesicht — wir stehen mit unserem Namen dafür ein, dass Beratung wieder persönlich wird.</p>
+<div class="grid3">
+<div class="featCard" style="--accent:#7c3aed;--accentSoft:#ede9fe"><div class="ico">🤝</div><h3>Ein echter Mensch, kein Skript</h3><p>Sie sprechen mit jemandem, der Ihre Situation wirklich versteht — nicht mit einer Warteschleife.</p></div>
+<div class="featCard" style="--accent:#0d9488;--accentSoft:#ccfbf1"><div class="ico">🔍</div><h3>Volle Transparenz</h3><p>Wir zeigen Ihnen genau, was Sie zahlen und warum — keine versteckten Kosten, kein Kleingedrucktes, das überrascht.</p></div>
+<div class="featCard" style="--accent:#ea580c;--accentSoft:#ffedd5"><div class="ico">🛡️</div><h3>Beratung ohne Druck</h3><p>Sie entscheiden in Ihrem Tempo. Unser Ziel ist eine Empfehlung, die zu Ihnen passt — nicht der schnellste Abschluss.</p></div>
+</div>
+</section>
+<section class="section" id="ablauf">
+<h2>So läuft Ihre Beratung ab</h2>
+<p class="lead">Drei einfache Schritte, keine Verpflichtung.</p>
+<div class="steps">
+<div class="step" style="--stepGrad:linear-gradient(135deg,#7c3aed,#2563eb)"><div class="num">1</div><h3>Persönliches Gespräch</h3><p>Wir kommen zu Ihnen und hören uns Ihre aktuelle Situation und Ihren Verbrauch an.</p></div>
+<div class="step" style="--stepGrad:linear-gradient(135deg,#0d9488,#0891b2)"><div class="num">2</div><h3>Individueller Vergleich</h3><p>Wir zeigen transparent, welcher Tarif zu Ihnen passt — inklusive aller Kosten.</p></div>
+<div class="step" style="--stepGrad:linear-gradient(135deg,#ea580c,#d97706)"><div class="num">3</div><h3>Sie entscheiden</h3><p>Keine Hektik, kein Druck. Der Wechsel läuft erst, wenn Sie wirklich überzeugt sind.</p></div>
+</div>
+</section>
+<section class="section" id="team">
+<h2>Die Köpfe hinter E1</h2>
+<p class="lead">Wir stehen mit unserem Namen für persönliche, ehrliche Beratung.</p>
+<div class="teamGrid">
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#7c3aed,#2563eb)">OS</div><h3>Orhan Salo</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#0d9488,#0891b2)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
+</div>
+</section>
+<section class="section" id="kontakt">
+<div class="contactBand">
+<div><h2 style="text-align:left;margin:0 0 6px">Fragen? Wir sind erreichbar.</h2><p style="color:#6b6885;margin:0">Rufen Sie uns direkt an — persönlich, kein Callcenter.</p></div>
+<div style="display:flex;flex-direction:column;gap:10px"><a class="tel" href="tel:+4917684109958">📞 0176 84109958 (Orhan Salo)</a><a class="tel" href="tel:+491782209604">📞 0178 2209604 (Luca-Marco Marrancone)</a></div>
+</div>
+</section>
+<div class="ctaBand"><h2>Sie sind Teil unseres Teams?</h2><p>Mitarbeiter melden sich hier im Vertriebsportal an.</p><a class="btnPrimary" href="/login" style="padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:700">Zum Login</a></div>
+<footer class="lFooter">© ''' + str(datetime.utcnow().year) + ''' E1 Direktvertrieb · <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></footer>
+</body></html>'''
+
+IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<div class="legal">
+<h1>Impressum</h1>
+<h2>Angaben gemäß § 5 TMG</h2>
+<p>E1 Direktvertrieb<br>Einzelunternehmen von Orhan Salo und Luca-Marco Marrancone<br>[Anschrift folgt]</p>
+<h2>Kontakt</h2>
+<p>Telefon: 0176 84109958 · 0178 2209604<br>E-Mail: [E-Mail-Adresse]</p>
+<h2>Registereintrag</h2>
+<p>[Handelsregister, Registergericht, Registernummer — falls vorhanden]</p>
+<h2>Umsatzsteuer-ID</h2>
+<p>[USt-IdNr. gemäß § 27a UStG — falls vorhanden]</p>
+<h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+<p>[Name, Anschrift wie oben]</p>
+<p><a href="/">Zurück zur Startseite</a></p>
+</div>
+</body></html>'''
+
+DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<div class="legal">
+<h1>Datenschutzerklärung</h1>
+<h2>1. Verantwortlicher</h2>
+<p>[Firmenname, Anschrift, Kontakt — siehe <a href="/impressum">Impressum</a>]</p>
+<h2>2. Verarbeitung im Vertriebsportal</h2>
+<p>Über dieses Portal verarbeiten wir personenbezogene Daten unserer Mitarbeiter:innen (Zugangsdaten, Provisions- und Leistungsdaten) sowie Daten von Kund:innen, die im Rahmen der Vertriebstätigkeit erfasst werden (Name, Kontaktdaten, Adresse, Verbrauchsdaten). Rechtsgrundlage ist die Erfüllung des Arbeits- bzw. Vertragsverhältnisses (Art. 6 Abs. 1 lit. b DSGVO) sowie berechtigtes Interesse an einer geordneten Vertriebssteuerung (Art. 6 Abs. 1 lit. f DSGVO).</p>
+<h2>3. Speicherdauer</h2>
+<p>Daten werden nur so lange gespeichert, wie es für die genannten Zwecke sowie gesetzliche Aufbewahrungspflichten erforderlich ist.</p>
+<h2>4. Ihre Rechte</h2>
+<p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Wenden Sie sich hierzu an die im Impressum genannte Kontaktadresse.</p>
+<p><a href="/">Zurück zur Startseite</a></p>
+</div>
+</body></html>'''
 
 from . import agency
