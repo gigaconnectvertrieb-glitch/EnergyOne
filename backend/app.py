@@ -11,7 +11,7 @@ from typing import Literal, Optional
 
 import pyotp
 import qrcode
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -42,7 +42,7 @@ STORAGE.mkdir(parents=True, exist_ok=True)
 class Base(DeclarativeBase): pass
 class Employee(Base):
     __tablename__ = "mitarbeiter"
-    id: Mapped[int] = mapped_column(primary_key=True); username: Mapped[str] = mapped_column(String(64), unique=True); email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); totp_secret: Mapped[str] = mapped_column(String(64)); role: Mapped[str] = mapped_column(String(32), default="vertrieb"); name: Mapped[str] = mapped_column(String(120)); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); commission_rate: Mapped[float] = mapped_column(Float, default=0); tier: Mapped[int] = mapped_column(Integer, default=1); vp_nummer: Mapped[Optional[str]] = mapped_column(String(30), nullable=True); active: Mapped[bool] = mapped_column(Boolean, default=True); last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True); username: Mapped[str] = mapped_column(String(64), unique=True); email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); totp_secret: Mapped[str] = mapped_column(String(64)); role: Mapped[str] = mapped_column(String(32), default="vertrieb"); name: Mapped[str] = mapped_column(String(120)); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); commission_rate: Mapped[float] = mapped_column(Float, default=0); tier: Mapped[int] = mapped_column(Integer, default=1); vp_nummer: Mapped[Optional[str]] = mapped_column(String(30), nullable=True); active: Mapped[bool] = mapped_column(Boolean, default=True); last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True); show_on_website: Mapped[bool] = mapped_column(Boolean, default=False); photo_storage_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 class Settings(Base):
     __tablename__ = "einstellungen"
     id: Mapped[int] = mapped_column(primary_key=True); master_key_hash: Mapped[str] = mapped_column(String(255))
@@ -256,9 +256,33 @@ def create_task(data: TaskIn,e: Employee=Depends(current),s: Session=Depends(db)
 def update_employee(employee_id: int, data: dict, e: Employee=Depends(admin), s: Session=Depends(db)):
     x=s.get(Employee,employee_id)
     if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
-    for field in ("name","phone","commission_rate","tier","vp_nummer","role","active","email"):
+    for field in ("name","phone","commission_rate","tier","vp_nummer","role","active","email","show_on_website"):
         if field in data: setattr(x,field,data[field])
-    log(s,e,"Mitarbeiter geändert",x.username); s.commit(); return serialize_employee(x)
+    log(s,e,"Mitarbeiter geändert",x.username); s.commit(); notify_update(); return serialize_employee(x)
+@app.post("/api/employees/{employee_id}/photo")
+def upload_employee_photo(employee_id: int, file: UploadFile = File(...), e: Employee=Depends(admin), s: Session=Depends(db)):
+    x=s.get(Employee,employee_id)
+    if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    if ext not in (".jpg",".jpeg",".png",".webp"): raise HTTPException(422,"Nur JPG/PNG/WEBP erlaubt")
+    storage_name = f"photo-{employee_id}-{secrets.token_hex(6)}{ext}"
+    (STORAGE / storage_name).write_bytes(file.file.read())
+    x.photo_storage_name = storage_name
+    log(s,e,"Mitarbeiterfoto hochgeladen",x.username); s.commit(); notify_update()
+    return serialize_employee(x)
+@app.get("/api/employees/{employee_id}/photo")
+def employee_photo(employee_id: int, s: Session=Depends(db)):
+    x=s.get(Employee,employee_id)
+    if not x or not x.photo_storage_name: raise HTTPException(404,"Kein Foto")
+    p = STORAGE / x.photo_storage_name
+    if not p.exists(): raise HTTPException(404,"Kein Foto")
+    ext = p.suffix.lower()
+    media = {"jpg":"image/jpeg",".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",".webp":"image/webp"}.get(ext,"application/octet-stream")
+    return Response(p.read_bytes(), media_type=media)
+@app.get("/api/public/team")
+def public_team(s: Session=Depends(db)):
+    rows = s.scalars(select(Employee).where(Employee.show_on_website.is_(True), Employee.active.is_(True)).order_by(Employee.role.desc(), Employee.name))
+    return [{"name":x.name, "role": "Teamleitung" if x.role=="admin" else "Vertrieb", "tier": x.tier, "has_photo": bool(x.photo_storage_name), "photo_url": f"/api/employees/{x.id}/photo" if x.photo_storage_name else None} for x in rows]
 @app.get("/api/export/customers.csv")
 def export_customers(_:Employee=Depends(admin),s:Session=Depends(db)):
     rows=[serialize(x) for x in s.scalars(select(Customer))];out=io.StringIO(); w=csv.DictWriter(out,fieldnames=rows[0].keys() if rows else ["id"]);w.writeheader();w.writerows(rows);return Response(out.getvalue(),media_type="text/csv",headers={"Content-Disposition":"attachment; filename=kunden.csv"})
@@ -267,6 +291,14 @@ def files(name:str):
     p=STORAGE/name
     if not p.exists() or p.parent != STORAGE: raise HTTPException(404,"Datei nicht gefunden")
     return Response(p.read_bytes(),media_type="application/pdf")
+@app.get("/static/logo.svg")
+def static_logo():
+    p = Path(__file__).parent / "static" / "logo.svg"
+    return Response(p.read_bytes(), media_type="image/svg+xml")
+@app.get("/static/logo-icon.png")
+def static_logo_icon():
+    p = Path(__file__).parent / "static" / "logo-icon.png"
+    return Response(p.read_bytes(), media_type="image/png")
 @app.get("/", response_class=HTMLResponse)
 def home(): return LANDING_HTML
 @app.get("/login", response_class=HTMLResponse)
@@ -308,28 +340,25 @@ tr:hover td{background:#faf9ff}
 @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 #login.fadeOut{opacity:0;transform:scale(.98);transition:opacity .35s,transform .35s}
 #login.hidden{display:none}
-.loginWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 0%,#1a1638,#0b0a1f 60%);transition:opacity .35s,transform .35s}
+.loginWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 0%,#161c2b,#0d1320 60%);transition:opacity .35s,transform .35s}
 .loginBox{width:100%;max-width:380px;text-align:center;animation:fadeUp .5s ease both}
-.loginLogo{font-size:26px;font-weight:800;color:#fff;letter-spacing:.5px;display:flex;align-items:center;justify-content:center;gap:8px}
-.loginLogo b{background:linear-gradient(90deg,#a78bfa,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
-.loginTag{color:#7c7fa3;font-size:12.5px;letter-spacing:.5px;margin:2px 0 36px}
+.loginIconImg{width:88px;height:auto;margin:0 auto 14px;display:block}
+.loginWordmark{font-size:24px;font-weight:700;color:#fff;letter-spacing:.3px;margin-bottom:6px}
+.loginWordmark b{color:#f5b942}
+.loginTag{color:#8a7550;font-size:11.5px;letter-spacing:1px;margin:0 0 32px}
 .loginStep{display:none}
 .loginStep.active{display:block;animation:fadeUp .3s ease both}
-.loginBox input{width:100%;box-sizing:border-box;background:#1c1a35;border:1px solid #322f57;color:#fff;padding:15px 16px;font-size:15px;outline:none;margin:0 0 14px;border-radius:12px;text-align:center;letter-spacing:.5px}
-.loginBox input::placeholder{color:#6b6890}
-.loginBox input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.2)}
-.loginBox button{width:100%;background:linear-gradient(90deg,#7c3aed,#3b82f6);border:0;color:#fff;padding:14px;border-radius:12px;font-weight:700;cursor:pointer;font-size:15px;margin:4px 0 0}
-.loginVpShown{color:#9c98c4;font-size:13px;margin-bottom:14px}
-.loginVpShown a{color:#a78bfa;text-decoration:none;margin-left:6px}
-.loginHint{color:#5f5c85;font-size:12px;margin-top:22px;line-height:1.5}
-.loginHint a{color:#8b87b5}
-.internalLoginBtn{display:block;margin:22px auto 0;width:fit-content;padding:9px 18px;border:1px solid #322f57;border-radius:999px;color:#9c98c4;font-size:12.5px;font-weight:600;text-decoration:none;transition:border-color .15s,color .15s}
-.internalLoginBtn:hover{border-color:#7c3aed;color:#c4b5fd}
+.loginBox input{width:100%;box-sizing:border-box;background:#171d2c;border:1px solid #34405c;color:#fff;padding:15px 16px;font-size:15px;outline:none;margin:0 0 14px;border-radius:12px;text-align:center;letter-spacing:.5px}
+.loginBox input::placeholder{color:#6b7590}
+.loginBox input:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.2)}
+.loginBox button{width:100%;background:linear-gradient(90deg,#f59e0b,#ea580c);border:0;color:#0d1320;padding:14px;border-radius:12px;font-weight:700;cursor:pointer;font-size:15px;margin:4px 0 0}
+.loginVpShown{color:#9ca3b8;font-size:13px;margin-bottom:14px}
+.loginVpShown a{color:#fbbf24;text-decoration:none;margin-left:6px}
+.loginHint{color:#5b6478;font-size:12px;margin-top:22px;line-height:1.5}
+.loginHint a{color:#8f97ab}
+.internalLoginBtn{display:block;margin:22px auto 0;width:fit-content;padding:9px 18px;border:1px solid #34405c;border-radius:999px;color:#9ca3b8;font-size:12.5px;font-weight:600;text-decoration:none;transition:border-color .15s,color .15s}
+.internalLoginBtn:hover{border-color:#f59e0b;color:#fbbf24}
 .adminLoginWrap{background:radial-gradient(circle at 50% 0%,#1c2230,#090a0d 60%)}
-.adminLoginWrap .loginLogo b{background:linear-gradient(90deg,#fbbf24,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent}
-.adminLoginWrap .loginBox button{background:linear-gradient(90deg,#f59e0b,#ea580c)}
-.adminLoginWrap .loginBox input:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.2)}
-.adminLoginWrap .loginHint a{color:#d4a24e}
 .abar{background:#eef0f7;border-radius:8px;overflow:hidden;height:18px}
 .abar>div{height:100%;width:0;transition:width 1s cubic-bezier(.22,1,.36,1);background:linear-gradient(90deg,#7c3aed,#2563eb)}
 .chatWrap{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding:6px 2px;margin-bottom:10px}
@@ -398,7 +427,8 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
 <div class="pageHead" style="--pageAccent:#2563eb"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
 <section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
-<section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
+<section><h2>Mitarbeiterliste</h2><p><small>"Website" zeigt Name+Foto öffentlich auf der Landingpage (Vertrauens-Sektion für Besucher).</small></p><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th>Öffentlich</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
+<section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
 </div>'''
 
@@ -439,7 +469,7 @@ PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
 <section><h2>EnergyOne Vertriebscoach</h2><p><small>Dein Coach ist jetzt jederzeit über das Chat-Symbol unten rechts erreichbar.</small></p></section>
 </div>'''
 
-SCRIPT = '''let token='';let isAdmin=false;let myTier=null;
+SCRIPT = '''let token='';let isAdmin=false;let myTier=null;let myId=null;
 const api=async(p,o={})=>{o.headers={...(o.headers||{}),Authorization:'Bearer '+token};let r=await fetch('/api'+p,o);if(!r.ok)throw Error(await r.text());return r.json()};
 async function downloadFile(p,filename){let r=await fetch('/api'+p,{headers:{Authorization:'Bearer '+token}});if(!r.ok){alert(await r.text());return}let blob=await r.blob();let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url)}
 function toCsv(rows){if(!rows.length)return'';let headers=Object.keys(rows[0]);return [headers.join(';'),...rows.map(r=>headers.map(h=>String(r[h]??'').replace(/;/g,',')).join(';'))].join('\\n')}
@@ -452,7 +482,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
 let ws=null;
@@ -467,7 +497,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAct
 async function signIn(){try{
 let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username.value,code:code.value})});
 let d=await r.json();if(!r.ok)throw Error(d.detail);
-token=d.access_token;isAdmin=d.employee.role==='admin';myTier=d.employee.tier;
+token=d.access_token;isAdmin=d.employee.role==='admin';myTier=d.employee.tier;myId=d.employee.id;
 localStorage.setItem('e1_token',token);
 who.innerHTML=d.employee.name+' · '+d.employee.role+(d.employee.role==='admin'?'':' · '+tierBadge(d.employee.tier));
 portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
@@ -481,7 +511,7 @@ let saved=localStorage.getItem('e1_token');if(!saved)return;
 token=saved;
 try{
 let me=await api('/me');
-isAdmin=me.role==='admin';myTier=me.tier;
+isAdmin=me.role==='admin';myTier=me.tier;myId=me.id;
 who.innerHTML=me.name+' · '+me.role+(me.role==='admin'?'':' · '+tierBadge(me.tier));
 portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
 login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
@@ -587,7 +617,12 @@ else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'ap
 input.value='';await loadCoach()
 }catch(e){alert('Coach-Nachricht fehlgeschlagen: '+e.message)}}
 async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
-async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
+async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td><label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
+async function toggleShowOnWebsite(id,checked){await api('/employees/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
+async function uploadEmployeePhoto(id,input){let f=input.files[0];if(!f)return;let fd=new FormData();fd.append('file',f);await fetch('/api/employees/'+id+'/photo',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});alert('Foto hochgeladen')}
+async function loadMyPublicProfile(){let me=await api('/me');let cb=document.getElementById('myShowOnWebsite');if(cb)cb.checked=!!me.show_on_website}
+async function toggleMyShowOnWebsite(checked){await api('/employees/'+myId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
+async function uploadMyPhoto(input){let f=input.files[0];if(!f)return;let fd=new FormData();fd.append('file',f);await fetch('/api/employees/'+myId+'/photo',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});alert('Foto hochgeladen')}
 async function toggleEmployeeActive(id){if(!confirm('Status wirklich ändern?'))return;try{await api('/employees/'+id+'/toggle-active',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function deleteEmployeeAccount(id,name){if(!confirm('Account von "'+name+'" löschen? Login/TOTP werden entfernt, Kunden/Provisionen bleiben für die Buchhaltung erhalten.'))return;try{await api('/employees/'+id+'/delete-account',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function purgeEmployee(id,name){if(!confirm('ACHTUNG: "'+name+'" WIRKLICH ALLES löschen? Kunden, Abschlüsse, Provisionen, Tagesmeldungen und Dokumente werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden!'))return;if(prompt('Zum Bestätigen "LÖSCHEN" eingeben:')!=='LÖSCHEN')return;try{await api('/employees/'+id,{method:'DELETE'});await loadEmployees()}catch(e){alert(e.message)}}
@@ -603,10 +638,11 @@ async function loadTeamLeaderboard(){let rows=await api('/team-leaderboard');let
 async function exportTeamCsv(){let rows=await api('/admin/commission-overview');let blob=new Blob([toCsv(rows)],{type:'text/csv'});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='mitarbeiter-zahlen.csv';a.click();URL.revokeObjectURL(url)}'''
 
 LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
-LOGO_ICON_ADMIN = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#ea580c"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg2)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
 
 LOGIN_EMPLOYEE = '''<div id="login" class="loginWrap"><div class="loginBox">
-<div class="loginLogo">''' + LOGO_ICON + ''' E1 <b>Direktvertrieb</b></div><div class="loginTag">VERTRIEBSPORTAL</div>
+<img src="/static/logo-icon.png" alt="E1 Direktvertrieb" class="loginIconImg">
+<div class="loginWordmark">E1 <b>Direktvertrieb</b></div>
+<div class="loginTag">ENERGIE, DIE ZU IHNEN PASST.</div>
 <div class="loginStep active" id="loginStep1"><input id="username" placeholder="VP-Nummer" onkeydown="if(event.key==='Enter')goToStep2()"><button onclick="goToStep2()">Weiter</button></div>
 <div class="loginStep" id="loginStep2"><div class="loginVpShown"><span id="vpShown"></span><a href="#" onclick="backToStep1();return false">ändern</a></div><input id="code" placeholder="Authentifizierungs-Code" onkeydown="if(event.key==='Enter')signIn()"><button onclick="signIn()">Bestätigen</button></div>
 <p class="loginHint">Code aus Google Authenticator. Bei Verlust: Generalschlüssel oder Admin um TOTP-Reset bitten.</p>
@@ -614,7 +650,9 @@ LOGIN_EMPLOYEE = '''<div id="login" class="loginWrap"><div class="loginBox">
 </div></div>'''
 
 LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="loginBox">
-<div class="loginLogo">''' + LOGO_ICON_ADMIN + ''' E1 <b>Admin</b></div><div class="loginTag">ADMIN PORTAL ZUGANG</div>
+<img src="/static/logo-icon.png" alt="E1 Direktvertrieb Admin" class="loginIconImg">
+<div class="loginWordmark">E1 <b>Direktvertrieb</b></div>
+<div class="loginTag">ADMIN PORTAL ZUGANG</div>
 <div class="loginStep active" id="loginStep1"><input id="username" placeholder="Benutzername"><input id="code" placeholder="Code / Generalschlüssel" onkeydown="if(event.key==='Enter')signIn()"><button onclick="signIn()">Anmelden</button></div>
 <p class="loginHint">Nur für Administratoren.<br><a href="/">Zum Mitarbeiter-Login</a></p>
 </div></div>'''
@@ -639,16 +677,17 @@ HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><met
 LANDING_CSS = '''*{box-sizing:border-box}
 body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2e;background:#fff}
 .lHeader{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px 6%;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid #eeecf7}
-.lLogo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px}
-.lLoginBtn{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;border:0;padding:11px 22px;border-radius:999px;font-weight:700;text-decoration:none;font-size:14px;transition:transform .15s,opacity .15s}
+.lLogo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px;color:#0d1320}
+.lLogo img{width:28px;height:auto}
+.lLoginBtn{background:linear-gradient(90deg,#f59e0b,#ea580c);color:#0d1320;border:0;padding:11px 22px;border-radius:999px;font-weight:700;text-decoration:none;font-size:14px;transition:transform .15s,opacity .15s}
 .lLoginBtn:hover{opacity:.92;transform:translateY(-1px)}
-.hero{position:relative;overflow:hidden;padding:90px 6% 100px;text-align:center;background:radial-gradient(circle at 50% 0%,#1a1638,#0b0a1f 65%);color:#fff}
+.hero{position:relative;overflow:hidden;padding:90px 6% 100px;text-align:center;background:radial-gradient(circle at 50% 0%,#1a2338,#0d1320 65%);color:#fff}
 .hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin:0 0 18px;line-height:1.15}
-.hero h1 span{background:linear-gradient(90deg,#a78bfa,#60a5fa);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero h1 span{background:linear-gradient(90deg,#fbbf24,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{max-width:600px;margin:0 auto 34px;color:#c4c1e0;font-size:17px}
 .heroBtns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .heroBtns a{padding:14px 28px;border-radius:999px;font-weight:700;text-decoration:none;font-size:15px}
-.btnPrimary{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff}
+.btnPrimary{background:linear-gradient(90deg,#f59e0b,#ea580c);color:#0d1320}
 .btnGhost{border:1px solid #4b4780;color:#fff}
 .section{padding:80px 6%;max-width:1100px;margin:0 auto}
 .section h2{font-size:clamp(24px,3vw,32px);text-align:center;margin:0 0 12px}
@@ -658,7 +697,7 @@ body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2
 .featCard .ico{font-size:28px;margin-bottom:14px;width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--accentSoft,#ede9fe)}
 .featCard h3{margin:0 0 8px;font-size:17px}
 .featCard p{margin:0;color:#6b6885;font-size:14.5px}
-.ctaBand{background:linear-gradient(100deg,#12102a,#221c4d 60%,#2d1f5e);color:#fff;text-align:center;padding:70px 6%}
+.ctaBand{background:linear-gradient(100deg,#0d1320,#1a2338 60%,#0d1320);color:#fff;text-align:center;padding:70px 6%}
 .ctaBand h2{margin:0 0 10px}
 .ctaBand p{color:#c4c1e0;margin:0 0 28px}
 .lFooter{padding:40px 6%;text-align:center;color:#8f8ca8;font-size:13.5px;border-top:1px solid #eeecf7}
@@ -690,14 +729,14 @@ body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2
 .contactBand a.tel:hover{color:#7c3aed}'''
 
 LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
 <section class="hero"><div class="heroWrap">
 <div>
 <h1>Ein Gesicht für Ihre <span>Energieberatung</span> — kein Callcenter.</h1>
 <p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den Tarif, der wirklich passt — fair, transparent, ohne Druck.</p>
 <div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="/login">Mitarbeiter-Login</a></div>
 </div>
-<div class="heroArt"><svg viewBox="0 0 420 420" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="hg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient><radialGradient id="hg2" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#a78bfa" stop-opacity="0.5"/><stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/></radialGradient></defs><circle cx="210" cy="210" r="190" fill="url(#hg2)"/><circle cx="210" cy="210" r="130" fill="none" stroke="#3a3665" stroke-width="1.5" stroke-dasharray="4 8"/><circle cx="210" cy="210" r="95" fill="url(#hg1)" opacity="0.15"/><path d="M226 90 L150 230 H196 L184 330 L280 170 H228 L226 90 Z" fill="url(#hg1)"/><circle cx="90" cy="120" r="7" fill="#60a5fa"/><circle cx="340" cy="300" r="9" fill="#a78bfa"/><circle cx="330" cy="100" r="5" fill="#fff" opacity="0.6"/></svg></div>
+<div class="heroArt" style="text-align:center"><img src="/static/logo-icon.png" alt="E1 Direktvertrieb" style="width:100%;max-width:340px;filter:drop-shadow(0 20px 60px rgba(245,158,11,.25))"></div>
 </div></section>
 <section class="section" id="leistungen">
 <h2>Warum Kund:innen uns vertrauen</h2>
@@ -721,10 +760,28 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <h2>Die Köpfe hinter E1</h2>
 <p class="lead">Wir stehen mit unserem Namen für persönliche, ehrliche Beratung.</p>
 <div class="teamGrid">
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#7c3aed,#2563eb)">OS</div><h3>Orhan Salo</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#0d9488,#0891b2)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
 </div>
 </section>
+<section class="section" id="unser-team">
+<h2>Unser Vertriebsteam</h2>
+<p class="lead">Die Menschen, die Ihnen persönlich gegenübersitzen.</p>
+<div class="teamGrid" id="dynamicTeamGrid"><p class="lead">Team wird geladen…</p></div>
+</section>
+<script>
+fetch('/api/public/team').then(r=>r.json()).then(rows=>{
+let list=rows.filter(x=>x.role==='Vertrieb');
+let grid=document.getElementById('dynamicTeamGrid');
+let sec=document.getElementById('unser-team');
+if(!list.length){sec.style.display='none';return}
+grid.innerHTML=list.map(x=>{
+let initials=x.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+let avatar=x.photo_url?`<img src="${x.photo_url}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;margin:0 auto 16px;display:block">`:`<div class="avatar">${initials}</div>`;
+return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">Vertrieb${x.tier?' · Stufe '+x.tier:''}</div></div>`;
+}).join('');
+}).catch(()=>{document.getElementById('unser-team').style.display='none'});
+</script>
 <section class="section" id="kontakt">
 <div class="contactBand">
 <div><h2 style="text-align:left;margin:0 0 6px">Fragen? Wir sind erreichbar.</h2><p style="color:#6b6885;margin:0">Rufen Sie uns direkt an — persönlich, kein Callcenter.</p></div>
@@ -736,7 +793,7 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 </body></html>'''
 
 IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
 <div class="legal">
 <h1>Impressum</h1>
 <h2>Angaben gemäß § 5 TMG</h2>
@@ -754,7 +811,7 @@ IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><
 </body></html>'''
 
 DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo">''' + LOGO_ICON.replace('width="30" height="30"','width="26" height="26"') + ''' E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
 <div class="legal">
 <h1>Datenschutzerklärung</h1>
 <h2>1. Verantwortlicher</h2>
