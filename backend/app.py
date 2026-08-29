@@ -817,8 +817,8 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <h2>Die Köpfe hinter E1</h2>
 <p class="lead">Wir stehen mit unserem Namen für persönliche, ehrliche Beratung.</p>
 <div class="teamGrid">
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Head of Sales &amp; Mitgründer</div><p>Verantwortet Vertrieb und Vertriebsstrategie bei E1 Direktvertrieb. Orhan steht selbst im direkten Kundenkontakt und lebt vor, wie faire Beratung funktioniert.</p></div>
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Head of Team &amp; Mitgründer</div><p>Verantwortet Teamaufbau und Organisation bei E1 Direktvertrieb. Luca-Marco sorgt dafür, dass aus Einzelkämpfern ein eingespieltes Team wird.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Head of Sales &amp; Mitgründer</div><p>Verantwortet Vertrieb, Vertriebsstrategie und die Entwicklung des Teams bei E1 Direktvertrieb. Orhan steht selbst im direkten Kundenkontakt und lebt vor, wie faire Beratung funktioniert.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Head of Team &amp; Mitgründer</div><p>Verantwortet Teamaufbau, Organisation und den täglichen Ablauf bei E1 Direktvertrieb. Luca-Marco sorgt dafür, dass aus Einzelkämpfern ein eingespieltes Team wird.</p></div>
 </div>
 </section>
 <section class="section" id="wissen">
