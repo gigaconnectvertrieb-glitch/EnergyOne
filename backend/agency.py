@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update
 
 
 class Team(Base):
@@ -325,7 +325,7 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
         owner_id = data.employee_id
     else:
         owner_id = e.id
-    item=ClosureEntry(**data.model_dump(exclude={"employee_id"}),employee_id=owner_id);s.add(item);s.flush();log(s,e,"Abschluss eingereicht",str(item.id));s.commit();return serialize(item)
+    item=ClosureEntry(**data.model_dump(exclude={"employee_id"}),employee_id=owner_id);s.add(item);s.flush();log(s,e,"Abschluss eingereicht",str(item.id));s.commit();notify_update();return serialize(item)
 
 
 @app.get("/api/employee/performance-calendar")
@@ -378,6 +378,16 @@ def all_commission_overview(_: Employee = Depends(admin), s: Session = Depends(d
         status.rate=rate; status.updated_at=datetime.utcnow()
         result.append({"employee_id":employee.id,"name":employee.name,"contracts_cancelled":cancelled,"cancellation_rate":rate,"storno_alert":status.alert, **summary})
     s.commit()
+    return result
+
+@app.get("/api/team-leaderboard")
+def team_leaderboard(_: Employee = Depends(current), s: Session = Depends(db)):
+    result=[]
+    for employee in s.scalars(select(Employee).where(Employee.active.is_(True), Employee.role=="vertrieb").order_by(Employee.name)):
+        rows=list(s.scalars(select(ClosureEntry).where(ClosureEntry.employee_id==employee.id)))
+        summary=commission_summary(rows)
+        result.append({"name":employee.name,"tier":employee.tier,"contracts_completed":summary["contracts_completed"],"contracts_cancelled":summary["_cancelled"],"cancellation_rate":summary["_rate"]})
+    result.sort(key=lambda x:x["contracts_completed"],reverse=True)
     return result
 
 
@@ -514,7 +524,7 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
         if not bracket: raise HTTPException(422,f"Keine passende Provisionsstaffel für Tarif {data.tariff_id}, Stufe {owner.tier}, {item.usage_kwh} kWh gefunden")
     if bracket:
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
-    log(s,e,"Abschluss geprüft",str(item.id));s.commit();return serialize(item)
+    log(s,e,"Abschluss geprüft",str(item.id));s.commit();notify_update();return serialize(item)
 
 
 @app.get("/api/providers")
@@ -576,7 +586,7 @@ def save_daily_performance(data: DailyPerformanceIn, e: Employee = Depends(curre
         item.contracts=data.contracts;item.cancellations=data.cancellations;item.note=data.note;item.updated_at=datetime.utcnow()
     else:
         item=DailyPerformance(**data.model_dump(),employee_id=e.id);s.add(item)
-    log(s,e,"Tagesmeldung gespeichert",data.entry_date.isoformat());s.commit();return {**serialize(item),"net":item.contracts-item.cancellations}
+    log(s,e,"Tagesmeldung gespeichert",data.entry_date.isoformat());s.commit();notify_update();return {**serialize(item),"net":item.contracts-item.cancellations}
 
 
 @app.get("/api/admin/daily-performance")

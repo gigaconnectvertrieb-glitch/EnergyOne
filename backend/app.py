@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import csv
 import io
@@ -10,7 +11,7 @@ from typing import Literal, Optional
 
 import pyotp
 import qrcode
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -119,8 +120,38 @@ def migrate_columns():
             try: conn.execute(text('ALTER TABLE "mitarbeiter" DROP COLUMN "password_hash"'))
             except Exception: pass
 
+class ConnectionManager:
+    def __init__(self): self.connections: list[WebSocket] = []
+    async def connect(self, ws: WebSocket):
+        await ws.accept(); self.connections.append(ws)
+    def disconnect(self, ws: WebSocket):
+        if ws in self.connections: self.connections.remove(ws)
+    async def broadcast(self, message: str):
+        dead = []
+        for ws in self.connections:
+            try: await ws.send_text(message)
+            except Exception: dead.append(ws)
+        for ws in dead: self.disconnect(ws)
+manager = ConnectionManager()
+MAIN_LOOP: Optional[asyncio.AbstractEventLoop] = None
+def notify_update(kind: str = "update"):
+    if MAIN_LOOP: asyncio.run_coroutine_threadsafe(manager.broadcast(kind), MAIN_LOOP)
+
+@app.websocket("/ws")
+async def ws_endpoint(websocket: WebSocket, token: str = ""):
+    try: eid = int(jwt.decode(token, SECRET, algorithms=["HS256"])["sub"])
+    except (JWTError, ValueError):
+        await websocket.close(code=4001); return
+    await manager.connect(websocket)
+    try:
+        while True: await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
 @app.on_event("startup")
 def startup():
+    global MAIN_LOOP
+    MAIN_LOOP = asyncio.get_event_loop()
     migrate_columns()
     Base.metadata.create_all(engine)
     with SessionLocal() as s:
@@ -177,7 +208,7 @@ def customers(q: str="", limit: int=100, offset: int=0, e: Employee=Depends(curr
     return [serialize(x) for x in s.scalars(stmt.order_by(Customer.created_at.desc()).limit(limit).offset(offset))]
 @app.post("/api/customers")
 def create_customer(data: CustomerIn, e: Employee=Depends(current), s: Session=Depends(db)):
-    owner=data.owner_id if e.role=="admin" and data.owner_id else e.id; c=Customer(**data.model_dump(exclude={"owner_id"}),owner_id=owner); s.add(c); s.flush(); s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde angelegt")); log(s,e,"Kunde angelegt",str(c.id)); s.commit(); return serialize(c)
+    owner=data.owner_id if e.role=="admin" and data.owner_id else e.id; c=Customer(**data.model_dump(exclude={"owner_id"}),owner_id=owner); s.add(c); s.flush(); s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde angelegt")); log(s,e,"Kunde angelegt",str(c.id)); s.commit(); notify_update(); return serialize(c)
 @app.put("/api/customers/{customer_id}")
 def update_customer(customer_id: int, data: CustomerUpdateIn, e: Employee=Depends(current), s: Session=Depends(db)):
     c=s.get(Customer,customer_id)
@@ -185,7 +216,7 @@ def update_customer(customer_id: int, data: CustomerUpdateIn, e: Employee=Depend
     if e.role!="admin" and c.owner_id!=e.id: raise HTTPException(403,"Keine Berechtigung")
     if data.status is not None and e.role!="admin": raise HTTPException(403,"Nur Admin darf den Status ändern")
     for field,value in data.model_dump(exclude_unset=True).items(): setattr(c,field,value)
-    s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde bearbeitet")); log(s,e,"Kunde bearbeitet",str(c.id)); s.commit(); return serialize(c)
+    s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde bearbeitet")); log(s,e,"Kunde bearbeitet",str(c.id)); s.commit(); notify_update(); return serialize(c)
 @app.get("/api/employees")
 def employees(_: Employee=Depends(admin), s: Session=Depends(db)): return [serialize_employee(x) for x in s.scalars(select(Employee).order_by(Employee.name))]
 def generate_vp_nummer(s: Session) -> str:
@@ -195,7 +226,7 @@ def generate_vp_nummer(s: Session) -> str:
 @app.post("/api/employees")
 def create_employee(data: EmployeeIn, e: Employee=Depends(admin), s: Session=Depends(db)):
     vp = generate_vp_nummer(s)
-    secret=pyotp.random_base32(); x=Employee(**data.model_dump(),username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); log(s,e,"Mitarbeiter angelegt",vp); s.commit()
+    secret=pyotp.random_base32(); x=Employee(**data.model_dump(),username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); log(s,e,"Mitarbeiter angelegt",vp); s.commit(); notify_update()
     return {**serialize_employee(x), **totp_setup(x.username, secret)}
 @app.post("/api/employees/{employee_id}/reset-totp")
 def reset_totp(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
@@ -208,7 +239,7 @@ def toggle_employee_active(employee_id: int, e: Employee=Depends(admin), s: Sess
     x=s.get(Employee,employee_id)
     if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
     if x.id==e.id: raise HTTPException(400,"Eigenen Account nicht deaktivieren")
-    x.active=not x.active; log(s,e,"Mitarbeiter deaktiviert" if not x.active else "Mitarbeiter aktiviert",x.username); s.commit()
+    x.active=not x.active; log(s,e,"Mitarbeiter deaktiviert" if not x.active else "Mitarbeiter aktiviert",x.username); s.commit(); notify_update()
     return serialize_employee(x)
 @app.get("/api/tasks")
 def tasks(e: Employee=Depends(current), s: Session=Depends(db)):
@@ -338,6 +369,7 @@ PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
 <section><h2>Abschluss melden</h2><input id="clCustName" placeholder="Kundenname"><select id="clProduct"><option value="strom">Strom</option><option value="gas">Gas</option></select><select id="clKind"><option value="privat">Privat</option><option value="firma">Firma</option></select><input id="clUsage" placeholder="Verbrauch kWh" type="number"><input id="clNote" placeholder="Bemerkung (optional)"><button onclick="submitClosure()">Melden</button><p id="closureResult"></p></section>
 <section><h2>Meine Tagesmeldung</h2><label>Datum <input id="dailyDate" type="date"></label><button onclick="changeDaily(-1,'contracts')">−</button><b id="contractsCount">0</b><button onclick="changeDaily(1,'contracts')">+</button> Verträge <button onclick="changeDaily(-1,'cancellations')">−</button><b id="cancellationsCount">0</b><button onclick="changeDaily(1,'cancellations')">+</button> Stornos<br><input id="dailyNote" placeholder="Bemerkung (optional)"><button onclick="saveDaily()">Tagesmeldung speichern</button><p id="dailyResult"></p></section>
 <section><h2>Meine Provisionen &amp; Vertragsstatus</h2><div class="grid" id="commissionKpis"></div><table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Status</th><th>Provision</th></tr></thead><tbody id="closureList"></tbody></table></section>
+<section><h2>Team-Rangliste</h2><p><small>Wer steht wo — zur gegenseitigen Motivation.</small></p><div id="teamLeaderboard"></div></section>
 <section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('')"><div id="provSearchResults"></div><div id="provCommissionResult"></div></section>
 <section><h2>Meine Unterlagen</h2><select id="myDocCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="myDocFile" type="file"><label>Ablaufdatum (optional) <input id="myDocExpires" type="date"></label><button onclick="uploadMyDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="myDocumentList"></tbody></table></section>
 </div>
@@ -409,9 +441,19 @@ function goToStep2(){if(!username.value.trim())return;vpShown.textContent=userna
 function backToStep1(){loginStep2.classList.remove('active');loginStep1.classList.add('active');code.value='';username.focus()}
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
+connectWs();
 if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
-else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments()}
+else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
+let ws=null;
+function connectWs(){
+if(ws){try{ws.onclose=null;ws.close()}catch(err){}}
+let proto=location.protocol==='https:'?'wss:':'ws:';
+ws=new WebSocket(proto+'//'+location.host+'/ws?token='+encodeURIComponent(token));
+ws.onmessage=()=>refreshActivePage();
+ws.onclose=()=>{if(token)setTimeout(connectWs,3000)};
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshActivePage()});
 async function signIn(){try{
 let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username.value,code:code.value})});
 let d=await r.json();if(!r.ok)throw Error(d.detail);
@@ -442,7 +484,7 @@ function resetIdleTimer(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{aler
 function refreshActivePage(){
 if(!token||document.hidden)return;
 let active=document.querySelector('.page.active');if(!active)return;
-if(active.id==='page-dashboard'){if(isAdmin){loadTeamBars();loadAllDaily();load()}else{loadCommissions()}}
+if(active.id==='page-dashboard'){if(isAdmin){loadTeamBars();loadAllDaily();load()}else{loadCommissions();loadTeamLeaderboard()}}
 else if(active.id==='page-provision'){loadTeamProvision();loadStornoOverview();loadPendingClosures()}
 else if(active.id==='page-ziele'){loadCharts()}
 else if(active.id==='page-mitarbeiter'){loadEmployees()}
@@ -526,6 +568,7 @@ async function submitClosureForEmployee(){await api('/employee/closures',{method
 async function rotateMasterKey(){let r=await api('/auth/master-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_key:newMasterKey.value||null})});masterKeyResult.innerHTML='Neuer Generalschlüssel (persönlich/telefonisch weitergeben, wird nirgends automatisch verschickt): <b>'+r.new_key+'</b>';newMasterKey.value=''}
 async function loadAllDaily(){let rows=await api('/admin/daily-performance');allDailyList.innerHTML=rows.map(x=>`<tr><td>${x.entry_date}</td><td>${x.employee}</td><td>${x.contracts}</td><td>${x.cancellations}</td><td>${x.net}</td></tr>`).join('')||'<p>Keine Meldungen.</p>'}
 async function loadTeamBars(){let rows=await api('/admin/commission-overview');let max=Math.max(1,...rows.map(x=>x.contracts_completed));teamBars.innerHTML=rows.map(x=>`<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><b>${x.name}</b><span>${x.contracts_completed} Verträge · Storno ${x.contracts_cancelled} (<span style="color:${x.storno_alert?'#dc2626':'#16a34a'};font-weight:700">${x.cancellation_rate}%</span>)</span></div><div class="abar"><div data-w="${Math.round(x.contracts_completed/max*100)}"></div></div></div>`).join('')||'<p>Keine Daten.</p>';requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('#teamBars .abar>div').forEach(el=>el.style.width=el.dataset.w+'%')))}
+async function loadTeamLeaderboard(){let rows=await api('/team-leaderboard');let max=Math.max(1,...rows.map(x=>x.contracts_completed));teamLeaderboard.innerHTML=rows.map((x,i)=>`<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><b>${i===0&&x.contracts_completed>0?'🏆 ':''}${x.name}</b> ${tierBadge(x.tier)}<span>${x.contracts_completed} Verträge</span></div><div class="abar"><div data-w="${Math.round(x.contracts_completed/max*100)}"></div></div></div>`).join('')||'<p class=empty>Noch keine Daten.</p>';requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('#teamLeaderboard .abar>div').forEach(el=>el.style.width=el.dataset.w+'%')))}
 async function exportTeamCsv(){let rows=await api('/admin/commission-overview');let blob=new Blob([toCsv(rows)],{type:'text/csv'});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='mitarbeiter-zahlen.csv';a.click();URL.revokeObjectURL(url)}'''
 
 LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
