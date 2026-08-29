@@ -696,7 +696,7 @@ def practice(data: PracticeIn, _: Employee = Depends(current)):
             result=anthropic_client(anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
             return {"source":"claude","answer":result.content[0].text}
         except Exception as ex:
-            print(f"[COACH ERROR] {type(ex).__name__}: {ex}")
+            print(f"[COACH ERROR] {type(ex).__name__}: {ex}", flush=True)
     match=next((x for x in PITCHES if "kein interesse" in data.objection.lower() and "Kein Interesse" in x["title"]),PITCHES[0])
     return {"source":"vorlage","answer":match["text"],"coach_tip":"Bleib freundlich, stelle nur eine offene Anschlussfrage und vermeide Druck."}
 
@@ -841,7 +841,7 @@ def coach_history(e: Employee = Depends(current), s: Session = Depends(db)):
 def run_coach_loop(user_content, e: Employee, s: Session):
     history=list(s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id).order_by(SalesCoachMessage.created_at.desc()).limit(12)))[::-1]
     anthropic_key=os.getenv("ANTHROPIC_API_KEY")
-    print(f"[COACH DEBUG] anthropic_key_set={bool(anthropic_key)} openai_key_set={bool(os.getenv('OPENAI_API_KEY'))} workspace_id_set={bool(os.getenv('ANTHROPIC_WORKSPACE_ID'))}")
+    print(f"[COACH DEBUG] anthropic_key_set={bool(anthropic_key)} openai_key_set={bool(os.getenv('OPENAI_API_KEY'))} workspace_id_set={bool(os.getenv('ANTHROPIC_WORKSPACE_ID'))}", flush=True)
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
             client=anthropic_client(anthropic_key)
@@ -861,7 +861,11 @@ def run_coach_loop(user_content, e: Employee, s: Session):
                         tool_results.append({"type":"tool_result","tool_use_id":block.id,"content":json.dumps(result, default=str)})
                 messages.append({"role":"user","content":tool_results})
             if answer is None: answer="Die Anfrage war zu umfangreich für eine direkte Antwort, bitte präzisiere sie."
-        except Exception as ex: print(f"[COACH ERROR] {type(ex).__name__}: {ex}"); answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
+        except Exception as ex:
+            import traceback
+            print(f"[COACH ERROR] {type(ex).__name__}: {ex}", flush=True)
+            traceback.print_exc()
+            answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
     else:
         answer="Für individuelle Antworten bitte die KI-Anbindung aktivieren. Bis dahin: Beschreibe den Einwand kurz, bleib freundlich und stelle eine offene Frage."
     reply=SalesCoachMessage(employee_id=e.id,role="assistant",text=answer);s.add(reply);s.commit();return serialize(reply)
