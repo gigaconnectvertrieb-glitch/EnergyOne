@@ -58,6 +58,9 @@ class Task(Base):
 class Activity(Base):
     __tablename__ = "aktivitaeten_log"
     id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); action: Mapped[str] = mapped_column(String(120)); detail: Mapped[str] = mapped_column(Text, default=""); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class JobApplication(Base):
+    __tablename__ = "bewerbungen"
+    id: Mapped[int] = mapped_column(primary_key=True); name: Mapped[str] = mapped_column(String(150)); email: Mapped[str] = mapped_column(String(255)); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); message: Mapped[str] = mapped_column(Text, default=""); photo_storage_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); seen: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class Login(BaseModel): username: str; code: str
 class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None
@@ -282,7 +285,16 @@ def employee_photo(employee_id: int, s: Session=Depends(db)):
 @app.get("/api/public/team")
 def public_team(s: Session=Depends(db)):
     rows = s.scalars(select(Employee).where(Employee.show_on_website.is_(True), Employee.active.is_(True)).order_by(Employee.role.desc(), Employee.name))
-    return [{"name":x.name, "role": "Teamleitung" if x.role=="admin" else "Vertrieb", "tier": x.tier, "has_photo": bool(x.photo_storage_name), "photo_url": f"/api/employees/{x.id}/photo" if x.photo_storage_name else None} for x in rows]
+    return [{"name":x.name, "role": "Teamleitung" if x.role=="admin" else "Vertriebsberater:in", "tier": x.tier, "has_photo": bool(x.photo_storage_name), "photo_url": f"/api/employees/{x.id}/photo" if x.photo_storage_name else None} for x in rows]
+@app.get("/api/admin/applications")
+def list_applications(_: Employee=Depends(admin), s: Session=Depends(db)):
+    rows = s.scalars(select(JobApplication).order_by(JobApplication.created_at.desc()))
+    return [{**serialize(x), "photo_url": f"/api/admin/applications/{x.id}/photo" if x.photo_storage_name else None} for x in rows]
+@app.post("/api/admin/applications/{application_id}/seen")
+def mark_application_seen(application_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
+    x = s.get(JobApplication, application_id)
+    if not x: raise HTTPException(404, "Bewerbung nicht gefunden")
+    x.seen = True; s.commit(); return serialize(x)
 @app.get("/api/export/customers.csv")
 def export_customers(_:Employee=Depends(admin),s:Session=Depends(db)):
     rows=[serialize(x) for x in s.scalars(select(Customer))];out=io.StringIO(); w=csv.DictWriter(out,fieldnames=rows[0].keys() if rows else ["id"]);w.writeheader();w.writerows(rows);return Response(out.getvalue(),media_type="text/csv",headers={"Content-Disposition":"attachment; filename=kunden.csv"})
@@ -305,6 +317,8 @@ def home(): return LANDING_HTML
 def employee_login_page(): return HTML
 @app.get("/admin", response_class=HTMLResponse)
 def admin_login_page(): return HTML_ADMIN
+@app.get("/karriere", response_class=HTMLResponse)
+def karriere_page(): return KARRIERE_HTML
 @app.get("/impressum", response_class=HTMLResponse)
 def impressum_page(): return IMPRESSUM_HTML
 @app.get("/datenschutz", response_class=HTMLResponse)
@@ -430,6 +444,7 @@ PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
 <section><h2>Mitarbeiterliste</h2><p><small>"Website" zeigt Name+Foto öffentlich auf der Landingpage (Vertrauens-Sektion für Besucher).</small></p><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th>Öffentlich</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
 <section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
+<section><h2>Bewerbungen (Website)</h2><table><thead><tr><th>Foto</th><th>Datum</th><th>Name</th><th>E-Mail</th><th>Telefon</th><th>Nachricht</th><th></th></tr></thead><tbody id="applicationsList"></tbody></table></section>
 </div>'''
 
 PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
@@ -482,7 +497,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
 let ws=null;
@@ -628,6 +643,10 @@ async function deleteEmployeeAccount(id,name){if(!confirm('Account von "'+name+'
 async function purgeEmployee(id,name){if(!confirm('ACHTUNG: "'+name+'" WIRKLICH ALLES löschen? Kunden, Abschlüsse, Provisionen, Tagesmeldungen und Dokumente werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden!'))return;if(prompt('Zum Bestätigen "LÖSCHEN" eingeben:')!=='LÖSCHEN')return;try{await api('/employees/'+id,{method:'DELETE'});await loadEmployees()}catch(e){alert(e.message)}}
 async function resetTotp(){if(!resetEmpId.value)return;let label=resetEmpId.options[resetEmpId.selectedIndex].textContent;let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Neuer Schlüssel für <b>'+label+'</b> — manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'}
 async function loadLoginAccess(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');let sel=document.getElementById('resetEmpId');if(sel)sel.innerHTML='<option value="">Mitarbeiter wählen</option>'+rows.map(x=>`<option value="${x.id}">${x.name} (${x.username})</option>`).join('')}
+async function loadApplications(){let rows=await api('/admin/applications');applicationsList.innerHTML=rows.map(x=>`<tr style="${x.seen?'':'font-weight:700'}"><td>${x.photo_url?`<img id="applyPhotoImg${x.id}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:'-'}</td><td>${x.created_at.slice(0,10)}</td><td>${x.name}</td><td>${x.email}</td><td>${x.phone||'-'}</td><td>${x.message||'-'}</td><td>${x.seen?'':`<button onclick="markApplicationSeen(${x.id})">Gesehen</button>`}</td></tr><tr><td></td><td></td><td colspan=5><input id="replyMsg${x.id}" placeholder="Antwort an ${x.name}..." style="width:60%"><button onclick="replyApplication(${x.id})">Antworten</button><span id="replyStatus${x.id}"></span></td></tr>`).join('')||'<tr><td colspan=7 class=empty>Noch keine Bewerbungen.</td></tr>';rows.forEach(x=>{if(x.photo_url)loadAuthImage(x.photo_url,'applyPhotoImg'+x.id)})}
+async function loadAuthImage(url,imgId){let r=await fetch(url,{headers:{Authorization:'Bearer '+token}});if(!r.ok)return;let blob=await r.blob();let img=document.getElementById(imgId);if(img)img.src=URL.createObjectURL(blob)}
+async function markApplicationSeen(id){await api('/admin/applications/'+id+'/seen',{method:'POST'});await loadApplications()}
+async function replyApplication(id){let msg=document.getElementById('replyMsg'+id).value.trim();if(!msg)return;let status=document.getElementById('replyStatus'+id);try{await api('/admin/applications/'+id+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});status.textContent=' Gesendet.';await loadApplications()}catch(e){status.textContent=' Fehler: '+e.message}}
 async function createProvider(){await api('/providers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:provName.value,street:provStreet.value,postal_code:provPlz.value,city:provCity.value,phone:provPhone.value,contact_person:provContact.value})});await loadProviders()}
 async function loadProviders(){let rows=await api('/providers');if(document.getElementById('providerList'))providerList.innerHTML='<table><tbody>'+rows.map(x=>`<tr><td>${x.id}</td><td>${x.name}</td><td>${x.city||''}</td></tr>`).join('')+'</tbody></table>';['curProvider','curProvider2'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='<option value="">Aktueller Anbieter (optional)</option>'+rows.map(x=>`<option value="${x.id}">${x.name}</option>`).join('')})}
 async function submitClosureForEmployee(){await api('/employee/closures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_name:closureCustName.value,product:closureProduct.value||'strom',usage_kwh:+closureUsage.value||0,employee_id:+closureEmpId.value})});closureCustName.value='';closureUsage.value='';alert('Eingetragen')}
@@ -674,12 +693,20 @@ __LOGIN__
 HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
 HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
 
+LANDING_JS = '''<script>document.addEventListener('click',function(e){var m=document.getElementById('lLoginMenu');if(!m)return;if(!e.target.closest('.lLoginWrap'))m.classList.remove('open')});</script>'''
+
 LANDING_CSS = '''*{box-sizing:border-box}
 body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2e;background:#fff}
-.lHeader{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:16px 6%;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid #eeecf7}
-.lLogo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px;color:#0d1320}
-.lLogo img{width:28px;height:auto}
-.lLoginBtn{background:linear-gradient(90deg,#f59e0b,#ea580c);color:#0d1320;border:0;padding:11px 22px;border-radius:999px;font-weight:700;text-decoration:none;font-size:14px;transition:transform .15s,opacity .15s}
+.lHeader{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;padding:14px 6%;background:rgba(13,19,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08)}
+.lLogo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:#fff}
+.lLogo img{width:34px;height:auto}
+.lLoginWrap{position:relative}
+.lLoginBtn{background:linear-gradient(90deg,#f59e0b,#ea580c);color:#0d1320;border:0;padding:11px 22px;border-radius:999px;font-weight:700;cursor:pointer;font-size:14px;transition:transform .15s,opacity .15s}
+.lLoginMenu{display:none;position:absolute;top:calc(100% + 10px);right:0;background:#171d2c;border:1px solid #2c3650;border-radius:14px;padding:8px;min-width:180px;box-shadow:0 20px 40px -12px rgba(0,0,0,.5)}
+.lLoginMenu.open{display:block;animation:fadeUp .2s ease both}
+.lLoginMenu a{display:block;padding:10px 14px;border-radius:9px;color:#e5e7eb;text-decoration:none;font-size:14px;font-weight:600}
+.lLoginMenu a:hover{background:#232b40;color:#fbbf24}
+.lLoginMenu a small{display:block;color:#8a93a8;font-weight:400;font-size:12px;margin-top:1px}
 .lLoginBtn:hover{opacity:.92;transform:translateY(-1px)}
 .hero{position:relative;overflow:hidden;padding:90px 6% 100px;text-align:center;background:radial-gradient(circle at 50% 0%,#1a2338,#0d1320 65%);color:#fff}
 .hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin:0 0 18px;line-height:1.15}
@@ -726,25 +753,46 @@ body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2
 .teamCard p{color:#6b6885;font-size:14px;margin:0}
 .contactBand{background:#f8f7fd;border-radius:24px;padding:44px;display:flex;flex-wrap:wrap;gap:28px;justify-content:space-between;align-items:center}
 .contactBand a.tel{display:flex;align-items:center;gap:10px;font-weight:700;color:#1c1a2e;text-decoration:none;font-size:16px}
-.contactBand a.tel:hover{color:#7c3aed}'''
+.contactBand a.tel:hover{color:#7c3aed}
+.lNav{display:flex;gap:28px;margin:0 auto}
+.lNav a{color:#c4c9d6;text-decoration:none;font-size:14.5px;font-weight:600;transition:color .15s}
+.lNav a:hover{color:#fbbf24}
+@media(max-width:760px){.lNav{display:none}}
+.applyForm{max-width:520px;margin:0 auto;text-align:left;display:flex;flex-direction:column;gap:12px}
+.applyForm input,.applyForm textarea{width:100%;box-sizing:border-box;padding:14px 16px;border:1px solid #e3e0f5;border-radius:12px;font:inherit;resize:vertical}
+.applyForm textarea{font-family:inherit}
+.applyForm button{align-self:flex-start;padding:13px 30px;border-radius:999px}
+.applyResult{color:#16a34a;font-weight:600;margin:0}
+.careerHero{background:radial-gradient(circle at 50% 0%,#1a2338,#0d1320 65%);color:#fff;padding:80px 6% 90px;text-align:center}
+.careerHero h1{font-size:clamp(28px,4vw,42px);font-weight:800;margin:0 0 16px}
+.careerHero h1 span{background:linear-gradient(90deg,#fbbf24,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent}
+.careerHero p{max-width:600px;margin:0 auto;color:#c4c1e0;font-size:16.5px}
+.benefitGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;margin-top:20px}
+.benefitCard{background:#f8f7fd;border-radius:16px;padding:26px}
+.benefitCard .ico{font-size:26px;margin-bottom:10px}
+.benefitCard h3{margin:0 0 6px;font-size:15.5px}
+.benefitCard p{margin:0;color:#6b6885;font-size:13.5px}
+.profileList{max-width:640px;margin:0 auto;text-align:left}
+.profileList li{margin-bottom:12px;padding-left:28px;position:relative;color:#3d3a52}
+.profileList li:before{content:"✓";position:absolute;left:0;color:#16a34a;font-weight:800}'''
 
 LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <section class="hero"><div class="heroWrap">
 <div>
-<h1>Ein Gesicht für Ihre <span>Energieberatung</span> — kein Callcenter.</h1>
-<p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den Tarif, der wirklich passt — fair, transparent, ohne Druck.</p>
-<div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="/login">Mitarbeiter-Login</a></div>
+<h1>Ein Gesicht für Ihre <span>Energieberatung</span>. Kein Callcenter.</h1>
+<p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den passenden Tarif. Fair, transparent und ohne Druck.</p>
+<div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="#kontakt">Kontakt aufnehmen</a></div>
 </div>
 <div class="heroArt" style="text-align:center"><img src="/static/logo-icon.png" alt="E1 Direktvertrieb" style="width:100%;max-width:340px;filter:drop-shadow(0 20px 60px rgba(245,158,11,.25))"></div>
 </div></section>
 <section class="section" id="leistungen">
 <h2>Warum Kund:innen uns vertrauen</h2>
-<p class="lead">Wir sind kein Konzern ohne Gesicht — wir stehen mit unserem Namen dafür ein, dass Beratung wieder persönlich wird.</p>
+<p class="lead">Wir sind kein Konzern ohne Gesicht. Wir stehen mit unserem Namen dafür ein, dass Beratung wieder persönlich wird.</p>
 <div class="grid3">
-<div class="featCard" style="--accent:#7c3aed;--accentSoft:#ede9fe"><div class="ico">🤝</div><h3>Ein echter Mensch, kein Skript</h3><p>Sie sprechen mit jemandem, der Ihre Situation wirklich versteht — nicht mit einer Warteschleife.</p></div>
-<div class="featCard" style="--accent:#0d9488;--accentSoft:#ccfbf1"><div class="ico">🔍</div><h3>Volle Transparenz</h3><p>Wir zeigen Ihnen genau, was Sie zahlen und warum — keine versteckten Kosten, kein Kleingedrucktes, das überrascht.</p></div>
-<div class="featCard" style="--accent:#ea580c;--accentSoft:#ffedd5"><div class="ico">🛡️</div><h3>Beratung ohne Druck</h3><p>Sie entscheiden in Ihrem Tempo. Unser Ziel ist eine Empfehlung, die zu Ihnen passt — nicht der schnellste Abschluss.</p></div>
+<div class="featCard" style="--accent:#7c3aed;--accentSoft:#ede9fe"><div class="ico">🤝</div><h3>Ein echter Mensch, kein Skript</h3><p>Sie sprechen mit jemandem, der Ihre Situation wirklich versteht, nicht mit einer Warteschleife.</p></div>
+<div class="featCard" style="--accent:#0d9488;--accentSoft:#ccfbf1"><div class="ico">🔍</div><h3>Volle Transparenz</h3><p>Wir zeigen Ihnen genau, was Sie zahlen und warum. Keine versteckten Kosten, kein Kleingedrucktes, das überrascht.</p></div>
+<div class="featCard" style="--accent:#ea580c;--accentSoft:#ffedd5"><div class="ico">🛡️</div><h3>Beratung ohne Druck</h3><p>Sie entscheiden in Ihrem Tempo. Unser Ziel ist eine Empfehlung, die zu Ihnen passt, nicht der schnellste Abschluss.</p></div>
 </div>
 </section>
 <section class="section" id="ablauf">
@@ -752,7 +800,7 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <p class="lead">Drei einfache Schritte, keine Verpflichtung.</p>
 <div class="steps">
 <div class="step" style="--stepGrad:linear-gradient(135deg,#7c3aed,#2563eb)"><div class="num">1</div><h3>Persönliches Gespräch</h3><p>Wir kommen zu Ihnen und hören uns Ihre aktuelle Situation und Ihren Verbrauch an.</p></div>
-<div class="step" style="--stepGrad:linear-gradient(135deg,#0d9488,#0891b2)"><div class="num">2</div><h3>Individueller Vergleich</h3><p>Wir zeigen transparent, welcher Tarif zu Ihnen passt — inklusive aller Kosten.</p></div>
+<div class="step" style="--stepGrad:linear-gradient(135deg,#0d9488,#0891b2)"><div class="num">2</div><h3>Individueller Vergleich</h3><p>Wir zeigen transparent, welcher Tarif zu Ihnen passt, inklusive aller Kosten.</p></div>
 <div class="step" style="--stepGrad:linear-gradient(135deg,#ea580c,#d97706)"><div class="num">3</div><h3>Sie entscheiden</h3><p>Keine Hektik, kein Druck. Der Wechsel läuft erst, wenn Sie wirklich überzeugt sind.</p></div>
 </div>
 </section>
@@ -760,46 +808,106 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <h2>Die Köpfe hinter E1</h2>
 <p class="lead">Wir stehen mit unserem Namen für persönliche, ehrliche Beratung.</p>
 <div class="teamGrid">
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Gründer</div><p>Verantwortlich für Vertrieb und persönliche Kundenbetreuung bei E1 Direktvertrieb.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Geschäftsführung &amp; Vertriebsleitung</div><p>Verantwortlich für Vertriebsstrategie und persönliche Kundenberatung.</p></div>
+<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Geschäftsführung &amp; Teamleitung</div><p>Verantwortlich für Teamaufbau und persönliche Kundenberatung.</p></div>
 </div>
 </section>
 <section class="section" id="unser-team">
 <h2>Unser Vertriebsteam</h2>
 <p class="lead">Die Menschen, die Ihnen persönlich gegenübersitzen.</p>
 <div class="teamGrid" id="dynamicTeamGrid"><p class="lead">Team wird geladen…</p></div>
+<p style="text-align:center;margin-top:28px"><a class="btnPrimary" href="/karriere" style="padding:13px 26px;border-radius:999px;text-decoration:none;font-weight:700">Werden Sie Teil des Teams</a></p>
 </section>
 <script>
 fetch('/api/public/team').then(r=>r.json()).then(rows=>{
-let list=rows.filter(x=>x.role==='Vertrieb');
+let list=rows.filter(x=>x.role!=='Teamleitung');
 let grid=document.getElementById('dynamicTeamGrid');
-let sec=document.getElementById('unser-team');
-if(!list.length){sec.style.display='none';return}
+if(!list.length){grid.innerHTML='<p class="lead">Team im Aufbau. Bald sehen Sie hier unsere Vertriebsberater:innen.</p>';return}
 grid.innerHTML=list.map(x=>{
 let initials=x.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 let avatar=x.photo_url?`<img src="${x.photo_url}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;margin:0 auto 16px;display:block">`:`<div class="avatar">${initials}</div>`;
-return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">Vertrieb${x.tier?' · Stufe '+x.tier:''}</div></div>`;
+return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">${x.role}${x.tier?' · Stufe '+x.tier:''}</div></div>`;
 }).join('');
-}).catch(()=>{document.getElementById('unser-team').style.display='none'});
+}).catch(()=>{document.getElementById('dynamicTeamGrid').innerHTML='<p class="lead">Team im Aufbau. Bald sehen Sie hier unsere Vertriebsberater:innen.</p>'});
 </script>
 <section class="section" id="kontakt">
 <div class="contactBand">
-<div><h2 style="text-align:left;margin:0 0 6px">Fragen? Wir sind erreichbar.</h2><p style="color:#6b6885;margin:0">Rufen Sie uns direkt an — persönlich, kein Callcenter.</p></div>
+<div><h2 style="text-align:left;margin:0 0 6px">Fragen? Wir sind erreichbar.</h2><p style="color:#6b6885;margin:0">Rufen Sie uns direkt an, persönlich und ohne Callcenter.</p></div>
 <div style="display:flex;flex-direction:column;gap:10px"><a class="tel" href="tel:+4917684109958">📞 0176 84109958 (Orhan Salo)</a><a class="tel" href="tel:+491782209604">📞 0178 2209604 (Luca-Marco Marrancone)</a></div>
 </div>
 </section>
 <div class="ctaBand"><h2>Sie sind Teil unseres Teams?</h2><p>Mitarbeiter melden sich hier im Vertriebsportal an.</p><a class="btnPrimary" href="/login" style="padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:700">Zum Login</a></div>
 <footer class="lFooter">© ''' + str(datetime.utcnow().year) + ''' E1 Direktvertrieb · <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></footer>
+''' + LANDING_JS + '''
+</body></html>'''
+
+KARRIERE_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Karriere · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
+<section class="careerHero">
+<h1>Verkaufen, ohne sich zu <span>verbiegen</span>.</h1>
+<p>Bei E1 Direktvertrieb arbeiten Sie eigenverantwortlich, werden persönlich von der Geschäftsführung begleitet und verdienen fair an dem, was Sie leisten. Kein Konzern, keine Warteschleifen, kein Kleingedrucktes.</p>
+</section>
+<section class="section">
+<h2>Warum E1</h2>
+<p class="lead">Wir haben E1 selbst aus dem Vertrieb heraus aufgebaut. Wir wissen, worauf es ankommt.</p>
+<div class="benefitGrid">
+<div class="benefitCard"><div class="ico">🎯</div><h3>Eigenverantwortung</h3><p>Sie organisieren sich selbst. Wir geben den Rahmen, nicht die Kontrolle.</p></div>
+<div class="benefitCard"><div class="ico">💶</div><h3>Faire Provision</h3><p>Transparente, stufenbasierte Provisionsstruktur, live einsehbar im Mitarbeiterportal.</p></div>
+<div class="benefitCard"><div class="ico">🤝</div><h3>Direkter Draht</h3><p>Kein anonymer Konzern. Sie sprechen direkt mit der Geschäftsführung, nicht mit einer Personalabteilung.</p></div>
+<div class="benefitCard"><div class="ico">📈</div><h3>Echtes Wachstum</h3><p>Persönliches Coaching, Schulungen und ein KI-Vertriebscoach helfen Ihnen, sich stetig zu verbessern.</p></div>
+</div>
+</section>
+<section class="section">
+<h2>Wer zu uns passt</h2>
+<ul class="profileList">
+<li>Sie sprechen gerne mit Menschen und hören genauso gut zu, wie Sie reden.</li>
+<li>Sie wollen für Ihre Leistung fair bezahlt werden, nicht nach Anwesenheit.</li>
+<li>Sie arbeiten selbstständig, ohne dass jemand über Ihre Schulter schaut.</li>
+<li>Vertriebserfahrung ist willkommen, aber kein Muss. Wir bringen Ihnen alles bei, was Sie brauchen.</li>
+</ul>
+</section>
+<section class="section">
+<h2>Jetzt bewerben</h2>
+<p class="lead">Kein Anschreiben nötig. Ein paar Zeilen reichen, wir melden uns persönlich bei Ihnen.</p>
+<form class="applyForm" id="applyForm" onsubmit="return false">
+<input id="applyName" placeholder="Ihr Name" required>
+<input id="applyEmail" type="email" placeholder="E-Mail" required>
+<input id="applyPhone" placeholder="Telefon (optional)">
+<textarea id="applyMessage" placeholder="Kurz zu Ihnen (optional)" rows="4"></textarea>
+<label style="font-size:13.5px;color:#6b6885">Foto (Passbild o.ä., optional aber gerne gesehen)<input id="applyPhoto" type="file" accept=".jpg,.jpeg,.png,.webp" style="display:block;margin-top:6px"></label>
+<button type="submit" onclick="submitApplication()">Bewerbung senden</button>
+<p class="applyResult" id="applyResult"></p>
+</form>
+</section>
+<footer class="lFooter">© ''' + str(datetime.utcnow().year) + ''' E1 Direktvertrieb · <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></footer>
+<script>
+async function submitApplication(){
+let name=document.getElementById('applyName').value.trim();
+let email=document.getElementById('applyEmail').value.trim();
+if(!name||!email){document.getElementById('applyResult').textContent='Bitte Name und E-Mail angeben.';return}
+let fd=new FormData();
+fd.append('name',name);fd.append('email',email);fd.append('phone',document.getElementById('applyPhone').value);fd.append('message',document.getElementById('applyMessage').value);
+let photoFile=document.getElementById('applyPhoto').files[0];
+if(photoFile)fd.append('photo',photoFile);
+try{
+let r=await fetch('/api/public/apply',{method:'POST',body:fd});
+if(!r.ok)throw Error(await r.text());
+document.getElementById('applyForm').reset();
+document.getElementById('applyResult').textContent='Danke! Wir melden uns bei Ihnen.';
+}catch(e){document.getElementById('applyResult').textContent='Senden fehlgeschlagen, bitte später erneut versuchen.'}
+}
+</script>
+''' + LANDING_JS + '''
 </body></html>'''
 
 IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Impressum</h1>
 <h2>Angaben gemäß § 5 TMG</h2>
 <p>E1 Direktvertrieb<br>Einzelunternehmen von Orhan Salo und Luca-Marco Marrancone<br>[Anschrift folgt]</p>
 <h2>Kontakt</h2>
-<p>Telefon: 0176 84109958 · 0178 2209604<br>E-Mail: [E-Mail-Adresse]</p>
+<p>Telefon: 0176 84109958 · 0178 2209604<br>E-Mail: saloorhan96@gmail.com · luca.marrancone@gmail.com</p>
 <h2>Registereintrag</h2>
 <p>[Handelsregister, Registergericht, Registernummer — falls vorhanden]</p>
 <h2>Umsatzsteuer-ID</h2>
@@ -808,10 +916,11 @@ IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><
 <p>[Name, Anschrift wie oben]</p>
 <p><a href="/">Zurück zur Startseite</a></p>
 </div>
+''' + LANDING_JS + '''
 </body></html>'''
 
 DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
-<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><a class="lLoginBtn" href="/login">Login</a></header>
+<header class="lHeader"><div class="lLogo"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</div><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Datenschutzerklärung</h1>
 <h2>1. Verantwortlicher</h2>
@@ -824,6 +933,7 @@ DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"
 <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch. Wenden Sie sich hierzu an die im Impressum genannte Kontaktadresse.</p>
 <p><a href="/">Zurück zur Startseite</a></p>
 </div>
+''' + LANDING_JS + '''
 </body></html>'''
 
 from . import agency

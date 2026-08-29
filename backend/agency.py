@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update
 
 
 class Team(Base):
@@ -719,6 +719,46 @@ def send_email(to: str, subject: str, body: str):
         user=os.getenv("SMTP_USER")
         if user: smtp.login(user, os.getenv("SMTP_PASSWORD",""))
         smtp.send_message(msg)
+
+@app.post("/api/public/apply")
+def submit_application(name: str = Form(...), email: str = Form(...), phone: str = Form(""), message: str = Form(""), photo: Optional[UploadFile] = File(None), s: Session = Depends(db)):
+    storage_name = None
+    if photo is not None and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower() or ".jpg"
+        if ext not in (".jpg", ".jpeg", ".png", ".webp"): raise HTTPException(422, "Foto muss JPG, PNG oder WEBP sein")
+        raw = photo.file.read()
+        if len(raw) > 8 * 1024 * 1024: raise HTTPException(422, "Foto darf maximal 8 MB groß sein")
+        storage_name = f"apply-{uuid.uuid4().hex}{ext}"
+        (STORAGE / storage_name).write_bytes(raw)
+    item = JobApplication(name=name, email=email, phone=phone or None, message=message, photo_storage_name=storage_name)
+    s.add(item); s.commit(); notify_update()
+    recipients = os.getenv("APPLICATION_EMAIL", "luca.marrancone@gmail.com,saloorhan96@gmail.com")
+    if recipients:
+        body = f"Neue Bewerbung über die Website:\n\nName: {item.name}\nE-Mail: {item.email}\nTelefon: {item.phone or '-'}\n\nNachricht:\n{item.message or '-'}\n\nFoto im Portal unter Bewerbungen einsehbar."
+        try: send_email(recipients, f"Neue Bewerbung: {item.name}", body)
+        except Exception as ex: print(f"[APPLY EMAIL ERROR] {type(ex).__name__}: {ex}", flush=True)
+    return {"status": "received"}
+@app.get("/api/admin/applications/{application_id}/photo")
+def application_photo(application_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = s.get(JobApplication, application_id)
+    if not item or not item.photo_storage_name: raise HTTPException(404, "Kein Foto")
+    p = STORAGE / item.photo_storage_name
+    if not p.exists(): raise HTTPException(404, "Kein Foto")
+    media = {".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",".webp":"image/webp"}.get(p.suffix.lower(), "application/octet-stream")
+    return Response(p.read_bytes(), media_type=media)
+
+class ApplicationReplyIn(BaseModel): message: str = Field(min_length=1)
+@app.post("/api/admin/applications/{application_id}/reply")
+def reply_application(application_id: int, data: ApplicationReplyIn, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = s.get(JobApplication, application_id)
+    if not item: raise HTTPException(404, "Bewerbung nicht gefunden")
+    try:
+        send_email(item.email, f"Antwort auf Ihre Bewerbung bei E1 Direktvertrieb", data.message)
+    except Exception as ex:
+        print(f"[APPLY REPLY ERROR] {type(ex).__name__}: {ex}", flush=True)
+        raise HTTPException(500, f"E-Mail konnte nicht gesendet werden: {ex}")
+    item.seen = True; log(s, e, "Bewerbung beantwortet", item.name); s.commit()
+    return serialize(item)
 
 AI_TOOLS_BASE = [
     {"name":"get_dashboard","description":"Zeigt die aktuellen Kennzahlen (Kunden, offene Aufgaben/Verträge/Rechnungen, Umsatz) für den eingeloggten Nutzer.","input_schema":{"type":"object","properties":{}}},
