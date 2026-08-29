@@ -695,17 +695,10 @@ def practice(data: PracticeIn, _: Employee = Depends(current)):
         try:
             result=anthropic_client(anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
             return {"source":"claude","answer":result.content[0].text}
-        except Exception: pass
-    key=os.getenv("OPENAI_API_KEY")
-    if not key:
-        match=next((x for x in PITCHES if "kein interesse" in data.objection.lower() and "Kein Interesse" in x["title"]),PITCHES[0])
-        return {"source":"vorlage","answer":match["text"],"coach_tip":"Bleib freundlich, stelle nur eine offene Anschlussfrage und vermeide Druck."}
-    try:
-        from openai import OpenAI
-        response=OpenAI(api_key=key).responses.create(model=os.getenv("OPENAI_MODEL","gpt-5.5"),store=False,instructions="Du bist ein deutschsprachiger Vertriebscoach für legale, transparente Energieberatung. Gib eine kurze respektvolle Einwandbehandlung, keine Garantien, keine irreführenden Aussagen. Strukturiere als Antwort und kurzer Coach-Tipp.",input=f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}")
-        return {"source":"ki","answer":response.output_text}
-    except Exception:
-        return {"source":"vorlage","answer":PITCHES[0]["text"],"coach_tip":"KI ist aktuell nicht erreichbar; nutze diese geprüfte Vorlage."}
+        except Exception as ex:
+            print(f"[COACH ERROR] {type(ex).__name__}: {ex}")
+    match=next((x for x in PITCHES if "kein interesse" in data.objection.lower() and "Kein Interesse" in x["title"]),PITCHES[0])
+    return {"source":"vorlage","answer":match["text"],"coach_tip":"Bleib freundlich, stelle nur eine offene Anschlussfrage und vermeide Druck."}
 
 
 COACH_INSTRUCTIONS = "Du bist der EnergyOne Vertriebscoach von E1 Direktvertrieb. Hilf Mitarbeitern auf Deutsch bei Pitches, Einwandbehandlung, Gesprächsstruktur, Nachfass-Nachrichten, Selbstorganisation und Zielarbeit, und beantworte bei Bedarf auch allgemeine Fragen. Sei kurz, praktisch und respektvoll. Keine Druckmethoden, keine irreführenden Preisversprechen, keine Rechts- oder Steuerberatung. Frage bei fehlendem Kontext gezielt nach. Du hast Werkzeuge, um Aktionen direkt im System auszuführen (Kunden/Aufgaben anlegen, Abschluss einreichen; Admins zusätzlich News/Incentives/Ziele anlegen und E-Mails senden). Nutze sie nur, wenn der Nutzer erkennbar eine Aktion will, nicht bei reinen Fragen. Bevor du eine E-Mail tatsächlich versendest, lege Empfänger, Betreff und Text im Chat vor und warte auf eine ausdrückliche Bestätigung."
@@ -862,14 +855,6 @@ def run_coach_loop(user_content, e: Employee, s: Session):
                 messages.append({"role":"user","content":tool_results})
             if answer is None: answer="Die Anfrage war zu umfangreich für eine direkte Antwort, bitte präzisiere sie."
         except Exception as ex: print(f"[COACH ERROR] {type(ex).__name__}: {ex}"); answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
-    elif os.getenv("OPENAI_API_KEY") and isinstance(user_content, str):
-        try:
-            from openai import OpenAI
-            messages=[{"role":x.role,"content":x.text} for x in history]
-            answer=OpenAI(api_key=os.getenv("OPENAI_API_KEY")).responses.create(model=os.getenv("OPENAI_MODEL","gpt-5.5"),store=False,instructions=COACH_INSTRUCTIONS,input=messages).output_text
-        except Exception as ex:
-            print(f"[COACH ERROR] {type(ex).__name__}: {ex}")
-            answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
     else:
         answer="Für individuelle Antworten bitte die KI-Anbindung aktivieren. Bis dahin: Beschreibe den Einwand kurz, bleib freundlich und stelle eine offene Frage."
     reply=SalesCoachMessage(employee_id=e.id,role="assistant",text=answer);s.add(reply);s.commit();return serialize(reply)
