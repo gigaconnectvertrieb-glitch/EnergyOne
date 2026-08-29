@@ -324,6 +324,7 @@ NAV = '''<nav class="navcol">
 <button class="navbtn hidden" id="navMitarbeiter" onclick="showPage('mitarbeiter',this)">👥 Mitarbeiter</button>
 <button class="navbtn hidden" id="navProvision" onclick="showPage('provision',this)">💶 Provision</button>
 <button class="navbtn hidden" id="navZiele" onclick="showPage('ziele',this)">🎯 Ziele &amp; Incentives</button>
+<button class="navbtn hidden" id="navLoginzugaenge" onclick="showPage('loginzugaenge',this)">🔑 Loginzugänge</button>
 <button class="navbtn hidden" id="navBuchhaltung" onclick="showPage('buchhaltung',this)">🧾 Buchhaltung</button>
 <button class="navbtn" id="navLernpfad" onclick="showPage('lernpfad',this)">🎓 Lernpfad &amp; KI</button>
 </nav>'''
@@ -353,11 +354,16 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 </div>'''
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
-<div class="pageHead"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen, TOTP-Zugang und Status.</p></div>
+<div class="pageHead"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
 <section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
-<section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th></th></tr></thead><tbody id="employeeList"></tbody></table><h3>TOTP-Anfrageschlüssel zurücksetzen</h3><input id="resetEmpId" placeholder="Mitarbeiter-ID" type="number"><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
+<section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
-<section><h2>Generalschlüssel</h2><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
+</div>'''
+
+PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
+<div class="pageHead"><h1>Loginzugänge</h1><p>TOTP-Zugang je Mitarbeiter neu einrichten und Generalschlüssel verwalten.</p></div>
+<section><h2>TOTP neu einrichten</h2><p><small>Setzt den Google-Authenticator-Schlüssel des gewählten Mitarbeiters zurück (z.B. bei Handy-Verlust).</small></p><select id="resetEmpId"></select><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
+<section><h2>Generalschlüssel</h2><p><small>Universeller Notfall-Zugang für alle Accounts. Nur persönlich/telefonisch weitergeben.</small></p><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
@@ -403,7 +409,7 @@ function goToStep2(){if(!username.value.trim())return;vpShown.textContent=userna
 function backToStep1(){loginStep2.classList.remove('active');loginStep1.classList.add('active');code.value='';username.focus()}
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments()}
 }
 async function signIn(){try{
@@ -433,6 +439,15 @@ load()
 })();
 let idleTimer=null;function armIdleTimer(){['click','keydown','mousemove','scroll'].forEach(ev=>document.addEventListener(ev,resetIdleTimer));resetIdleTimer()}
 function resetIdleTimer(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{alert('Automatisch abgemeldet wegen Inaktivität.');doLogout()},15*60*1000)}
+function refreshActivePage(){
+if(!token||document.hidden)return;
+let active=document.querySelector('.page.active');if(!active)return;
+if(active.id==='page-dashboard'){if(isAdmin){loadTeamBars();loadAllDaily();load()}else{loadCommissions()}}
+else if(active.id==='page-provision'){loadTeamProvision();loadStornoOverview();loadPendingClosures()}
+else if(active.id==='page-ziele'){loadCharts()}
+else if(active.id==='page-mitarbeiter'){loadEmployees()}
+}
+setInterval(refreshActivePage,20000);
 document.getElementById('dailyDate') && (dailyDate.value=new Date().toISOString().slice(0,10));
 let daily={contracts:0,cancellations:0};
 function changeDaily(delta,key){daily[key]=Math.max(0,daily[key]+delta);document.getElementById(key+'Count').textContent=daily[key]}
@@ -498,12 +513,13 @@ async function askCoach(){let input=document.getElementById('coachInput');let fi
 if(fileInput.files[0]){let fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('message',input.value);await fetch('/api/training/coach/upload',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});fileInput.value=''}
 else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:input.value})})}
 input.value='';await loadCoach()}
-async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';empName.value='';empEmail.value='';await loadEmployees()}
+async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
 async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
 async function toggleEmployeeActive(id){if(!confirm('Status wirklich ändern?'))return;try{await api('/employees/'+id+'/toggle-active',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function deleteEmployeeAccount(id,name){if(!confirm('Account von "'+name+'" löschen? Login/TOTP werden entfernt, Kunden/Provisionen bleiben für die Buchhaltung erhalten.'))return;try{await api('/employees/'+id+'/delete-account',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function purgeEmployee(id,name){if(!confirm('ACHTUNG: "'+name+'" WIRKLICH ALLES löschen? Kunden, Abschlüsse, Provisionen, Tagesmeldungen und Dokumente werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden!'))return;if(prompt('Zum Bestätigen "LÖSCHEN" eingeben:')!=='LÖSCHEN')return;try{await api('/employees/'+id,{method:'DELETE'});await loadEmployees()}catch(e){alert(e.message)}}
-async function resetTotp(){let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Schlüssel manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'}
+async function resetTotp(){if(!resetEmpId.value)return;let label=resetEmpId.options[resetEmpId.selectedIndex].textContent;let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Neuer Schlüssel für <b>'+label+'</b> — manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'}
+async function loadLoginAccess(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');let sel=document.getElementById('resetEmpId');if(sel)sel.innerHTML='<option value="">Mitarbeiter wählen</option>'+rows.map(x=>`<option value="${x.id}">${x.name} (${x.username})</option>`).join('')}
 async function createProvider(){await api('/providers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:provName.value,street:provStreet.value,postal_code:provPlz.value,city:provCity.value,phone:provPhone.value,contact_person:provContact.value})});await loadProviders()}
 async function loadProviders(){let rows=await api('/providers');if(document.getElementById('providerList'))providerList.innerHTML='<table><tbody>'+rows.map(x=>`<tr><td>${x.id}</td><td>${x.name}</td><td>${x.city||''}</td></tr>`).join('')+'</tbody></table>';['curProvider','curProvider2'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='<option value="">Aktueller Anbieter (optional)</option>'+rows.map(x=>`<option value="${x.id}">${x.name}</option>`).join('')})}
 async function submitClosureForEmployee(){await api('/employee/closures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_name:closureCustName.value,product:closureProduct.value||'strom',usage_kwh:+closureUsage.value||0,employee_id:+closureEmpId.value})});closureCustName.value='';closureUsage.value='';alert('Eingetragen')}
@@ -531,7 +547,7 @@ LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="lo
 
 APP_SHELL = '''<header><div><b>''' + LOGO_ICON + ''' E1 Direktvertrieb</b><span class="badge" id="portalBadge">Portal</span></div><div class="headerRight"><span id="who"></span><button id="logoutBtn" class="hidden" onclick="doLogout()">Logout</button></div></header>
 __LOGIN__
-<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_LERNPFAD + '''</div></div>
+<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_LERNPFAD + '''</div></div>
 <div id="coachBubble" class="hidden" onclick="toggleCoachWindow()">💬</div>
 <div id="coachWindow" class="hidden">
 <div id="coachWinHeader" class="coachWinHeader"><span>''' + LOGO_ICON.replace('width="30" height="30"','width="20" height="20"') + ''' EnergyOne Coach</span><button class="coachWinClose" onclick="toggleCoachWindow()">✕</button></div>
