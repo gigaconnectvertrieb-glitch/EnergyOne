@@ -405,7 +405,17 @@ tr:hover td{background:#faf9ff}
 #coachWindow .chatWrap{padding:14px;margin:0;max-height:none;flex:1;min-height:120px}
 #coachWindow .chatBar{padding:0 14px 12px}
 @media(max-width:480px){#coachWindow{right:16px;left:16px;width:auto}}
-@media(max-width:900px){.shell{flex-direction:column}.navcol{position:static;flex-direction:row;overflow-x:auto;width:100%;height:auto;padding:10px}.navbtn{white-space:nowrap}}'''
+@media(max-width:900px){.shell{flex-direction:column}.navcol{position:static;flex-direction:row;overflow-x:auto;width:100%;height:auto;padding:10px}.navbtn{white-space:nowrap}}
+#photoCropModal{position:fixed;inset:0;background:rgba(15,10,40,.55);z-index:200;display:flex;align-items:center;justify-content:center}
+#photoCropModal.hidden{display:none}
+.cropBox{background:#fff;border-radius:18px;padding:22px;width:360px;max-width:calc(100vw - 32px);box-shadow:0 24px 60px -12px rgba(20,10,60,.4)}
+.cropBox h3{margin:0 0 14px}
+#cropCanvas{display:block;margin:0 auto;border-radius:50%;background:#eee;cursor:grab;touch-action:none}
+#cropCanvas:active{cursor:grabbing}
+.cropControls{display:flex;align-items:center;gap:10px;margin:16px 0}
+.cropControls input[type=range]{flex:1}
+.cropBtns{display:flex;gap:10px;justify-content:flex-end}
+.cropBtns button.ghost{background:#e9e7f5;color:#1c1a2e}'''
 
 NAV = '''<nav class="navcol">
 <button class="navbtn active" id="navDashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
@@ -447,7 +457,7 @@ PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
 <div class="pageHead" style="--pageAccent:#2563eb"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
 <section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
 <section><h2>Mitarbeiterliste</h2><p><small>"Website" zeigt Name+Foto öffentlich auf der Landingpage (Vertrauens-Sektion für Besucher).</small></p><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th>Öffentlich</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
-<section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
+<section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><img id="myPhotoPreview" style="width:56px;height:56px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:12px;background:#eee" onerror="this.style.visibility='hidden'"><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
 <section><h2>Bewerbungen (Website)</h2><table><thead><tr><th>Foto</th><th>Datum</th><th>Name</th><th>E-Mail</th><th>Telefon</th><th>Nachricht</th><th></th></tr></thead><tbody id="applicationsList"></tbody></table></section>
 </div>'''
@@ -641,12 +651,76 @@ else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'ap
 input.value='';await loadCoach()
 }catch(e){alert('Coach-Nachricht fehlgeschlagen: '+e.message)}}
 async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
-async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td><label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
+async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td>${x.photo_storage_name?`<img src="/api/employees/${x.id}/photo?t=${Date.now()}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">`:''}<label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
 async function toggleShowOnWebsite(id,checked){await api('/employees/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
-async function uploadEmployeePhoto(id,input){let f=input.files[0];if(!f)return;let fd=new FormData();fd.append('file',f);await fetch('/api/employees/'+id+'/photo',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});alert('Foto hochgeladen')}
-async function loadMyPublicProfile(){let me=await api('/me');let cb=document.getElementById('myShowOnWebsite');if(cb)cb.checked=!!me.show_on_website}
+function uploadEmployeePhoto(id,input){let f=input.files[0];if(!f)return;openCropModal(f,id);input.value=''}
+async function loadMyPublicProfile(){let me=await api('/me');let cb=document.getElementById('myShowOnWebsite');if(cb)cb.checked=!!me.show_on_website;let prev=document.getElementById('myPhotoPreview');if(prev)prev.src='/api/employees/'+myId+'/photo?t='+Date.now()}
+let _crop={img:null,scale:1,offX:0,offY:0,targetId:null,dragging:false,lastX:0,lastY:0};
+function openCropModal(file,targetId){
+let reader=new FileReader();
+reader.onload=e=>{
+let img=new Image();
+img.onload=()=>{
+let cv=document.getElementById('cropCanvas');
+_crop.img=img;_crop.targetId=targetId;_crop.offX=0;_crop.offY=0;
+let minScale=Math.max(cv.width/img.width,cv.height/img.height);
+_crop.scale=minScale;
+let zoom=document.getElementById('cropZoom');
+zoom.min=minScale;zoom.max=minScale*3;zoom.step=minScale/100;zoom.value=minScale;
+document.getElementById('photoCropModal').classList.remove('hidden');
+cropRedraw();
+};
+img.src=e.target.result;
+};
+reader.readAsDataURL(file);
+}
+function closeCropModal(){document.getElementById('photoCropModal').classList.add('hidden');_crop.img=null}
+function cropClamp(){
+let cv=document.getElementById('cropCanvas');let img=_crop.img;if(!img)return;
+let w=img.width*_crop.scale,h=img.height*_crop.scale;
+let maxX=Math.max(0,(w-cv.width)/2),maxY=Math.max(0,(h-cv.height)/2);
+_crop.offX=Math.max(-maxX,Math.min(maxX,_crop.offX));
+_crop.offY=Math.max(-maxY,Math.min(maxY,_crop.offY));
+}
+function cropRedraw(){
+let cv=document.getElementById('cropCanvas');let ctx=cv.getContext('2d');
+ctx.clearRect(0,0,cv.width,cv.height);
+if(!_crop.img)return;
+_crop.scale=parseFloat(document.getElementById('cropZoom').value);
+cropClamp();
+let img=_crop.img,w=img.width*_crop.scale,h=img.height*_crop.scale;
+let cx=cv.width/2+_crop.offX,cy=cv.height/2+_crop.offY;
+ctx.drawImage(img,cx-w/2,cy-h/2,w,h);
+}
+function cropDragStart(e){if(!_crop.img)return;e.preventDefault();_crop.dragging=true;let p=e.touches?e.touches[0]:e;_crop.lastX=p.clientX;_crop.lastY=p.clientY}
+function cropDragMove(e){if(!_crop.dragging)return;e.preventDefault();let p=e.touches?e.touches[0]:e;_crop.offX+=p.clientX-_crop.lastX;_crop.offY+=p.clientY-_crop.lastY;_crop.lastX=p.clientX;_crop.lastY=p.clientY;cropRedraw()}
+function cropDragEnd(){_crop.dragging=false}
+(function(){
+let cv=document.getElementById('cropCanvas');
+if(!cv)return;
+cv.addEventListener('mousedown',cropDragStart);
+window.addEventListener('mousemove',cropDragMove);
+window.addEventListener('mouseup',cropDragEnd);
+cv.addEventListener('touchstart',cropDragStart,{passive:false});
+cv.addEventListener('touchmove',cropDragMove,{passive:false});
+cv.addEventListener('touchend',cropDragEnd);
+})();
+function applyCrop(){
+if(!_crop.img)return;
+document.getElementById('cropCanvas').toBlob(async blob=>{
+let fd=new FormData();fd.append('file',blob,'photo.jpg');
+try{
+let res=await fetch('/api/employees/'+_crop.targetId+'/photo',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
+if(!res.ok){let err=await res.json().catch(()=>({}));throw new Error(err.detail||('Fehler '+res.status))}
+closeCropModal();
+let mp=document.getElementById('page-mitarbeiter');
+if(mp&&mp.classList.contains('active'))await loadEmployees();
+await loadMyPublicProfile();
+}catch(ex){alert('Foto-Upload fehlgeschlagen: '+ex.message)}
+},'image/jpeg',0.9);
+}
 async function toggleMyShowOnWebsite(checked){await api('/employees/'+myId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
-async function uploadMyPhoto(input){let f=input.files[0];if(!f)return;let fd=new FormData();fd.append('file',f);await fetch('/api/employees/'+myId+'/photo',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});alert('Foto hochgeladen')}
+function uploadMyPhoto(input){let f=input.files[0];if(!f)return;openCropModal(f,myId);input.value=''}
 async function toggleEmployeeActive(id){if(!confirm('Status wirklich ändern?'))return;try{await api('/employees/'+id+'/toggle-active',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function deleteEmployeeAccount(id,name){if(!confirm('Account von "'+name+'" löschen? Login/TOTP werden entfernt, Kunden/Provisionen bleiben für die Buchhaltung erhalten.'))return;try{await api('/employees/'+id+'/delete-account',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function purgeEmployee(id,name){if(!confirm('ACHTUNG: "'+name+'" WIRKLICH ALLES löschen? Kunden, Abschlüsse, Provisionen, Tagesmeldungen und Dokumente werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden!'))return;if(prompt('Zum Bestätigen "LÖSCHEN" eingeben:')!=='LÖSCHEN')return;try{await api('/employees/'+id,{method:'DELETE'});await loadEmployees()}catch(e){alert(e.message)}}
@@ -695,6 +769,14 @@ __LOGIN__
 <div class="chatWrap" id="coachLog"></div>
 <div class="chatBar"><input id="coachInput" placeholder="Nachricht an den Coach..." onkeydown="if(event.key==='Enter')askCoach()"><label class="fileBtn">📎<input id="coachFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden" onchange="askCoach()"></label><button onclick="askCoach()">➤</button></div>
 <p style="padding:0 14px 12px"><small><a href="#" onclick="clearCoach();return false">Chat leeren</a></small></p>
+</div>
+<div id="photoCropModal" class="hidden">
+<div class="cropBox">
+<h3>Foto zuschneiden</h3>
+<canvas id="cropCanvas" width="280" height="280"></canvas>
+<div class="cropControls"><span>🔍</span><input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1" oninput="cropRedraw()"></div>
+<div class="cropBtns"><button class="ghost" onclick="closeCropModal()">Abbrechen</button><button onclick="applyCrop()">Übernehmen</button></div>
+</div>
 </div>
 </div>
 <script>''' + SCRIPT + '''</script></body></html>'''
