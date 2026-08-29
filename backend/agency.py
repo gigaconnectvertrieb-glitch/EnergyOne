@@ -986,7 +986,47 @@ def schedule(data: ScheduleIn, e: Employee = Depends(current), s: Session = Depe
 def news(_: Employee = Depends(current), s: Session = Depends(db)): return [serialize(x) for x in s.scalars(select(News).order_by(News.important.desc(),News.published_at.desc()))]
 @app.post("/api/news")
 def publish_news(data: NewsIn, e: Employee = Depends(admin), s: Session = Depends(db)):
-    item=News(**data.model_dump(),author_id=e.id);s.add(item);log(s,e,"News veröffentlicht",item.title);s.commit();return serialize(item)
+    item=News(**data.model_dump(),author_id=e.id);s.add(item);log(s,e,"News veröffentlicht",item.title);s.commit();notify_update();return serialize(item)
+@app.delete("/api/news/{news_id}")
+def delete_news(news_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item=s.get(News,news_id)
+    if not item: raise HTTPException(404,"News nicht gefunden")
+    s.delete(item); log(s,e,"News gelöscht",item.title); s.commit(); notify_update()
+    return {"status":"deleted"}
+_ENERGY_NEWS_CACHE = {"items": [], "fetched_at": 0.0}
+_ENERGY_NEWS_TTL = 1800
+_ENERGY_NEWS_FEED = "https://news.google.com/rss/search?q=Strom%20OR%20Gas%20OR%20Energiepreise%20Deutschland%20when:14d&hl=de&gl=DE&ceid=DE:de"
+
+def _fetch_energy_news():
+    import time, urllib.request, xml.etree.ElementTree as ET
+    now = time.time()
+    if now - _ENERGY_NEWS_CACHE["fetched_at"] < _ENERGY_NEWS_TTL and _ENERGY_NEWS_CACHE["items"]:
+        return _ENERGY_NEWS_CACHE["items"]
+    try:
+        req = urllib.request.Request(_ENERGY_NEWS_FEED, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            xml_data = resp.read()
+        root = ET.fromstring(xml_data)
+        items = []
+        for item in root.findall(".//item")[:10]:
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            pub_date = (item.findtext("pubDate") or "").strip()
+            source_el = item.find("source")
+            source = source_el.text.strip() if source_el is not None and source_el.text else ""
+            if title and link:
+                items.append({"title": title, "link": link, "source": source, "published": pub_date})
+        if items:
+            _ENERGY_NEWS_CACHE["items"] = items
+            _ENERGY_NEWS_CACHE["fetched_at"] = now
+        return _ENERGY_NEWS_CACHE["items"]
+    except Exception as ex:
+        print(f"[ENERGY NEWS ERROR] {type(ex).__name__}: {ex}", flush=True)
+        return _ENERGY_NEWS_CACHE["items"]
+
+@app.get("/api/public/energy-news")
+def public_energy_news():
+    return _fetch_energy_news()
 
 
 @app.get("/api/incentives")
