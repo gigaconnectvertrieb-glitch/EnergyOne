@@ -65,7 +65,7 @@ class JobApplication(Base):
 class Login(BaseModel): username: str; code: str
 class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None
 class MasterKeyIn(BaseModel): new_key: Optional[str] = Field(default=None, min_length=8, max_length=200)
-class CustomerIn(BaseModel): kind: Literal["privat", "firma"]; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: EmailStr; phone: Optional[str] = None; postal_code: str; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: float = 0; status: str = "neu"; owner_id: Optional[int] = None
+class CustomerIn(BaseModel): kind: Literal["privat", "firma"]; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: Optional[EmailStr] = None; phone: Optional[str] = None; postal_code: str; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: float = 0; status: str = "neu"; owner_id: Optional[int] = None
 class CustomerUpdateIn(BaseModel):
     kind: Optional[Literal["privat", "firma"]] = None; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: Optional[EmailStr] = None; phone: Optional[str] = None; postal_code: Optional[str] = None; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: Optional[float] = None; status: Optional[str] = None
 class TaskIn(BaseModel): title: str; description: str = ""; assignee_id: int; due_date: Optional[date] = None; customer_id: Optional[int] = None
@@ -579,14 +579,18 @@ function fillCustomerForm(sfx,c){document.getElementById('kind'+sfx).value=c.kin
 function resetCustomerForm(sfx){['custName','mail','cphone','plz','street','city','usage'].forEach(id=>document.getElementById(id+sfx).value='')}
 function editCustomer(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId=id;fillCustomerForm('',c);custSubmitBtn.textContent='Speichern'}
 function editCustomer2(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId2=id;fillCustomerForm('2',c);custStatus2.value=c.status||'neu';custStatus2.classList.remove('hidden');custSubmitBtn2.textContent='Speichern'}
-async function customer(){let v={kind:kind.value,email:mail.value,phone:cphone.value,postal_code:plz.value,street:street.value,city:city.value,usage_kwh:+usage.value||0};if(curProvider.value)v.current_provider_id=+curProvider.value;if(v.kind==='firma')v.company=custName.value;else{let a=custName.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+async function customer(){if(!custName.value.trim()){alert('Bitte Name/Firma angeben');return}if(!plz.value.trim()){alert('Bitte PLZ angeben');return}let v={kind:kind.value,email:mail.value||null,phone:cphone.value,postal_code:plz.value,street:street.value,city:city.value,usage_kwh:+usage.value||0};if(curProvider.value)v.current_provider_id=+curProvider.value;if(v.kind==='firma')v.company=custName.value;else{let a=custName.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+try{
 if(editingCustomerId){await api('/customers/'+editingCustomerId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId=null;custSubmitBtn.textContent='Anlegen'}
 else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
-resetCustomerForm('');load()}
-async function customer2(){let v={kind:kind2.value,email:mail2.value,phone:cphone2.value,postal_code:plz2.value,street:street2.value,city:city2.value,usage_kwh:+usage2.value||0};if(curProvider2.value)v.current_provider_id=+curProvider2.value;if(v.kind==='firma')v.company=custName2.value;else{let a=custName2.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+resetCustomerForm('');load()
+}catch(ex){alert('Kunde konnte nicht gespeichert werden: '+ex.message)}}
+async function customer2(){if(!custName2.value.trim()){alert('Bitte Name/Firma angeben');return}if(!plz2.value.trim()){alert('Bitte PLZ angeben');return}let v={kind:kind2.value,email:mail2.value||null,phone:cphone2.value,postal_code:plz2.value,street:street2.value,city:city2.value,usage_kwh:+usage2.value||0};if(curProvider2.value)v.current_provider_id=+curProvider2.value;if(v.kind==='firma')v.company=custName2.value;else{let a=custName2.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+try{
 if(editingCustomerId2){v.status=custStatus2.value;await api('/customers/'+editingCustomerId2,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId2=null;custSubmitBtn2.textContent='Anlegen';custStatus2.classList.add('hidden')}
 else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
-resetCustomerForm('2');load()}
+resetCustomerForm('2');load()
+}catch(ex){alert('Kunde konnte nicht gespeichert werden: '+ex.message)}}
 async function deleteCustomer(id){let c=custCache.find(x=>x.id===id);let name=c?(c.company||c.first_name+' '+(c.last_name||'')):id;if(!confirm('Kunde "'+name+'" wirklich löschen?'))return;try{await api('/customers/'+id,{method:'DELETE'});await load()}catch(e){alert(e.message)}}
 function fillClosureFromCustomer(){document.getElementById('clNewCustomerFields').style.display=clCustomerId.value?'none':'inline';let c=custCache.find(x=>x.id===+clCustomerId.value);if(!c)return;clKind.value=c.kind;if(c.usage_kwh)clUsage.value=c.usage_kwh;updateLiveCommission()}
 function quickClosure(id){clCustomerId.value=id;fillClosureFromCustomer();document.getElementById('clCustomerId').closest('section').scrollIntoView({behavior:'smooth'})}
