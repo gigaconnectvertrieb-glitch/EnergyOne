@@ -150,6 +150,7 @@ class ClosureEntry(Base):
     __tablename__ = "abschluss_meldungen"
     id: Mapped[int] = mapped_column(primary_key=True)
     employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id"))
+    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("kunden.id"), nullable=True)
     customer_name: Mapped[str] = mapped_column(String(200))
     contract_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     product: Mapped[str] = mapped_column(String(20), default="strom")
@@ -218,7 +219,12 @@ class IncentiveIn(BaseModel): name: str; description: str = ""; minimum_contract
 class ExpenseIn(BaseModel): category: str; description: str = ""; amount: float = Field(gt=0); spent_on: date = Field(default_factory=date.today)
 class GoalIn(BaseModel): employee_id: Optional[int] = None; team_id: Optional[int] = None; period_start: date; period_end: date; target_contracts: int = Field(ge=0); target_revenue: float = Field(ge=0)
 class ClosureIn(BaseModel):
-    customer_name: str = Field(min_length=2, max_length=200)
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    postal_code: Optional[str] = None
+    phone: Optional[str] = None
+    provider_id: Optional[int] = None
+    tariff_id: Optional[int] = None
     contract_number: Optional[str] = Field(default=None, max_length=50)
     product: str = "strom"
     customer_kind: str = "privat"
@@ -227,7 +233,7 @@ class ClosureIn(BaseModel):
     expected_commission: float = Field(default=0, ge=0)
     note: str = ""
     employee_id: Optional[int] = None
-class ReviewIn(BaseModel): status: str; note: str = ""; provider_id: Optional[int] = None; tariff_id: Optional[int] = None; bracket_id: Optional[int] = None
+class ReviewIn(BaseModel): status: str; note: str = ""; provider_id: Optional[int] = None; tariff_id: Optional[int] = None; bracket_id: Optional[int] = None; usage_kwh: Optional[float] = Field(default=None, ge=0); expected_commission: Optional[float] = Field(default=None, ge=0)
 class ProviderIn(BaseModel):
     name: str = Field(min_length=2, max_length=150)
     street: Optional[str] = None
@@ -325,7 +331,32 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
         owner_id = data.employee_id
     else:
         owner_id = e.id
-    item=ClosureEntry(**data.model_dump(exclude={"employee_id"}),employee_id=owner_id);s.add(item);s.flush();log(s,e,"Abschluss eingereicht",str(item.id));s.commit();notify_update();return serialize(item)
+    owner_employee = s.get(Employee, owner_id)
+    customer_id = data.customer_id
+    customer_name = data.customer_name
+    if customer_id:
+        cust = s.get(Customer, customer_id)
+        if not cust: raise HTTPException(404, "Kunde nicht gefunden")
+        if e.role not in ("admin", "buchhaltung") and cust.owner_id != e.id: raise HTTPException(403, "Keine Berechtigung")
+        customer_name = cust.company or f"{cust.first_name or ''} {cust.last_name or ''}".strip()
+    elif customer_name:
+        parts = customer_name.split(" ", 1)
+        cust = Customer(kind=data.customer_kind, first_name=parts[0], last_name=parts[1] if len(parts) > 1 else None, postal_code=data.postal_code or "", phone=data.phone, usage_kwh=data.usage_kwh, current_provider_id=data.provider_id, owner_id=owner_id)
+        s.add(cust); s.flush()
+        s.add(CustomerHistory(customer_id=cust.id, employee_id=e.id, detail="Kunde über Abschluss angelegt"))
+        customer_id = cust.id
+    else:
+        raise HTTPException(422, "Kunde auswählen oder Kundenname angeben")
+    expected_commission = data.expected_commission
+    bracket_id = None
+    if data.tariff_id:
+        bracket = s.scalar(select(CommissionBracket).where(CommissionBracket.tariff_id == data.tariff_id, CommissionBracket.tier == owner_employee.tier, CommissionBracket.usage_from <= data.usage_kwh, (CommissionBracket.usage_to.is_(None)) | (CommissionBracket.usage_to >= data.usage_kwh)).order_by(CommissionBracket.usage_from.desc()))
+        if bracket:
+            bracket_id = bracket.id
+            expected_commission = round(bracket.commission_amount + (bracket.commission_per_kwh or 0) * data.usage_kwh, 2)
+    item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note)
+    s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id)); s.commit(); notify_update()
+    return serialize(item)
 
 
 @app.get("/api/employee/performance-calendar")
@@ -515,6 +546,7 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
     if not item: raise HTTPException(404,"Abschluss nicht gefunden")
     item.status=data.status; item.note=(item.note+"\n"+data.note).strip(); item.reviewed_by=e.id; item.reviewed_at=datetime.utcnow()
     if data.provider_id: item.provider_id=data.provider_id
+    if data.usage_kwh is not None: item.usage_kwh=data.usage_kwh
     bracket=None
     if data.bracket_id:
         bracket=s.get(CommissionBracket,data.bracket_id)
@@ -524,6 +556,7 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
         if not bracket: raise HTTPException(422,f"Keine passende Provisionsstaffel für Tarif {data.tariff_id}, Stufe {owner.tier}, {item.usage_kwh} kWh gefunden")
     if bracket:
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
+    if data.expected_commission is not None: item.expected_commission=data.expected_commission
     log(s,e,"Abschluss geprüft",str(item.id));s.commit();notify_update();return serialize(item)
 
 
