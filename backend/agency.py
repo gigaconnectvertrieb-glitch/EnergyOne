@@ -737,6 +737,11 @@ def submit_application(name: str = Form(...), email: str = Form(...), phone: str
         body = f"Neue Bewerbung über die Website:\n\nName: {item.name}\nE-Mail: {item.email}\nTelefon: {item.phone or '-'}\n\nNachricht:\n{item.message or '-'}\n\nFoto im Portal unter Bewerbungen einsehbar."
         try: send_email(recipients, f"Neue Bewerbung: {item.name}", body)
         except Exception as ex: print(f"[APPLY EMAIL ERROR] {type(ex).__name__}: {ex}", flush=True)
+    try:
+        confirm_body = f"Hallo {item.name},\n\nvielen Dank für Ihre Bewerbung bei E1 Direktvertrieb. Wir haben sie erhalten und melden uns in Kürze persönlich bei Ihnen.\n\nViele Grüße\nIhr E1 Direktvertrieb Team"
+        send_email(item.email, "Ihre Bewerbung bei E1 Direktvertrieb", confirm_body)
+    except Exception as ex:
+        print(f"[APPLY CONFIRM EMAIL ERROR] {type(ex).__name__}: {ex}", flush=True)
     return {"status": "received"}
 @app.get("/api/admin/applications/{application_id}/photo")
 def application_photo(application_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
