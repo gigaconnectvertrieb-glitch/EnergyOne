@@ -701,7 +701,14 @@ def practice(data: PracticeIn, _: Employee = Depends(current)):
     return {"source":"vorlage","answer":match["text"],"coach_tip":"Bleib freundlich, stelle nur eine offene Anschlussfrage und vermeide Druck."}
 
 
-COACH_INSTRUCTIONS = "Du bist der EnergyOne Vertriebscoach von E1 Direktvertrieb. Hilf Mitarbeitern auf Deutsch bei Pitches, Einwandbehandlung, Gesprächsstruktur, Nachfass-Nachrichten, Selbstorganisation und Zielarbeit, und beantworte bei Bedarf auch allgemeine Fragen. Sei kurz, praktisch und respektvoll. Keine Druckmethoden, keine irreführenden Preisversprechen, keine Rechts- oder Steuerberatung. Frage bei fehlendem Kontext gezielt nach. Du hast Werkzeuge, um Aktionen direkt im System auszuführen (Kunden/Aufgaben anlegen, Abschluss einreichen; Admins zusätzlich News/Incentives/Ziele anlegen und E-Mails senden). Nutze sie nur, wenn der Nutzer erkennbar eine Aktion will, nicht bei reinen Fragen. Bevor du eine E-Mail tatsächlich versendest, lege Empfänger, Betreff und Text im Chat vor und warte auf eine ausdrückliche Bestätigung."
+COACH_INSTRUCTIONS_BASE = "Du bist der EnergyOne Vertriebscoach von E1 Direktvertrieb. Hilf auf Deutsch bei Pitches, Einwandbehandlung, Gesprächsstruktur, Nachfass-Nachrichten, Selbstorganisation und Zielarbeit, und beantworte bei Bedarf auch allgemeine Fragen. Sei kurz, praktisch und respektvoll. Keine Druckmethoden, keine irreführenden Preisversprechen, keine Rechts- oder Steuerberatung. Frage bei fehlendem Kontext gezielt nach. Du hast Werkzeuge, um Aktionen direkt im System auszuführen (Kunden/Aufgaben anlegen, Abschluss einreichen; Admins zusätzlich News/Incentives/Ziele anlegen und E-Mails senden). Nutze sie nur, wenn der Nutzer erkennbar eine Aktion will, nicht bei reinen Fragen. Bevor du eine E-Mail tatsächlich versendest, lege Empfänger, Betreff und Text im Chat vor und warte auf eine ausdrückliche Bestätigung."
+
+def coach_instructions_for(e: Employee) -> str:
+    if e.role == "admin":
+        persona = f"Du sprichst gerade mit {e.name}, Teamleitung/Admin bei E1 Direktvertrieb. Sprich sie/ihn mit Namen an, wenn es passt. Du darfst team- und agenturweite Themen besprechen (z.B. Teamzahlen, Mitarbeiterführung, Incentives), nicht nur Einzelverkauf."
+    else:
+        persona = f"Du sprichst gerade mit {e.name}, Vertriebsmitarbeiter/in (Stufe {e.tier}) bei E1 Direktvertrieb. Sprich sie/ihn mit Namen an, wenn es passt, und beziehe dich auf ihre/seine eigene Stufe/Provision, wenn relevant. Team- oder andere-Mitarbeiter-Daten bespricht du nicht mit ihr/ihm."
+    return COACH_INSTRUCTIONS_BASE + "\n\n" + persona
 
 def send_email(to: str, subject: str, body: str):
     host=os.getenv("SMTP_HOST")
@@ -842,7 +849,7 @@ def run_coach_loop(user_content, e: Employee, s: Session):
             tools=ai_tools_for(e.role)
             answer=None
             for _ in range(5):
-                response=client.messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=800,system=COACH_INSTRUCTIONS,messages=messages,tools=tools)
+                response=client.messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=800,system=coach_instructions_for(e),messages=messages,tools=tools)
                 if response.stop_reason!="tool_use":
                     answer="".join(b.text for b in response.content if b.type=="text")
                     break
