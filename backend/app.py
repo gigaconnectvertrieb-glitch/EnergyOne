@@ -62,6 +62,8 @@ class Login(BaseModel): username: str; code: str
 class EmployeeIn(BaseModel): username: str = Field(min_length=3, max_length=64); email: Optional[EmailStr] = None; name: str; role: Literal["admin", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); vp_nummer: Optional[str] = None; phone: Optional[str] = None
 class MasterKeyIn(BaseModel): new_key: Optional[str] = Field(default=None, min_length=8, max_length=200)
 class CustomerIn(BaseModel): kind: Literal["privat", "firma"]; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: EmailStr; phone: Optional[str] = None; postal_code: str; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: float = 0; status: str = "neu"; owner_id: Optional[int] = None
+class CustomerUpdateIn(BaseModel):
+    kind: Optional[Literal["privat", "firma"]] = None; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: Optional[EmailStr] = None; phone: Optional[str] = None; postal_code: Optional[str] = None; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: Optional[float] = None; status: Optional[str] = None
 class TaskIn(BaseModel): title: str; description: str = ""; assignee_id: int; due_date: Optional[date] = None; customer_id: Optional[int] = None
 
 app = FastAPI(title="E1 Direktvertrieb Vertriebsportal", version="1.0.0")
@@ -176,6 +178,14 @@ def customers(q: str="", limit: int=100, offset: int=0, e: Employee=Depends(curr
 @app.post("/api/customers")
 def create_customer(data: CustomerIn, e: Employee=Depends(current), s: Session=Depends(db)):
     owner=data.owner_id if e.role=="admin" and data.owner_id else e.id; c=Customer(**data.model_dump(exclude={"owner_id"}),owner_id=owner); s.add(c); s.flush(); s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde angelegt")); log(s,e,"Kunde angelegt",str(c.id)); s.commit(); return serialize(c)
+@app.put("/api/customers/{customer_id}")
+def update_customer(customer_id: int, data: CustomerUpdateIn, e: Employee=Depends(current), s: Session=Depends(db)):
+    c=s.get(Customer,customer_id)
+    if not c: raise HTTPException(404,"Kunde nicht gefunden")
+    if e.role!="admin" and c.owner_id!=e.id: raise HTTPException(403,"Keine Berechtigung")
+    if data.status is not None and e.role!="admin": raise HTTPException(403,"Nur Admin darf den Status ändern")
+    for field,value in data.model_dump(exclude_unset=True).items(): setattr(c,field,value)
+    s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde bearbeitet")); log(s,e,"Kunde bearbeitet",str(c.id)); s.commit(); return serialize(c)
 @app.get("/api/employees")
 def employees(_: Employee=Depends(admin), s: Session=Depends(db)): return [serialize_employee(x) for x in s.scalars(select(Employee).order_by(Employee.name))]
 @app.post("/api/employees")
@@ -189,6 +199,13 @@ def reset_totp(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(
     if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
     x.totp_secret=pyotp.random_base32(); log(s,e,"TOTP zurückgesetzt",x.username); s.commit()
     return totp_setup(x.username, x.totp_secret)
+@app.post("/api/employees/{employee_id}/toggle-active")
+def toggle_employee_active(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
+    x=s.get(Employee,employee_id)
+    if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
+    if x.id==e.id: raise HTTPException(400,"Eigenen Account nicht deaktivieren")
+    x.active=not x.active; log(s,e,"Mitarbeiter deaktiviert" if not x.active else "Mitarbeiter aktiviert",x.username); s.commit()
+    return serialize_employee(x)
 @app.get("/api/tasks")
 def tasks(e: Employee=Depends(current), s: Session=Depends(db)):
     stmt=select(Task) if e.role=="admin" else select(Task).where(Task.assignee_id==e.id)
@@ -214,10 +231,12 @@ def files(name:str):
     return Response(p.read_bytes(),media_type="application/pdf")
 @app.get("/", response_class=HTMLResponse)
 def home(): return HTML
+@app.get("/admin", response_class=HTMLResponse)
+def admin_login_page(): return HTML_ADMIN
 
 CSS = '''*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto;margin:0;background:#f3f2fa;color:#1c1a2e}
 header{background:linear-gradient(100deg,#12102a,#221c4d 60%,#2d1f5e);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(20,10,60,.25);position:sticky;top:0;z-index:20}
-header b{letter-spacing:.2px}
+header b{letter-spacing:.2px;display:inline-flex;align-items:center;gap:8px}
 .badge{background:rgba(255,255,255,.14);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px;margin-left:10px;text-transform:uppercase;vertical-align:middle}
 .headerRight{display:flex;align-items:center;gap:14px;margin-left:auto}
 .shell{display:flex;max-width:1300px;margin:0 auto;min-height:calc(100vh - 60px)}
@@ -245,20 +264,28 @@ tr:hover td{background:#faf9ff}
 @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 #login.fadeOut{opacity:0;transform:scale(.98);transition:opacity .35s,transform .35s}
 #login.hidden{display:none}
-.loginWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#0b0a1f;transition:opacity .35s,transform .35s}
-.loginCard{display:flex;max-width:820px;width:100%;background:#12102a;border-radius:24px;overflow:hidden;box-shadow:0 30px 60px -20px rgba(20,10,60,.6)}
-.loginLeft{flex:1;min-width:280px;padding:48px 40px;color:#fff;display:flex;flex-direction:column;box-sizing:border-box}
-.loginLeft h2{font-size:28px;margin:0 0 8px}
-.loginLeft p.sub{color:#9ca3c4;margin:0 0 6px;font-size:14px;line-height:1.5}
-.loginField{position:relative;margin-top:22px}
-.loginField input{width:100%;box-sizing:border-box;background:transparent;border:0;border-bottom:1px solid #3a3860;color:#fff;padding:8px 2px;font-size:15px;outline:none;margin:0;border-radius:0}
-.loginField input:focus{border-color:#8b5cf6}
-.loginField label{position:absolute;left:2px;top:8px;color:#7c7fa3;font-size:13px;pointer-events:none;transition:.15s}
-.loginField input:focus+label,.loginField input:not(:placeholder-shown)+label{top:-14px;font-size:11px;color:#a78bfa}
-.loginBtn{margin-top:26px;background:linear-gradient(90deg,#7c3aed,#3b82f6);border:0;color:#fff;padding:13px;border-radius:999px;font-weight:600;cursor:pointer;font-size:15px}
-.loginHint{color:#7c7fa3;font-size:12px;margin-top:14px;line-height:1.5}
-.loginRight{flex:1;min-width:280px;display:none}
-@media(min-width:640px){.loginRight{display:block}}
+.loginWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 0%,#1a1638,#0b0a1f 60%);transition:opacity .35s,transform .35s}
+.loginBox{width:100%;max-width:380px;text-align:center;animation:fadeUp .5s ease both}
+.loginLogo{font-size:26px;font-weight:800;color:#fff;letter-spacing:.5px;display:flex;align-items:center;justify-content:center;gap:8px}
+.loginLogo b{background:linear-gradient(90deg,#a78bfa,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
+.loginTag{color:#7c7fa3;font-size:12.5px;letter-spacing:.5px;margin:2px 0 36px}
+.loginStep{display:none}
+.loginStep.active{display:block;animation:fadeUp .3s ease both}
+.loginBox input{width:100%;box-sizing:border-box;background:#1c1a35;border:1px solid #322f57;color:#fff;padding:15px 16px;font-size:15px;outline:none;margin:0 0 14px;border-radius:12px;text-align:center;letter-spacing:.5px}
+.loginBox input::placeholder{color:#6b6890}
+.loginBox input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.2)}
+.loginBox button{width:100%;background:linear-gradient(90deg,#7c3aed,#3b82f6);border:0;color:#fff;padding:14px;border-radius:12px;font-weight:700;cursor:pointer;font-size:15px;margin:4px 0 0}
+.loginVpShown{color:#9c98c4;font-size:13px;margin-bottom:14px}
+.loginVpShown a{color:#a78bfa;text-decoration:none;margin-left:6px}
+.loginHint{color:#5f5c85;font-size:12px;margin-top:22px;line-height:1.5}
+.loginHint a{color:#8b87b5}
+.internalLoginBtn{display:block;margin:22px auto 0;width:fit-content;padding:9px 18px;border:1px solid #322f57;border-radius:999px;color:#9c98c4;font-size:12.5px;font-weight:600;text-decoration:none;transition:border-color .15s,color .15s}
+.internalLoginBtn:hover{border-color:#7c3aed;color:#c4b5fd}
+.adminLoginWrap{background:radial-gradient(circle at 50% 0%,#1c2230,#090a0d 60%)}
+.adminLoginWrap .loginLogo b{background:linear-gradient(90deg,#fbbf24,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent}
+.adminLoginWrap .loginBox button{background:linear-gradient(90deg,#f59e0b,#ea580c)}
+.adminLoginWrap .loginBox input:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.2)}
+.adminLoginWrap .loginHint a{color:#d4a24e}
 .abar{background:#eef0f7;border-radius:8px;overflow:hidden;height:18px}
 .abar>div{height:100%;width:0;transition:width 1s cubic-bezier(.22,1,.36,1);background:linear-gradient(90deg,#7c3aed,#2563eb)}
 .chatWrap{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding:6px 2px;margin-bottom:10px}
@@ -268,6 +295,23 @@ tr:hover td{background:#faf9ff}
 .chatBar{display:flex;gap:6px;align-items:center}
 .chatBar input{flex:1;margin:0}
 .fileBtn{cursor:pointer;padding:10px 12px;border:1px solid #dcd9ec;border-radius:10px;background:#f6f5fb}
+.pageHead{margin-bottom:20px}
+.pageHead h1{font-size:24px;margin:0 0 4px}
+.pageHead p{margin:0;color:#6b6885;font-size:13.5px}
+.empty{color:#8f8ca8;font-size:13.5px;padding:8px 0}
+.searchHit{display:inline-block;background:#f6f5fb;border:1px solid #e3e0f5;border-radius:10px;padding:6px 12px;margin:3px;cursor:pointer;font-size:13px;font-weight:600;color:#4b4768;transition:background .15s,color .15s}
+.searchHit:hover{background:#7c3aed;color:#fff}
+#coachBubble{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#2563eb);display:flex;align-items:center;justify-content:center;font-size:26px;cursor:pointer;box-shadow:0 10px 30px -8px rgba(124,58,237,.6);z-index:60;transition:transform .18s}
+#coachBubble:hover{transform:scale(1.08)}
+#coachBubble.hidden{display:none}
+#coachWindow{position:fixed;bottom:96px;right:24px;width:370px;max-width:calc(100vw - 32px);background:#fff;border-radius:18px;box-shadow:0 24px 60px -12px rgba(20,10,60,.4);z-index:60;display:flex;flex-direction:column;overflow:hidden;max-height:min(560px,70vh);animation:fadeUp .25s ease both}
+#coachWindow.hidden{display:none}
+.coachWinHeader{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;padding:13px 16px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;cursor:move;user-select:none}
+.coachWinHeader span{display:flex;align-items:center;gap:8px}
+.coachWinClose{background:transparent;border:0;color:#fff;font-size:15px;cursor:pointer;padding:2px;margin:0}
+#coachWindow .chatWrap{padding:14px;margin:0;max-height:none;flex:1;min-height:120px}
+#coachWindow .chatBar{padding:0 14px 12px}
+@media(max-width:480px){#coachWindow{right:16px;left:16px;width:auto}}
 @media(max-width:900px){.shell{flex-direction:column}.navcol{position:static;flex-direction:row;overflow-x:auto;width:100%;height:auto;padding:10px}.navbtn{white-space:nowrap}}'''
 
 NAV = '''<nav class="navcol">
@@ -276,44 +320,61 @@ NAV = '''<nav class="navcol">
 <button class="navbtn hidden" id="navMitarbeiter" onclick="showPage('mitarbeiter',this)">👥 Mitarbeiter</button>
 <button class="navbtn hidden" id="navProvision" onclick="showPage('provision',this)">💶 Provision</button>
 <button class="navbtn hidden" id="navZiele" onclick="showPage('ziele',this)">🎯 Ziele &amp; Incentives</button>
+<button class="navbtn hidden" id="navBuchhaltung" onclick="showPage('buchhaltung',this)">🧾 Buchhaltung</button>
 <button class="navbtn" id="navLernpfad" onclick="showPage('lernpfad',this)">🎓 Lernpfad &amp; KI</button>
 </nav>'''
 
 PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
+<div class="pageHead"><h1 id="dashTitle">Dashboard</h1><p id="dashSub">Deine Zahlen auf einen Blick.</p></div>
 <div class="grid" id="kpis"></div>
 <div id="empDashboardExtra" class="hidden">
-<section><h2>Neuer Kunde</h2><input id="custName" placeholder="Name / Firma"><input id="mail" placeholder="E-Mail"><input id="cphone" placeholder="Telefon"><input id="plz" placeholder="PLZ"><input id="street" placeholder="Straße, Nr."><input id="city" placeholder="Ort"><input id="usage" placeholder="Verbrauch kWh" type="number"><select id="kind"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider"><option value="">Aktueller Anbieter (optional)</option></select><button onclick="customer()">Anlegen</button></section>
-<section><h2>Meine Kunden</h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th></tr></thead><tbody id="customers"></tbody></table></section>
+<section><h2>Neuer Kunde</h2><input id="custName" placeholder="Name / Firma"><input id="mail" placeholder="E-Mail"><input id="cphone" placeholder="Telefon"><input id="plz" placeholder="PLZ"><input id="street" placeholder="Straße, Nr."><input id="city" placeholder="Ort"><input id="usage" placeholder="Verbrauch kWh" type="number"><select id="kind"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider"><option value="">Aktueller Anbieter (optional)</option></select><button id="custSubmitBtn" onclick="customer()">Anlegen</button></section>
+<section><h2>Meine Kunden</h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th><th></th></tr></thead><tbody id="customers"></tbody></table></section>
+<section><h2>Abschluss melden</h2><input id="clCustName" placeholder="Kundenname"><select id="clProduct"><option value="strom">Strom</option><option value="gas">Gas</option></select><select id="clKind"><option value="privat">Privat</option><option value="firma">Firma</option></select><input id="clUsage" placeholder="Verbrauch kWh" type="number"><input id="clNote" placeholder="Bemerkung (optional)"><button onclick="submitClosure()">Melden</button><p id="closureResult"></p></section>
 <section><h2>Meine Tagesmeldung</h2><label>Datum <input id="dailyDate" type="date"></label><button onclick="changeDaily(-1,'contracts')">−</button><b id="contractsCount">0</b><button onclick="changeDaily(1,'contracts')">+</button> Verträge <button onclick="changeDaily(-1,'cancellations')">−</button><b id="cancellationsCount">0</b><button onclick="changeDaily(1,'cancellations')">+</button> Stornos<br><input id="dailyNote" placeholder="Bemerkung (optional)"><button onclick="saveDaily()">Tagesmeldung speichern</button><p id="dailyResult"></p></section>
 <section><h2>Meine Provisionen &amp; Vertragsstatus</h2><div class="grid" id="commissionKpis"></div><table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Status</th><th>Provision</th></tr></thead><tbody id="closureList"></tbody></table></section>
+<section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('')"><div id="provSearchResults"></div><div id="provCommissionResult"></div></section>
+<section><h2>Meine Unterlagen</h2><select id="myDocCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="myDocFile" type="file"><label>Ablaufdatum (optional) <input id="myDocExpires" type="date"></label><button onclick="uploadMyDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="myDocumentList"></tbody></table></section>
 </div>
 <section id="adminDashboard" class="hidden"><h2>Team-Übersicht <button onclick="exportTeamCsv()" style="float:right">CSV exportieren</button></h2><div id="teamBars"></div></section>
 <section id="adminDailyOverview" class="hidden"><h2>Tagesmeldungen (alle Mitarbeiter)</h2><table><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Verträge</th><th>Stornos</th><th>Netto</th></tr></thead><tbody id="allDailyList"></tbody></table></section>
 </div>'''
 
 PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
-<section><h2>Neuer Kunde</h2><input id="custName2" placeholder="Name / Firma"><input id="mail2" placeholder="E-Mail"><input id="cphone2" placeholder="Telefon"><input id="plz2" placeholder="PLZ"><input id="street2" placeholder="Straße, Nr."><input id="city2" placeholder="Ort"><input id="usage2" placeholder="Verbrauch kWh" type="number"><select id="kind2"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider2"><option value="">Aktueller Anbieter (optional)</option></select><button onclick="customer2()">Anlegen</button></section>
-<section><h2>Kunden <button onclick="load()">Aktualisieren</button> <button onclick="downloadFile('/export/customers.csv','kunden.csv')">CSV exportieren</button></h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th></tr></thead><tbody id="customersAdmin"></tbody></table></section>
+<div class="pageHead"><h1>Aufgaben</h1><p>Kunden, Termine und offene Aufgaben der Agentur.</p></div>
+<section><h2>Neuer Kunde</h2><input id="custName2" placeholder="Name / Firma"><input id="mail2" placeholder="E-Mail"><input id="cphone2" placeholder="Telefon"><input id="plz2" placeholder="PLZ"><input id="street2" placeholder="Straße, Nr."><input id="city2" placeholder="Ort"><input id="usage2" placeholder="Verbrauch kWh" type="number"><select id="kind2"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider2"><option value="">Aktueller Anbieter (optional)</option></select><select id="custStatus2" class="hidden"><option value="neu">Neu</option><option value="bearbeitung">In Bearbeitung</option><option value="abgeschlossen">Abgeschlossen</option><option value="storno">Storno</option><option value="klaerung">Klärungsbedarf</option></select><button id="custSubmitBtn2" onclick="customer2()">Anlegen</button></section>
+<section><h2>Kunden <button onclick="load()">Aktualisieren</button> <button onclick="downloadFile('/export/customers.csv','kunden.csv')">CSV exportieren</button></h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th><th></th></tr></thead><tbody id="customersAdmin"></tbody></table></section>
 <section><h2>Offene Aufgaben</h2><table><tbody id="tasks"></tbody></table></section>
 <section><h2>Kalender / Termine</h2><div id="calendarAdmin" class="hidden"><input id="calEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="calTitle" placeholder="Titel"><label>Start <input id="calStart" type="datetime-local"></label><label>Ende <input id="calEnd" type="datetime-local"></label><button onclick="createSchedule()">Termin anlegen</button></div><table><thead><tr><th>Start</th><th>Ende</th><th>Art/Titel</th></tr></thead><tbody id="calendarList"></tbody></table></section>
-<section><h2>Unterlagen (Agentur)</h2><select id="docCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="docFile" type="file"><label>Ablaufdatum (optional) <input id="docExpires" type="date"></label><label>Betrag € (optional) <input id="docAmount" type="number"></label><button onclick="uploadDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="documentList"></tbody></table></section>
 </div>'''
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
+<div class="pageHead"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen, TOTP-Zugang und Status.</p></div>
 <section><h2>Mitarbeiter anlegen</h2><input id="empVpNummer" placeholder="VP-Nummer (= Benutzername für Login)"><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
-<section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Report</th></tr></thead><tbody id="employeeList"></tbody></table><h3>TOTP-Anfrageschlüssel zurücksetzen</h3><input id="resetEmpId" placeholder="Mitarbeiter-ID" type="number"><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
+<section><h2>Mitarbeiterliste</h2><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th></th></tr></thead><tbody id="employeeList"></tbody></table><h3>TOTP-Anfrageschlüssel zurücksetzen</h3><input id="resetEmpId" placeholder="Mitarbeiter-ID" type="number"><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
-<section><h2>Buchhaltung · Ablaufende Unterlagen</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Ablauf</th></tr></thead><tbody id="expiringDocs"></tbody></table></section>
 <section><h2>Generalschlüssel</h2><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
+<div class="pageHead"><h1>Provision</h1><p>Suche, Prüfung eingereichter Abschlüsse, Team- und Einzelprovision.</p></div>
+<section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput2" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('2')"><div id="provSearchResults2"></div><div id="provCommissionResult2"></div></section>
+<section><h2>Abschlüsse prüfen</h2><p><small>Anbieter/Tarif zuweisen — die Provision wird automatisch nach Stufe des Mitarbeiters berechnet.</small></p><div id="pendingClosures"></div></section>
 <section><h2>Team-Provision Gesamt</h2><div class="grid" id="teamProvisionKpi"></div><table><thead><tr><th>Mitarbeiter</th><th>Provision (abgeschlossen)</th><th>Offen</th></tr></thead><tbody id="teamProvisionList"></tbody></table></section>
 <section><h2>Stornoquoten</h2><div id="stornoOverview"></div></section>
 <section><h2>Anbieter</h2><input id="provName" placeholder="Anbietername"><input id="provStreet" placeholder="Straße"><input id="provPlz" placeholder="PLZ"><input id="provCity" placeholder="Ort"><input id="provPhone" placeholder="Telefon"><input id="provContact" placeholder="Ansprechpartner"><button onclick="createProvider()">Anbieter anlegen</button><p><small>Tarife &amp; Provisionsstaffeln über <code>/docs</code> (<code>/api/providers/import</code> für Massenimport).</small></p><div id="providerList"></div></section>
 </div>'''
 
+PAGE_BUCHHALTUNG = '''<div class="page" id="page-buchhaltung">
+<div class="pageHead"><h1>Buchhaltung</h1><p>Agentur-Unterlagen, Mitarbeiter-Abrechnungen und ablaufende Dokumente.</p></div>
+<section><h2>Unterlagen (Agentur)</h2><select id="docCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="docFile" type="file"><label>Ablaufdatum (optional) <input id="docExpires" type="date"></label><label>Betrag € (optional) <input id="docAmount" type="number"></label><button onclick="uploadDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="documentList"></tbody></table></section>
+<section><h2>Mitarbeiter-Abrechnung hochladen</h2><input id="abrEmpId" placeholder="Mitarbeiter-ID" type="number"><select id="abrCategory"><option value="abrechnung">Provisionsabrechnung</option><option value="lohnabrechnung">Lohnabrechnung</option></select><input id="abrFile" type="file"><label>Betrag € (optional) <input id="abrAmount" type="number"></label><button onclick="uploadStaffDocument()">Hochladen</button></section>
+<section><h2>Abrechnungen &amp; Unterlagen der Mitarbeiter</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Betrag</th><th></th></tr></thead><tbody id="staffDocsList"></tbody></table></section>
+<section><h2>Ablaufende Unterlagen</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Ablauf</th></tr></thead><tbody id="expiringDocs"></tbody></table></section>
+</div>'''
+
 PAGE_ZIELE = '''<div class="page" id="page-ziele">
+<div class="pageHead"><h1>Ziele &amp; Incentives</h1><p>Zielerreichung, Teamziele und Prämien.</p></div>
 <section><h2>Zielerreichung</h2><div id="scoreCharts"></div></section>
 <section><h2>Teams gesamt</h2><div id="teamCharts"></div></section>
 <section><h2>Ziel anlegen</h2><input id="goalEmpId" placeholder="Mitarbeiter-ID" type="number"><label>Von <input id="goalStart" type="date"></label><label>Bis <input id="goalEnd" type="date"></label><input id="goalContracts" placeholder="Ziel-Verträge" type="number"><input id="goalRevenue" placeholder="Ziel-Provision €" type="number"><button onclick="createGoal()">Anlegen</button></section>
@@ -321,8 +382,9 @@ PAGE_ZIELE = '''<div class="page" id="page-ziele">
 </div>'''
 
 PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
+<div class="pageHead"><h1>Lernpfad &amp; KI</h1><p>Schulungen und dein persönlicher Vertriebscoach.</p></div>
 <section><h2>Schulungen</h2><div id="trainingAdmin" class="hidden"><input id="trTitle" placeholder="Titel"><label>Start <input id="trStart" type="datetime-local"></label><label>Ende <input id="trEnd" type="datetime-local"></label><input id="trMax" placeholder="Max. Teilnehmer" type="number"><button onclick="createTraining()">Anlegen</button></div><div id="trainingList"></div></section>
-<section><h2>EnergyOne Vertriebscoach</h2><p id="coachHint" class="hidden"><small>Die KI ist auf deinen eigenen Bereich beschränkt (deine Kunden, Aufgaben, Abschlüsse).</small></p><div class="chatWrap" id="coachLog"></div><div class="chatBar"><input id="coachInput" placeholder="Nachricht an den Coach..." onkeydown="if(event.key==='Enter')askCoach()"><label class="fileBtn">📎<input id="coachFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden" onchange="askCoach()"></label><button onclick="askCoach()">Senden</button></div><p><small><a href="#" onclick="clearCoach();return false">Chat leeren</a> — die KI erinnert sich trotzdem an den Verlauf.</small></p></section>
+<section><h2>EnergyOne Vertriebscoach</h2><p><small>Dein Coach ist jetzt jederzeit über das Chat-Symbol unten rechts erreichbar.</small></p></section>
 </div>'''
 
 SCRIPT = '''let token='';let isAdmin=false;
@@ -333,34 +395,66 @@ function tierBadge(t){const c={1:'#2463eb',2:'#eab308',3:'#7c3aed'}[t]||'#94a3b8
 function statusBadge(s){const c={bearbeitung:'#eab308',abgeschlossen:'#16a34a',storno:'#dc2626',klaerung:'#2463eb',eingereicht:'#94a3b8'}[s]||'#94a3b8';const l={bearbeitung:'In Bearbeitung',abgeschlossen:'Abgeschlossen',storno:'Storno',klaerung:'Klärungsbedarf',eingereicht:'Eingereicht'}[s]||s;return `<span style="background:${c};color:#fff;border-radius:4px;padding:2px 8px;font-size:12px">${l}</span>`}
 function bar(pct,scale){const c=scale==='gruen'?'#16a34a':scale==='gelb'?'#eab308':'#dc2626';return `<div style="background:#eef1f6;border-radius:4px;overflow:hidden;height:14px;width:100%"><div style="background:${c};height:14px;width:${Math.min(100,pct)}%"></div></div>`}
 function showPage(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active')}
+function goToStep2(){if(!username.value.trim())return;vpShown.textContent=username.value;loginStep1.classList.remove('active');loginStep2.classList.add('active');code.focus()}
+function backToStep1(){loginStep2.classList.remove('active');loginStep1.classList.add('active');code.value='';username.focus()}
+function applyRoleUI(admin){
+coachBubble.classList.remove('hidden');
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
+else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments()}
+}
 async function signIn(){try{
 let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username.value,code:code.value})});
 let d=await r.json();if(!r.ok)throw Error(d.detail);
 token=d.access_token;isAdmin=d.employee.role==='admin';
+localStorage.setItem('e1_token',token);
 who.innerHTML=d.employee.name+' · '+d.employee.role+' · '+tierBadge(d.employee.tier);
 portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
 login.classList.add('fadeOut');await new Promise(res=>setTimeout(res,350));login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
-if(isAdmin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');loadEmployees();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs()}
-else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions()}
+applyRoleUI(isAdmin);
 load()
 }catch(e){alert(e.message)}}
-function doLogout(){token='';document.location.reload()}
+function doLogout(){token='';localStorage.removeItem('e1_token');document.location.reload()}
+(async function restoreSession(){
+let saved=localStorage.getItem('e1_token');if(!saved)return;
+token=saved;
+try{
+let me=await api('/me');
+isAdmin=me.role==='admin';
+who.innerHTML=me.name+' · '+me.role+' · '+tierBadge(me.tier);
+portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
+login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
+applyRoleUI(isAdmin);
+load()
+}catch(e){localStorage.removeItem('e1_token');token=''}
+})();
 let idleTimer=null;function armIdleTimer(){['click','keydown','mousemove','scroll'].forEach(ev=>document.addEventListener(ev,resetIdleTimer));resetIdleTimer()}
 function resetIdleTimer(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{alert('Automatisch abgemeldet wegen Inaktivität.');doLogout()},15*60*1000)}
 document.getElementById('dailyDate') && (dailyDate.value=new Date().toISOString().slice(0,10));
 let daily={contracts:0,cancellations:0};
 function changeDaily(delta,key){daily[key]=Math.max(0,daily[key]+delta);document.getElementById(key+'Count').textContent=daily[key]}
 async function saveDaily(){try{let x=await api('/employee/daily-performance',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({entry_date:dailyDate.value,contracts:daily.contracts,cancellations:daily.cancellations,note:dailyNote.value})});dailyResult.textContent='Gespeichert · Netto: '+x.net}catch(e){alert(e.message)}}
+let custCache=[];let editingCustomerId=null;let editingCustomerId2=null;
 async function load(){let[d,cs,ts]=await Promise.all([api('/dashboard'),api('/customers'),api('/tasks')]);
+custCache=cs;
 kpis.innerHTML=Object.entries({Kunden:d.customers,'Offene Aufgaben':d.open_tasks}).map(([k,v])=>`<div class=card><small>${k}</small><div class=n>${v}</div></div>`).join('');
-let rowsHtml=cs.map(x=>`<tr><td>${x.company||x.first_name+' '+(x.last_name||'')}</td><td>${x.status}</td><td>${x.postal_code}</td></tr>`).join('');
-if(document.getElementById('customers'))customers.innerHTML=rowsHtml;
-if(document.getElementById('customersAdmin'))customersAdmin.innerHTML=rowsHtml;
+if(document.getElementById('customers'))customers.innerHTML=cs.map(x=>`<tr><td>${x.company||x.first_name+' '+(x.last_name||'')}</td><td>${x.status}</td><td>${x.postal_code}</td><td><button onclick="editCustomer(${x.id})">Bearbeiten</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Noch keine Kunden angelegt.</td></tr>';
+if(document.getElementById('customersAdmin'))customersAdmin.innerHTML=cs.map(x=>`<tr><td>${x.company||x.first_name+' '+(x.last_name||'')}</td><td>${x.status}</td><td>${x.postal_code}</td><td><button onclick="editCustomer2(${x.id})">Bearbeiten</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Noch keine Kunden angelegt.</td></tr>';
 if(document.getElementById('tasks'))tasks.innerHTML=ts.map(x=>`<tr><td>${x.title}</td><td>${x.status}</td><td>${x.due_date||''}</td></tr>`).join('');
-loadProviders();loadCharts();loadDocuments();loadCalendar();loadTrainings()
+loadProviders();loadCharts();loadCalendar();loadTrainings()
 }
-async function customer(){let v={kind:kind.value,email:mail.value,phone:cphone.value,postal_code:plz.value,street:street.value,city:city.value,usage_kwh:+usage.value||0};if(curProvider.value)v.current_provider_id=+curProvider.value;if(v.kind==='firma')v.company=custName.value;else{let a=custName.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});load()}
-async function customer2(){let v={kind:kind2.value,email:mail2.value,phone:cphone2.value,postal_code:plz2.value,street:street2.value,city:city2.value,usage_kwh:+usage2.value||0};if(curProvider2.value)v.current_provider_id=+curProvider2.value;if(v.kind==='firma')v.company=custName2.value;else{let a=custName2.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});load()}
+function fillCustomerForm(sfx,c){document.getElementById('kind'+sfx).value=c.kind;document.getElementById('mail'+sfx).value=c.email||'';document.getElementById('cphone'+sfx).value=c.phone||'';document.getElementById('plz'+sfx).value=c.postal_code||'';document.getElementById('street'+sfx).value=c.street||'';document.getElementById('city'+sfx).value=c.city||'';document.getElementById('usage'+sfx).value=c.usage_kwh||0;let cp=document.getElementById('curProvider'+sfx);if(cp)cp.value=c.current_provider_id||'';document.getElementById('custName'+sfx).value=c.company||((c.first_name||'')+' '+(c.last_name||'')).trim()}
+function resetCustomerForm(sfx){['custName','mail','cphone','plz','street','city','usage'].forEach(id=>document.getElementById(id+sfx).value='')}
+function editCustomer(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId=id;fillCustomerForm('',c);custSubmitBtn.textContent='Speichern'}
+function editCustomer2(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId2=id;fillCustomerForm('2',c);custStatus2.value=c.status||'neu';custStatus2.classList.remove('hidden');custSubmitBtn2.textContent='Speichern'}
+async function customer(){let v={kind:kind.value,email:mail.value,phone:cphone.value,postal_code:plz.value,street:street.value,city:city.value,usage_kwh:+usage.value||0};if(curProvider.value)v.current_provider_id=+curProvider.value;if(v.kind==='firma')v.company=custName.value;else{let a=custName.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+if(editingCustomerId){await api('/customers/'+editingCustomerId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId=null;custSubmitBtn.textContent='Anlegen'}
+else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
+resetCustomerForm('');load()}
+async function customer2(){let v={kind:kind2.value,email:mail2.value,phone:cphone2.value,postal_code:plz2.value,street:street2.value,city:city2.value,usage_kwh:+usage2.value||0};if(curProvider2.value)v.current_provider_id=+curProvider2.value;if(v.kind==='firma')v.company=custName2.value;else{let a=custName2.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
+if(editingCustomerId2){v.status=custStatus2.value;await api('/customers/'+editingCustomerId2,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId2=null;custSubmitBtn2.textContent='Anlegen';custStatus2.classList.add('hidden')}
+else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
+resetCustomerForm('2');load()}
+async function submitClosure(){try{await api('/employee/closures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customer_name:clCustName.value,product:clProduct.value,customer_kind:clKind.value,usage_kwh:+clUsage.value||0,note:clNote.value})});clCustName.value='';clUsage.value='';clNote.value='';closureResult.textContent='Abschluss gemeldet — wird von der Agentur geprüft.';await loadCommissions()}catch(e){alert(e.message)}}
 async function loadCommissions(){let c=await api('/employee/commission-overview');commissionKpis.innerHTML=Object.entries({'Provision (abgeschlossen)':c.total_commission.toFixed(2)+' €','Offene Provision':c.pending_commission.toFixed(2)+' €',Abgeschlossen:c.contracts_completed,Offen:c.contracts_pending}).map(([k,v])=>`<div class=card><small>${k}</small><div class=n>${v}</div></div>`).join('');let rows=await api('/employee/closures');closureList.innerHTML=rows.map(x=>`<tr><td>${x.customer_name}</td><td>${x.product}</td><td>${x.completed_on}</td><td>${statusBadge(x.status)}</td><td>${x.expected_commission.toFixed(2)} €</td></tr>`).join('')}
 async function loadStornoOverview(){let rows=await api('/admin/commission-overview');stornoOverview.innerHTML='<table><thead><tr><th>Mitarbeiter</th><th>Stornoquote</th><th>Storno</th><th>Abgeschlossen</th></tr></thead><tbody>'+rows.map(x=>`<tr><td>${x.name}</td><td style="color:${x.storno_alert?'#dc2626':'#16a34a'};font-weight:700">${x.cancellation_rate} %</td><td>${x.contracts_cancelled}</td><td>${x.contracts_completed}</td></tr>`).join('')+'</tbody></table>'}
 async function loadTeamProvision(){let rows=await api('/admin/commission-overview');let total=rows.reduce((s,x)=>s+x.total_commission,0);teamProvisionKpi.innerHTML=`<div class="card"><small>Team-Provision gesamt (abgeschlossen)</small><div class="n">${total.toFixed(2)} €</div></div>`;teamProvisionList.innerHTML=rows.map(x=>`<tr><td>${x.name}</td><td>${x.total_commission.toFixed(2)} €</td><td>${x.pending_commission.toFixed(2)} €</td></tr>`).join('')}
@@ -368,15 +462,32 @@ async function loadCharts(){let sc=await api('/agency/scorecards');scoreCharts.i
 async function createGoal(){await api('/goals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee_id:goalEmpId.value?+goalEmpId.value:null,period_start:goalStart.value,period_end:goalEnd.value,target_contracts:+goalContracts.value||0,target_revenue:+goalRevenue.value||0})});alert('Ziel angelegt');await loadCharts()}
 async function createIncentive(){await api('/incentives',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:incName.value,description:incDesc.value,minimum_contracts:+incMin.value||0,reward_eur:+incReward.value||0})});incName.value='';await loadCharts()}
 async function uploadDocument(){let f=docFile.files[0];if(!f){alert('Bitte Datei wählen');return}let fd=new FormData();fd.append('file',f);fd.append('category',docCategory.value);if(docExpires.value)fd.append('expires_on',docExpires.value);if(docAmount.value)fd.append('amount',docAmount.value);await fetch('/api/documents',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});docFile.value='';docExpires.value='';docAmount.value='';await loadDocuments()}
-async function loadDocuments(){let rows=await api('/documents');if(!document.getElementById('documentList'))return;documentList.innerHTML=rows.map(x=>`<tr><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on||'-'}</td><td><button onclick="downloadFile('/documents/${x.id}/file','${x.filename}')">Download</button></td></tr>`).join('')}
-async function loadExpiringDocs(){let rows=await api('/admin/documents/expiring');expiringDocs.innerHTML=rows.map(x=>`<tr><td>${x.employee_name||'Agentur'}</td><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on}</td></tr>`).join('')||'<p>Nichts läuft bald ab.</p>'}
+async function loadDocuments(){let rows=await api('/documents');if(!document.getElementById('documentList'))return;let filtered=isAdmin?rows.filter(x=>!x.owner_employee_id):rows;documentList.innerHTML=filtered.map(x=>`<tr><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on||'-'}</td><td><button onclick="downloadFile('/documents/${x.id}/file','${x.filename}')">Download</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Keine Unterlagen.</td></tr>'}
+async function uploadMyDocument(){let f=myDocFile.files[0];if(!f){alert('Bitte Datei wählen');return}let fd=new FormData();fd.append('file',f);fd.append('category',myDocCategory.value);if(myDocExpires.value)fd.append('expires_on',myDocExpires.value);await fetch('/api/documents',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});myDocFile.value='';myDocExpires.value='';await loadMyDocuments()}
+async function loadMyDocuments(){let rows=await api('/documents');myDocumentList.innerHTML=rows.map(x=>`<tr><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on||'-'}</td><td><button onclick="downloadFile('/documents/${x.id}/file','${x.filename}')">Download</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Noch keine Unterlagen.</td></tr>'}
+async function uploadStaffDocument(){let f=abrFile.files[0];if(!f){alert('Bitte Datei wählen');return}if(!abrEmpId.value){alert('Bitte Mitarbeiter-ID angeben');return}let fd=new FormData();fd.append('file',f);fd.append('category',abrCategory.value);fd.append('owner_employee_id',abrEmpId.value);if(abrAmount.value)fd.append('amount',abrAmount.value);await fetch('/api/documents',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});abrFile.value='';abrAmount.value='';await loadStaffDocs()}
+async function loadStaffDocs(){let[rows,emps]=await Promise.all([api('/documents'),api('/employees')]);let byId={};emps.forEach(e=>byId[e.id]=e.name);staffDocsList.innerHTML=rows.filter(x=>x.owner_employee_id).map(x=>`<tr><td>${byId[x.owner_employee_id]||x.owner_employee_id}</td><td>${x.category}</td><td>${x.filename}</td><td>${x.amount?x.amount.toFixed(2)+' €':'-'}</td><td><button onclick="downloadFile('/documents/${x.id}/file','${x.filename}')">Download</button></td></tr>`).join('')||'<tr><td colspan=5 class=empty>Keine Abrechnungen hochgeladen.</td></tr>'}
+async function loadExpiringDocs(){let rows=await api('/admin/documents/expiring');expiringDocs.innerHTML=rows.map(x=>`<tr><td>${x.employee_name||'Agentur'}</td><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on}</td></tr>`).join('')||'<tr><td colspan=4 class=empty>Nichts läuft bald ab.</td></tr>'}
+async function searchProvider(sfx){let q=document.getElementById('provSearchInput'+sfx).value.trim().toLowerCase();let providers=await api('/providers');let matches=q?providers.filter(p=>p.name.toLowerCase().includes(q)):providers.slice(0,15);document.getElementById('provSearchResults'+sfx).innerHTML=matches.slice(0,25).map(p=>`<span class="searchHit" onclick="showProviderCommission('${sfx}',${p.id},'${p.name.replace(/'/g,"\\'")}')">${p.name}</span>`).join('')||'<p class=empty>Keine Treffer.</p>'}
+async function showProviderCommission(sfx,id,name){let tariffs=await api('/providers/'+id+'/tariffs');let html=`<h3>${name}</h3>`;for(const t of tariffs){let brackets=await api('/tariffs/'+t.id+'/brackets');let byTier={1:[],2:[],3:[]};brackets.forEach(b=>{if(byTier[b.tier])byTier[b.tier].push(b)});let froms=[...new Set(brackets.map(b=>b.usage_from))].sort((a,b)=>a-b);html+=`<div class="card"><b>${t.name}</b><table><thead><tr><th>Verbrauch ab</th><th>Stufe 1</th><th>Stufe 2</th><th>Stufe 3</th></tr></thead><tbody>`+froms.map(f=>`<tr><td>${f} kWh</td>`+[1,2,3].map(tier=>{let b=byTier[tier].find(x=>x.usage_from===f);return `<td>${b?b.commission_amount.toFixed(2)+' €':'-'}</td>`}).join('')+`</tr>`).join('')+'</tbody></table></div>'}document.getElementById('provCommissionResult'+sfx).innerHTML=html}
+async function loadPendingClosures(){let[rows,providers]=await Promise.all([api('/admin/closures'),api('/providers')]);let pending=rows.filter(x=>['eingereicht','bearbeitung','klaerung'].includes(x.status));pendingClosures.innerHTML=pending.map(c=>`<div class="card"><b>${c.customer_name}</b> · ${c.product} · ${c.usage_kwh} kWh · ${c.completed_on} · ${statusBadge(c.status)}<div style="margin-top:8px"><select id="revProv${c.id}" onchange="loadRevTariffs(${c.id})"><option value="">Anbieter wählen</option>${providers.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select><select id="revTariff${c.id}"><option value="">Tarif wählen</option></select><select id="revStatus${c.id}"><option value="bearbeitung">In Bearbeitung</option><option value="abgeschlossen">Abgeschlossen</option><option value="storno">Storno</option><option value="klaerung">Klärungsbedarf</option></select><button onclick="reviewClosure(${c.id})">Prüfen</button></div></div>`).join('')||'<p class=empty>Keine offenen Abschlüsse zur Prüfung.</p>'}
+async function loadRevTariffs(closureId){let pid=document.getElementById('revProv'+closureId).value;let sel=document.getElementById('revTariff'+closureId);if(!pid){sel.innerHTML='<option value="">Tarif wählen</option>';return}let rows=await api('/providers/'+pid+'/tariffs');sel.innerHTML='<option value="">Tarif wählen</option>'+rows.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+async function reviewClosure(id){let tariffId=document.getElementById('revTariff'+id).value;let providerId=document.getElementById('revProv'+id).value;let status=document.getElementById('revStatus'+id).value;try{await api('/admin/closures/'+id+'/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,provider_id:providerId?+providerId:null,tariff_id:tariffId?+tariffId:null})});await loadPendingClosures();await loadTeamProvision();await loadTeamBars()}catch(e){alert(e.message)}}
 async function loadCalendar(){let rows=await api('/planning');calendarList.innerHTML=rows.map(x=>`<tr><td>${x.starts_at.replace('T',' ')}</td><td>${x.ends_at.replace('T',' ')}</td><td>${x.kind}${x.note?' — '+x.note:''}</td></tr>`).join('')||'<p>Keine Termine.</p>'}
 async function createSchedule(){await api('/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee_id:+calEmpId.value,starts_at:calStart.value,ends_at:calEnd.value,kind:'Termin',note:calTitle.value})});calTitle.value='';await loadCalendar()}
 async function loadTrainings(){let rows=await api('/trainings');trainingList.innerHTML=rows.map(x=>`<div class="card"><b>${x.title}</b> · ${x.starts_at.replace('T',' ')} · ${x.participants}${x.max_participants?'/'+x.max_participants:''} Teilnehmer ${x.registered?'✓ angemeldet':`<button onclick="registerTraining(${x.id})">Anmelden</button>`}${isAdmin?` <button onclick="registerAll(${x.id})">Alle anmelden</button>`:''}</div>`).join('')||'<p>Keine Schulungen geplant.</p>'}
 async function registerTraining(id){await api('/trainings/'+id+'/register',{method:'POST'});await loadTrainings()}
 async function registerAll(id){let emps=await api('/employees');for(const emp of emps){try{await api('/trainings/'+id+'/register?employee_id='+emp.id,{method:'POST'})}catch(e){}}await loadTrainings()}
 async function createTraining(){await api('/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:trTitle.value,starts_at:trStart.value,ends_at:trEnd.value,max_participants:trMax.value?+trMax.value:null})});trTitle.value='';trMax.value='';await loadTrainings()}
-let coachClearedAt=null;
+let coachClearedAt=null;let coachOpen=false;
+function toggleCoachWindow(){coachOpen=!coachOpen;coachWindow.classList.toggle('hidden',!coachOpen);if(coachOpen){loadCoach();coachInput.focus()}}
+(function makeCoachDraggable(){
+let win=document.getElementById('coachWindow');let header=document.getElementById('coachWinHeader');
+let dragging=false,offX=0,offY=0;
+header.addEventListener('mousedown',e=>{if(e.target.closest('.coachWinClose'))return;dragging=true;let r=win.getBoundingClientRect();offX=e.clientX-r.left;offY=e.clientY-r.top;win.style.right='auto';win.style.bottom='auto';win.style.left=r.left+'px';win.style.top=r.top+'px'});
+document.addEventListener('mousemove',e=>{if(!dragging)return;win.style.left=Math.max(4,Math.min(window.innerWidth-40,e.clientX-offX))+'px';win.style.top=Math.max(4,Math.min(window.innerHeight-40,e.clientY-offY))+'px'});
+document.addEventListener('mouseup',()=>dragging=false);
+})();
 async function loadCoach(){let rows=await api('/training/coach/history');coachLog.innerHTML=rows.filter(x=>!coachClearedAt||x.created_at>coachClearedAt).map(x=>`<div class="bubble ${x.role==='assistant'?'bot':'user'}">${x.text}</div>`).join('');coachLog.scrollTop=coachLog.scrollHeight}
 function clearCoach(){coachClearedAt=new Date().toISOString();coachLog.innerHTML=''}
 async function askCoach(){let input=document.getElementById('coachInput');let fileInput=document.getElementById('coachFile');if(!input.value.trim()&&!fileInput.files[0])return;
@@ -384,7 +495,8 @@ if(fileInput.files[0]){let fd=new FormData();fd.append('file',fileInput.files[0]
 else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:input.value})})}
 input.value='';await loadCoach()}
 async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:empVpNummer.value,name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value,vp_nummer:empVpNummer.value})});empQr.innerHTML='<p>QR für '+r.username+' scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';await loadEmployees()}
-async function loadEmployees(){let rows=await api('/employees');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="downloadFile('/employees/${x.id}/report.xlsx','report-${x.username}.xlsx')">Excel</button></td></tr>`).join('')}
+async function loadEmployees(){let rows=await api('/employees');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="downloadFile('/employees/${x.id}/report.xlsx','report-${x.username}.xlsx')">Excel</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button></td></tr>`).join('')}
+async function toggleEmployeeActive(id){if(!confirm('Status wirklich ändern?'))return;try{await api('/employees/'+id+'/toggle-active',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function resetTotp(){let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Schlüssel manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'}
 async function createProvider(){await api('/providers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:provName.value,street:provStreet.value,postal_code:provPlz.value,city:provCity.value,phone:provPhone.value,contact_person:provContact.value})});await loadProviders()}
 async function loadProviders(){let rows=await api('/providers');if(document.getElementById('providerList'))providerList.innerHTML='<table><tbody>'+rows.map(x=>`<tr><td>${x.id}</td><td>${x.name}</td><td>${x.city||''}</td></tr>`).join('')+'</tbody></table>';['curProvider','curProvider2'].forEach(id=>{let el=document.getElementById(id);if(el)el.innerHTML='<option value="">Aktueller Anbieter (optional)</option>'+rows.map(x=>`<option value="${x.id}">${x.name}</option>`).join('')})}
@@ -394,10 +506,38 @@ async function loadAllDaily(){let rows=await api('/admin/daily-performance');all
 async function loadTeamBars(){let rows=await api('/admin/commission-overview');let max=Math.max(1,...rows.map(x=>x.contracts_completed));teamBars.innerHTML=rows.map(x=>`<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><b>${x.name}</b><span>${x.contracts_completed} Verträge · Storno ${x.contracts_cancelled} (<span style="color:${x.storno_alert?'#dc2626':'#16a34a'};font-weight:700">${x.cancellation_rate}%</span>)</span></div><div class="abar"><div data-w="${Math.round(x.contracts_completed/max*100)}"></div></div></div>`).join('')||'<p>Keine Daten.</p>';requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('#teamBars .abar>div').forEach(el=>el.style.width=el.dataset.w+'%')))}
 async function exportTeamCsv(){let rows=await api('/admin/commission-overview');let blob=new Blob([toCsv(rows)],{type:'text/csv'});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='mitarbeiter-zahlen.csv';a.click();URL.revokeObjectURL(url)}'''
 
-HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>
-<header><div><b>⚡ E1 Direktvertrieb</b><span class="badge" id="portalBadge">Portal</span></div><div class="headerRight"><span id="who"></span><button id="logoutBtn" class="hidden" onclick="doLogout()">Logout</button></div></header>
-<div id="login" class="loginWrap"><div class="loginCard"><div class="loginLeft"><h2>Anmelden</h2><p class="sub">E1 Direktvertrieb · Vertriebsportal — mit VP-Nummer und Authenticator-Code einloggen.</p><div class="loginField"><input id="username" placeholder=" "><label>VP-Nummer</label></div><div class="loginField"><input id="code" placeholder=" "><label>Code (Authenticator)</label></div><button class="loginBtn" onclick="signIn()">Login</button><p class="loginHint">Code aus Google Authenticator. Bei Verlust: Generalschlüssel oder Admin um TOTP-Reset bitten.</p></div><div class="loginRight"><svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#22d3ee"/><stop offset="50%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#ec4899"/></linearGradient><filter id="blur1"><feGaussianBlur stdDeviation="20"/></filter></defs><rect width="400" height="500" fill="#0b0a1f"/><path d="M-50,260 C80,150 150,360 280,220 C380,120 450,300 500,210 L500,550 L-50,550 Z" fill="url(#g1)" opacity="0.85" filter="url(#blur1)"/><path d="M-50,330 C100,260 200,430 320,300 C400,220 460,380 500,320 L500,550 L-50,550 Z" fill="url(#g1)" opacity="0.55"/></svg></div></div></div>
-<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_ZIELE + PAGE_LERNPFAD + '''</div></div></div>
+LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
+LOGO_ICON_ADMIN = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#ea580c"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg2)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
+
+LOGIN_EMPLOYEE = '''<div id="login" class="loginWrap"><div class="loginBox">
+<div class="loginLogo">''' + LOGO_ICON + ''' E1 <b>Direktvertrieb</b></div><div class="loginTag">VERTRIEBSPORTAL</div>
+<div class="loginStep active" id="loginStep1"><input id="username" placeholder="VP-Nummer" onkeydown="if(event.key==='Enter')goToStep2()"><button onclick="goToStep2()">Weiter</button></div>
+<div class="loginStep" id="loginStep2"><div class="loginVpShown"><span id="vpShown"></span><a href="#" onclick="backToStep1();return false">ändern</a></div><input id="code" placeholder="Authentifizierungs-Code" onkeydown="if(event.key==='Enter')signIn()"><button onclick="signIn()">Bestätigen</button></div>
+<p class="loginHint">Code aus Google Authenticator. Bei Verlust: Generalschlüssel oder Admin um TOTP-Reset bitten.</p>
+<a href="/admin" class="internalLoginBtn">Interner Login</a>
+</div></div>'''
+
+LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="loginBox">
+<div class="loginLogo">''' + LOGO_ICON_ADMIN + ''' E1 <b>Admin</b></div><div class="loginTag">ADMIN PORTAL ZUGANG</div>
+<div class="loginStep active" id="loginStep1"><input id="username" placeholder="Benutzername"><input id="code" placeholder="Code / Generalschlüssel" onkeydown="if(event.key==='Enter')signIn()"><button onclick="signIn()">Anmelden</button></div>
+<p class="loginHint">Nur für Administratoren.<br><a href="/">Zum Mitarbeiter-Login</a></p>
+</div></div>'''
+
+APP_SHELL = '''<header><div><b>''' + LOGO_ICON + ''' E1 Direktvertrieb</b><span class="badge" id="portalBadge">Portal</span></div><div class="headerRight"><span id="who"></span><button id="logoutBtn" class="hidden" onclick="doLogout()">Logout</button></div></header>
+__LOGIN__
+<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_LERNPFAD + '''</div></div>
+<div id="coachBubble" class="hidden" onclick="toggleCoachWindow()">💬</div>
+<div id="coachWindow" class="hidden">
+<div id="coachWinHeader" class="coachWinHeader"><span>''' + LOGO_ICON.replace('width="30" height="30"','width="20" height="20"') + ''' EnergyOne Coach</span><button class="coachWinClose" onclick="toggleCoachWindow()">✕</button></div>
+<p id="coachHint" class="hidden" style="padding:10px 14px 0"><small>Die KI ist auf deinen eigenen Bereich beschränkt (deine Kunden, Aufgaben, Abschlüsse).</small></p>
+<div class="chatWrap" id="coachLog"></div>
+<div class="chatBar"><input id="coachInput" placeholder="Nachricht an den Coach..." onkeydown="if(event.key==='Enter')askCoach()"><label class="fileBtn">📎<input id="coachFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" class="hidden" onchange="askCoach()"></label><button onclick="askCoach()">➤</button></div>
+<p style="padding:0 14px 12px"><small><a href="#" onclick="clearCoach();return false">Chat leeren</a></small></p>
+</div>
+</div>
 <script>''' + SCRIPT + '''</script></body></html>'''
+
+HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
+HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
 
 from . import agency
