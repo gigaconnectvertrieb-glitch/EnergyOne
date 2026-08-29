@@ -682,13 +682,18 @@ PITCHES = [
 def pitches(_: Employee = Depends(current)): return PITCHES
 
 
+def anthropic_client(api_key: str):
+    from anthropic import Anthropic
+    workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+    headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
+    return Anthropic(api_key=api_key, default_headers=headers) if headers else Anthropic(api_key=api_key)
+
 @app.post("/api/training/practice")
 def practice(data: PracticeIn, _: Employee = Depends(current)):
     anthropic_key=os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
-            from anthropic import Anthropic
-            result=Anthropic(api_key=anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
+            result=anthropic_client(anthropic_key).messages.create(model=os.getenv("ANTHROPIC_MODEL","claude-sonnet-5"),max_tokens=500,system="Du bist ein deutschsprachiger, transparenter Vertriebscoach. Gib eine kurze Einwandbehandlung ohne Druck oder Preisversprechen.",messages=[{"role":"user","content":f"Produkt: {data.product}; Kunde: {data.customer_type}; Einwand: {data.objection}"}])
             return {"source":"claude","answer":result.content[0].text}
         except Exception: pass
     key=os.getenv("OPENAI_API_KEY")
@@ -838,8 +843,7 @@ def run_coach_loop(user_content, e: Employee, s: Session):
     anthropic_key=os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
-            from anthropic import Anthropic
-            client=Anthropic(api_key=anthropic_key)
+            client=anthropic_client(anthropic_key)
             messages=[{"role":x.role,"content":x.text} for x in history[:-1]] + [{"role":"user","content":user_content}]
             tools=ai_tools_for(e.role)
             answer=None
