@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from .app import Base, Customer, CustomerIn, Employee, EmployeeIn, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf
+import pyotp
+
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf
 
 
 class Team(Base):
@@ -398,6 +400,56 @@ def employee_kartei(employee_id: int, e: Employee = Depends(current), s: Session
         "daily_performance": [serialize(x) for x in s.scalars(select(DailyPerformance).where(DailyPerformance.employee_id==employee_id).order_by(DailyPerformance.entry_date.desc()))],
         "trainings": trainings,
     }
+
+
+@app.post("/api/employees/{employee_id}/delete-account")
+def delete_employee_account(employee_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    """Account löschen: Login/TOTP/persönliche Daten werden entfernt, Kunden/Abschlüsse/Provisionshistorie bleiben für Buchhaltung erhalten."""
+    x = s.get(Employee, employee_id)
+    if not x: raise HTTPException(404, "Mitarbeiter nicht gefunden")
+    if x.id == e.id: raise HTTPException(400, "Eigenen Account nicht löschen")
+    x.active = False; x.name = "Ehemaliger Mitarbeiter"; x.email = None; x.phone = None; x.totp_secret = pyotp.random_base32()
+    log(s, e, "Mitarbeiter-Account gelöscht (Geschäftsdaten bleiben erhalten)", x.username)
+    s.commit()
+    return {"status": "deleted", "mode": "account_only"}
+
+
+@app.delete("/api/employees/{employee_id}")
+def purge_employee(employee_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    """Wirklich alles löschen: Mitarbeiter samt Kunden, Abschlüssen, Provisionen, Tagesmeldungen, Dokumenten, Terminen etc. unwiderruflich entfernen."""
+    x = s.get(Employee, employee_id)
+    if not x: raise HTTPException(404, "Mitarbeiter nicht gefunden")
+    if x.id == e.id: raise HTTPException(400, "Eigenen Account nicht löschen")
+    username = x.username
+    customer_ids = list(s.scalars(select(Customer.id).where(Customer.owner_id == employee_id)))
+    if customer_ids:
+        for t in s.scalars(select(Task).where(Task.customer_id.in_(customer_ids))): t.customer_id = None
+        for h in s.scalars(select(CustomerHistory).where(CustomerHistory.customer_id.in_(customer_ids))): s.delete(h)
+    for row in s.scalars(select(Customer).where(Customer.owner_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(CustomerHistory).where(CustomerHistory.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(Task).where(Task.assignee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(Task).where(Task.creator_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(Activity).where(Activity.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(ClosureEntry).where(ClosureEntry.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(ClosureEntry).where(ClosureEntry.reviewed_by == employee_id)): row.reviewed_by = None
+    for row in s.scalars(select(DailyPerformance).where(DailyPerformance.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(TrainingRegistration).where(TrainingRegistration.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(TeamMember).where(TeamMember.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(ScheduleEntry).where(ScheduleEntry.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(StornoStatus).where(StornoStatus.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(SalesGoal).where(SalesGoal.employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(Document).where(Document.owner_employee_id == employee_id)): s.delete(row)
+    for row in s.scalars(select(Document).where(Document.uploaded_by == employee_id)): row.uploaded_by = e.id
+    for row in s.scalars(select(Team).where(Team.leader_id == employee_id)): row.leader_id = None
+    for row in s.scalars(select(News).where(News.author_id == employee_id)): row.author_id = e.id
+    for row in s.scalars(select(Expense).where(Expense.created_by == employee_id)): row.created_by = e.id
+    for row in s.scalars(select(Training).where(Training.created_by == employee_id)): row.created_by = e.id
+    s.flush()
+    s.delete(x)
+    log(s, e, "Mitarbeiter vollständig gelöscht", username)
+    s.commit()
+    return {"status": "deleted", "mode": "full_purge"}
 
 
 @app.get("/api/employees/{employee_id}/report.pdf")
