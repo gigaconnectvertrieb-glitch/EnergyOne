@@ -425,6 +425,7 @@ NAV = '''<nav class="navcol">
 <button class="navbtn hidden" id="navZiele" onclick="showPage('ziele',this)">🎯 Ziele &amp; Incentives</button>
 <button class="navbtn hidden" id="navLoginzugaenge" onclick="showPage('loginzugaenge',this)">🔑 Loginzugänge</button>
 <button class="navbtn hidden" id="navBuchhaltung" onclick="showPage('buchhaltung',this)">🧾 Buchhaltung</button>
+<button class="navbtn hidden" id="navEmails" onclick="showPage('emails',this)">📧 E-Mails</button>
 <button class="navbtn" id="navLernpfad" onclick="showPage('lernpfad',this)">🎓 Lernpfad &amp; KI</button>
 </nav>'''
 
@@ -494,6 +495,18 @@ PAGE_ZIELE = '''<div class="page" id="page-ziele">
 <section><h2>News</h2><p><small>Interne Team-News (nur im Portal sichtbar). Die "Aktuelles"-Sektion auf der Website zeigt automatisch aktuelle Strom/Gas-Nachrichten aus dem Internet, dafür ist hier keine Pflege nötig.</small></p><input id="newsTitle" placeholder="Titel"><textarea id="newsText" placeholder="Text" rows="3" style="width:100%;box-sizing:border-box"></textarea><label><input type="checkbox" id="newsImportant" style="width:auto"> Wichtig</label><button onclick="createNews()">Veröffentlichen</button><div id="newsList"></div></section>
 </div>'''
 
+PAGE_EMAILS = '''<div class="page" id="page-emails">
+<div class="pageHead" style="--pageAccent:#2563eb"><h1>E-Mails</h1><p>Geschäftliche Postfächer direkt im Portal lesen und beantworten.</p></div>
+<section><h2>Postfächer</h2><div id="mailAccountList" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div><details><summary style="cursor:pointer;font-weight:600;font-size:13.5px">Postfach hinzufügen</summary><div style="margin-top:10px"><input id="mailNewAddress" placeholder="E-Mail-Adresse (z.B. info@e1direktvertrieb.de)"><input id="mailNewDisplayName" placeholder="Anzeigename (z.B. Info)"><input id="mailNewPassword" type="password" placeholder="App-Passwort"><button onclick="addMailAccount()">Hinzufügen</button><p id="mailAddResult"></p></div></details></section>
+<section id="mailWorkArea" class="hidden"><h2 id="mailWorkTitle">Nachrichten</h2>
+<div style="display:flex;gap:10px;margin-bottom:10px"><button onclick="pollSelectedMailAccount()">🔄 Jetzt prüfen</button><button onclick="openMailComposer()">✎ Neue E-Mail</button></div>
+<div style="display:flex;gap:18px;flex-wrap:wrap">
+<div style="flex:1;min-width:260px"><table><thead><tr><th>Von</th><th>Betreff</th><th>Datum</th></tr></thead><tbody id="mailMessageList"></tbody></table></div>
+<div style="flex:1;min-width:280px" id="mailReadPane"><p class="empty">Nachricht auswählen.</p></div>
+</div>
+</section>
+</div>'''
+
 PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
 <div class="pageHead" style="--pageAccent:#0d9488"><h1>Lernpfad &amp; KI</h1><p>Schulungen und dein persönlicher Vertriebscoach.</p></div>
 <section><h2>Schulungen</h2><div id="trainingAdmin" class="hidden"><input id="trTitle" placeholder="Titel"><label>Start <input id="trStart" type="datetime-local"></label><label>Ende <input id="trEnd" type="datetime-local"></label><input id="trMax" placeholder="Max. Teilnehmer" type="number"><button onclick="createTraining()">Anlegen</button></div><div id="trainingList"></div></section>
@@ -513,7 +526,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
 let ws=null;
@@ -559,6 +572,7 @@ if(active.id==='page-dashboard'){if(isAdmin){loadTeamBars();loadAllDaily();load(
 else if(active.id==='page-provision'){loadTeamProvision();loadStornoOverview();loadPendingClosures()}
 else if(active.id==='page-ziele'){loadCharts()}
 else if(active.id==='page-mitarbeiter'){loadEmployees()}
+else if(active.id==='page-emails'){loadMailAccounts();if(selectedMailAccountId)loadMailMessages(selectedMailAccountId)}
 }
 setInterval(refreshActivePage,20000);
 document.getElementById('dailyDate') && (dailyDate.value=new Date().toISOString().slice(0,10));
@@ -619,6 +633,54 @@ async function createIncentive(){await api('/incentives',{method:'POST',headers:
 async function createNews(){if(!newsTitle.value.trim())return;await api('/news',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newsTitle.value,text:newsText.value,important:newsImportant.checked})});newsTitle.value='';newsText.value='';newsImportant.checked=false;await loadNews()}
 async function loadNews(){let rows=await api('/news');newsList.innerHTML=rows.map(x=>`<div class="card"><b>${x.title}</b>${x.important?' <small style="color:#dc2626">(wichtig)</small>':''}<br>${x.text}<br><button onclick="deleteNews(${x.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c);margin-top:6px">Löschen</button></div>`).join('')||'<p class=empty>Keine News.</p>'}
 async function deleteNews(id){if(!confirm('News löschen?'))return;await api('/news/'+id,{method:'DELETE'});await loadNews()}
+function escHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+let selectedMailAccountId=null;let mailAccountsCache=[];let mailOpenMessage=null;
+async function loadMailAccounts(){
+let rows=await api('/mail/accounts').catch(()=>[]);
+mailAccountsCache=rows;
+mailAccountList.innerHTML=rows.map(a=>`<button class="navbtn${a.id===selectedMailAccountId?' active':''}" style="padding:8px 14px;font-size:13px" onclick="selectMailAccount(${a.id})">${escHtml(a.display_name||a.address)}${a.unread_count?` <span style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px">${a.unread_count}</span>`:''} <span onclick="event.stopPropagation();deleteMailAccount(${a.id})" style="opacity:.6">✕</span></button>`).join('')||'<p class="empty">Noch kein Postfach hinterlegt.</p>';
+if(rows.length && !selectedMailAccountId){selectMailAccount(rows[0].id)}
+}
+function selectMailAccount(id){selectedMailAccountId=id;mailWorkArea.classList.remove('hidden');mailOpenMessage=null;let a=mailAccountsCache.find(x=>x.id===id);mailWorkTitle.textContent='Nachrichten · '+(a?(a.display_name||a.address):'');mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>';loadMailAccounts();loadMailMessages(id)}
+async function deleteMailAccount(id){if(!confirm('Postfach und alle zwischengespeicherten Nachrichten wirklich entfernen?'))return;await api('/mail/accounts/'+id,{method:'DELETE'});if(selectedMailAccountId===id){selectedMailAccountId=null;mailWorkArea.classList.add('hidden')}await loadMailAccounts()}
+async function loadMailMessages(id){
+let rows=await api('/mail/accounts/'+id+'/messages').catch(()=>[]);
+mailMessageList.innerHTML=rows.map(m=>`<tr style="cursor:pointer;${m.is_read?'':'font-weight:700'}" onclick="openMailMessage(${m.id})"><td>${m.direction==='out'?'Ich':escHtml(m.sender_name||m.sender_email)}</td><td>${escHtml(m.subject)||'(kein Betreff)'}</td><td>${new Date(m.received_at).toLocaleString('de-DE')}</td></tr>`).join('')||'<tr><td colspan="3" class="empty">Keine Nachrichten.</td></tr>';
+}
+async function openMailMessage(id){
+let m=await api('/mail/messages/'+id);
+mailOpenMessage=m;
+mailReadPane.innerHTML=`<div class="card"><b>${escHtml(m.subject)||'(kein Betreff)'}</b><br><small>${m.direction==='out'?'An: '+escHtml(m.to_addrs):'Von: '+(m.sender_name?escHtml(m.sender_name)+' &lt;'+escHtml(m.sender_email)+'&gt;':escHtml(m.sender_email))}</small><p style="white-space:pre-wrap">${escHtml(m.body_text)}</p><button onclick="openMailComposer(true)">Antworten</button></div>`;
+await loadMailMessages(selectedMailAccountId);await loadMailAccounts();
+}
+function openMailComposer(reply){
+let pre=reply?mailOpenMessage:null;
+let to=pre?(pre.direction==='out'?(pre.to_addrs||''):pre.sender_email):'';
+let subject=pre?('Re: '+(pre.subject||'').replace(/^Re: /i,'')):'';
+mailReadPane.innerHTML=`<div class="card"><h3>${reply?'Antworten':'Neue E-Mail'}</h3><input id="mailToInput" placeholder="An" value="${escHtml(to)}"><input id="mailSubjectInput" placeholder="Betreff" value="${escHtml(subject)}"><textarea id="mailBodyInput" rows="8" style="width:100%;box-sizing:border-box" placeholder="Nachricht"></textarea><button onclick="sendMailMessage()">Senden</button> <button onclick="cancelMailComposer()" style="background:#e9e7f5;color:#1c1a2e">Abbrechen</button><p id="mailSendResult"></p></div>`;
+}
+function cancelMailComposer(){if(mailOpenMessage)openMailMessage(mailOpenMessage.id);else mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>'}
+async function sendMailMessage(){
+if(!selectedMailAccountId)return;
+if(!mailToInput.value.trim()){mailSendResult.textContent='Bitte Empfänger angeben.';return}
+let payload={to:mailToInput.value,subject:mailSubjectInput.value,body:mailBodyInput.value};
+if(mailOpenMessage&&mailOpenMessage.message_id)payload.in_reply_to=mailOpenMessage.message_id;
+try{
+await api('/mail/accounts/'+selectedMailAccountId+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+mailReadPane.innerHTML='<p class="empty">Gesendet.</p>';mailOpenMessage=null;
+await loadMailMessages(selectedMailAccountId);
+}catch(ex){mailSendResult.textContent='Fehler: '+ex.message}
+}
+async function pollSelectedMailAccount(){if(!selectedMailAccountId)return;await api('/mail/accounts/'+selectedMailAccountId+'/poll',{method:'POST'});await loadMailMessages(selectedMailAccountId);await loadMailAccounts()}
+async function addMailAccount(){
+if(!mailNewAddress.value.trim()||!mailNewPassword.value.trim()){mailAddResult.textContent='Adresse und App-Passwort angeben.';return}
+mailAddResult.textContent='Prüfe Zugangsdaten...';
+try{
+await api('/mail/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:mailNewAddress.value,display_name:mailNewDisplayName.value,app_password:mailNewPassword.value})});
+mailNewAddress.value='';mailNewDisplayName.value='';mailNewPassword.value='';mailAddResult.textContent='Postfach hinzugefügt.';
+await loadMailAccounts();
+}catch(ex){mailAddResult.textContent='Fehler: '+ex.message}
+}
 async function uploadDocument(){let f=docFile.files[0];if(!f){alert('Bitte Datei wählen');return}let fd=new FormData();fd.append('file',f);fd.append('category',docCategory.value);if(docExpires.value)fd.append('expires_on',docExpires.value);if(docAmount.value)fd.append('amount',docAmount.value);await fetch('/api/documents',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});docFile.value='';docExpires.value='';docAmount.value='';await loadDocuments()}
 async function loadDocuments(){let rows=await api('/documents');if(!document.getElementById('documentList'))return;let filtered=isAdmin?rows.filter(x=>!x.owner_employee_id):rows;documentList.innerHTML=filtered.map(x=>`<tr><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on||'-'}</td><td><button onclick="downloadFile('/documents/${x.id}/file','${x.filename}')">Download</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Keine Unterlagen.</td></tr>'}
 async function uploadMyDocument(){let f=myDocFile.files[0];if(!f){alert('Bitte Datei wählen');return}let fd=new FormData();fd.append('file',f);fd.append('category',myDocCategory.value);if(myDocExpires.value)fd.append('expires_on',myDocExpires.value);await fetch('/api/documents',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});myDocFile.value='';myDocExpires.value='';await loadMyDocuments()}
@@ -765,7 +827,7 @@ LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="lo
 
 APP_SHELL = '''<header><div><b>''' + LOGO_ICON + ''' E1 Direktvertrieb</b><span class="badge" id="portalBadge">Portal</span></div><div class="headerRight"><span id="who"></span><button id="logoutBtn" class="hidden" onclick="doLogout()">Logout</button></div></header>
 __LOGIN__
-<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_LERNPFAD + '''</div></div>
+<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_EMAILS + PAGE_LERNPFAD + '''</div></div>
 <div id="coachBubble" class="hidden" onclick="toggleCoachWindow()">💬</div>
 <div id="coachWindow" class="hidden">
 <div id="coachWinHeader" class="coachWinHeader"><span>''' + LOGO_ICON.replace('width="30" height="30"','width="20" height="20"') + ''' EnergyOne Coach</span><button class="coachWinClose" onclick="toggleCoachWindow()">✕</button></div>
@@ -1054,3 +1116,4 @@ DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"
 </body></html>'''
 
 from . import agency
+from . import mail
