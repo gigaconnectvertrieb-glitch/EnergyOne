@@ -422,6 +422,18 @@ def team_leaderboard(_: Employee = Depends(current), s: Session = Depends(db)):
     return result
 
 
+@app.delete("/api/customers/{customer_id}")
+def delete_customer(customer_id: int, e: Employee = Depends(current), s: Session = Depends(db)):
+    c = s.get(Customer, customer_id)
+    if not c: raise HTTPException(404, "Kunde nicht gefunden")
+    if e.role != "admin" and c.owner_id != e.id: raise HTTPException(403, "Keine Berechtigung")
+    for h in s.scalars(select(CustomerHistory).where(CustomerHistory.customer_id == customer_id)): s.delete(h)
+    for t in s.scalars(select(Task).where(Task.customer_id == customer_id)): t.customer_id = None
+    for cl in s.scalars(select(ClosureEntry).where(ClosureEntry.customer_id == customer_id)): cl.customer_id = None
+    s.delete(c)
+    log(s, e, "Kunde gelöscht", str(customer_id)); s.commit(); notify_update()
+    return {"status": "deleted"}
+
 @app.get("/api/employees/{employee_id}/kartei")
 def employee_kartei(employee_id: int, e: Employee = Depends(current), s: Session = Depends(db)):
     if e.role != "admin" and e.id != employee_id: raise HTTPException(403, "Keine Berechtigung")
