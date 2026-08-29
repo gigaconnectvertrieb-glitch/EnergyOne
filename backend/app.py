@@ -26,7 +26,7 @@ ISSUER = "E1 Direktvertrieb"
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agentur.db")
 if DATABASE_URL.startswith("postgresql"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {"connect_timeout": 10})
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 SECRET = os.getenv("JWT_SECRET")
 if not SECRET:
@@ -112,19 +112,24 @@ def reset_login_attempts(username: str): _login_attempts.pop(username, None)
 
 def migrate_columns():
     inspector = inspect(engine); existing_tables = set(inspector.get_table_names())
-    with engine.begin() as conn:
-        for table in Base.metadata.sorted_tables:
-            if table.name not in existing_tables: continue
-            existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
-            for col in table.columns:
-                if col.name in existing_cols: continue
-                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'))
-        if "mitarbeiter" in existing_tables and "password_hash" in {c["name"] for c in inspector.get_columns("mitarbeiter")}:
-            try: conn.execute(text('ALTER TABLE "mitarbeiter" DROP COLUMN "password_hash"'))
-            except Exception: pass
-        if "kunden" in existing_tables:
-            try: conn.execute(text('ALTER TABLE "kunden" ALTER COLUMN "email" DROP NOT NULL'))
-            except Exception: pass
+    is_pg = engine.dialect.name == "postgresql"
+    def run(sql: str):
+        with engine.begin() as conn:
+            if is_pg: conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            conn.execute(text(sql))
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables: continue
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing_cols: continue
+            try: run(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}')
+            except Exception as ex: print(f"[MIGRATE WARN] {table.name}.{col.name}: {type(ex).__name__}: {ex}", flush=True)
+    if "mitarbeiter" in existing_tables and "password_hash" in {c["name"] for c in inspector.get_columns("mitarbeiter")}:
+        try: run('ALTER TABLE "mitarbeiter" DROP COLUMN "password_hash"')
+        except Exception: pass
+    if "kunden" in existing_tables:
+        try: run('ALTER TABLE "kunden" ALTER COLUMN "email" DROP NOT NULL')
+        except Exception: pass
 
 class ConnectionManager:
     def __init__(self): self.connections: list[WebSocket] = []
