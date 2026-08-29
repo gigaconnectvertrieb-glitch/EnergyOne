@@ -562,7 +562,7 @@ async function loadTrainings(){let rows=await api('/trainings');trainingList.inn
 async function registerTraining(id){await api('/trainings/'+id+'/register',{method:'POST'});await loadTrainings()}
 async function registerAll(id){let emps=await api('/employees');for(const emp of emps){try{await api('/trainings/'+id+'/register?employee_id='+emp.id,{method:'POST'})}catch(e){}}await loadTrainings()}
 async function createTraining(){await api('/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:trTitle.value,starts_at:trStart.value,ends_at:trEnd.value,max_participants:trMax.value?+trMax.value:null})});trTitle.value='';trMax.value='';await loadTrainings()}
-let coachClearedAt=null;let coachOpen=false;
+let coachOpen=false;
 function toggleCoachWindow(){coachOpen=!coachOpen;coachWindow.classList.toggle('hidden',!coachOpen);if(coachOpen){loadCoach();coachInput.focus()}}
 (function makeCoachDraggable(){
 let win=document.getElementById('coachWindow');let header=document.getElementById('coachWinHeader');
@@ -571,8 +571,8 @@ header.addEventListener('mousedown',e=>{if(e.target.closest('.coachWinClose'))re
 document.addEventListener('mousemove',e=>{if(!dragging)return;win.style.left=Math.max(4,Math.min(window.innerWidth-40,e.clientX-offX))+'px';win.style.top=Math.max(4,Math.min(window.innerHeight-40,e.clientY-offY))+'px'});
 document.addEventListener('mouseup',()=>dragging=false);
 })();
-async function loadCoach(){let rows=await api('/training/coach/history');coachLog.innerHTML=rows.filter(x=>!coachClearedAt||x.created_at>coachClearedAt).map(x=>`<div class="bubble ${x.role==='assistant'?'bot':'user'}">${x.text}</div>`).join('');coachLog.scrollTop=coachLog.scrollHeight}
-function clearCoach(){coachClearedAt=new Date().toISOString();coachLog.innerHTML=''}
+async function loadCoach(){let rows=await api('/training/coach/history');coachLog.innerHTML=rows.map(x=>`<div class="bubble ${x.role==='assistant'?'bot':'user'}">${x.text}</div>`).join('');coachLog.scrollTop=coachLog.scrollHeight}
+async function clearCoach(){if(!confirm('Chatverlauf wirklich löschen?'))return;await api('/training/coach/history',{method:'DELETE'});coachLog.innerHTML=''}
 async function askCoach(){let input=document.getElementById('coachInput');let fileInput=document.getElementById('coachFile');if(!input.value.trim()&&!fileInput.files[0])return;
 try{
 if(fileInput.files[0]){let fd=new FormData();fd.append('file',fileInput.files[0]);fd.append('message',input.value);let r=await fetch('/api/training/coach/upload',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});if(!r.ok)throw Error(await r.text());fileInput.value=''}

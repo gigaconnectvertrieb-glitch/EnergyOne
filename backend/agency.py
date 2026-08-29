@@ -838,14 +838,27 @@ def run_ai_tool(tool_name: str, tool_input: dict, e: Employee, s: Session):
 def coach_history(e: Employee = Depends(current), s: Session = Depends(db)):
     return [serialize(x) for x in s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id).order_by(SalesCoachMessage.created_at.desc()).limit(30))][::-1]
 
+@app.delete("/api/training/coach/history")
+def clear_coach_history(e: Employee = Depends(current), s: Session = Depends(db)):
+    for m in s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id)): s.delete(m)
+    s.commit()
+    return {"status": "cleared"}
+
+COACH_FALLBACK_TEXTS = {
+    "Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung.",
+    "Für individuelle Antworten bitte die KI-Anbindung aktivieren. Bis dahin: Beschreibe den Einwand kurz, bleib freundlich und stelle eine offene Frage.",
+    "Die Anfrage war zu umfangreich für eine direkte Antwort, bitte präzisiere sie.",
+}
+
 def run_coach_loop(user_content, e: Employee, s: Session):
-    history=list(s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id).order_by(SalesCoachMessage.created_at.desc()).limit(12)))[::-1]
+    history_raw=list(s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id).order_by(SalesCoachMessage.created_at.desc()).limit(20)))[::-1]
+    history=[x for x in history_raw[:-1] if x.text not in COACH_FALLBACK_TEXTS][-12:]
     anthropic_key=os.getenv("ANTHROPIC_API_KEY")
     print(f"[COACH DEBUG] anthropic_key_set={bool(anthropic_key)} openai_key_set={bool(os.getenv('OPENAI_API_KEY'))} workspace_id_set={bool(os.getenv('ANTHROPIC_WORKSPACE_ID'))}", flush=True)
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
             client=anthropic_client(anthropic_key)
-            messages=[{"role":x.role,"content":x.text} for x in history[:-1]] + [{"role":"user","content":user_content}]
+            messages=[{"role":x.role,"content":x.text} for x in history] + [{"role":"user","content":user_content}]
             tools=ai_tools_for(e.role)
             answer=None
             for _ in range(5):
