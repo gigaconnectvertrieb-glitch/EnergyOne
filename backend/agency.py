@@ -841,6 +841,7 @@ def coach_history(e: Employee = Depends(current), s: Session = Depends(db)):
 def run_coach_loop(user_content, e: Employee, s: Session):
     history=list(s.scalars(select(SalesCoachMessage).where(SalesCoachMessage.employee_id==e.id).order_by(SalesCoachMessage.created_at.desc()).limit(12)))[::-1]
     anthropic_key=os.getenv("ANTHROPIC_API_KEY")
+    print(f"[COACH DEBUG] anthropic_key_set={bool(anthropic_key)} openai_key_set={bool(os.getenv('OPENAI_API_KEY'))} workspace_id_set={bool(os.getenv('ANTHROPIC_WORKSPACE_ID'))}")
     if anthropic_key and anthropic_key != "replace-with-a-new-rotated-key":
         try:
             client=anthropic_client(anthropic_key)
@@ -866,7 +867,8 @@ def run_coach_loop(user_content, e: Employee, s: Session):
             from openai import OpenAI
             messages=[{"role":x.role,"content":x.text} for x in history]
             answer=OpenAI(api_key=os.getenv("OPENAI_API_KEY")).responses.create(model=os.getenv("OPENAI_MODEL","gpt-5.5"),store=False,instructions=COACH_INSTRUCTIONS,input=messages).output_text
-        except Exception:
+        except Exception as ex:
+            print(f"[COACH ERROR] {type(ex).__name__}: {ex}")
             answer="Der KI-Coach ist gerade nicht erreichbar. Nutze bis dahin die Pitch-Vorlagen oder frage deine Teamleitung."
     else:
         answer="Für individuelle Antworten bitte die KI-Anbindung aktivieren. Bis dahin: Beschreibe den Einwand kurz, bleib freundlich und stelle eine offene Frage."
