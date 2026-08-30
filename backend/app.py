@@ -316,6 +316,10 @@ def static_logo():
 def static_logo_icon():
     p = Path(__file__).parent / "static" / "logo-icon.png"
     return Response(p.read_bytes(), media_type="image/png")
+@app.get("/static/logo-full.png")
+def static_logo_full():
+    p = Path(__file__).parent / "static" / "logo-full.png"
+    return Response(p.read_bytes(), media_type="image/png")
 @app.get("/", response_class=HTMLResponse)
 def home(): return LANDING_HTML
 @app.get("/login", response_class=HTMLResponse)
@@ -941,7 +945,7 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den passenden Tarif. Fair, transparent und ohne Druck.</p>
 <div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="#kontakt">Kontakt aufnehmen</a></div>
 </div>
-<div class="heroArt" style="text-align:center"><img src="/static/logo-icon.png" alt="E1 Direktvertrieb" style="width:100%;max-width:340px;filter:drop-shadow(0 20px 60px rgba(245,158,11,.25))"></div>
+<div class="heroArt" style="text-align:center"><img src="/static/logo-full.png" alt="E1 Direktvertrieb" style="width:100%;max-width:420px;filter:drop-shadow(0 20px 60px rgba(245,158,11,.25))"></div>
 </div></section>
 <section class="section" id="leistungen">
 <h2>Warum Kund:innen uns vertrauen</h2>
