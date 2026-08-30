@@ -168,6 +168,7 @@ class ClosureEntry(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    contract_pdf_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
 
 
 class DailyPerformance(Base):
@@ -680,6 +681,33 @@ def employee_report_xlsx(employee_id: int, _: Employee = Depends(admin), s: Sess
     return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="report-{target.username}.xlsx"'})
 
 
+def generate_closure_pdf(s: Session, item: "ClosureEntry") -> str:
+    owner = s.get(Employee, item.employee_id)
+    provider = s.get(Provider, item.provider_id) if item.provider_id else None
+    tariff = None
+    if item.bracket_id:
+        bracket = s.get(CommissionBracket, item.bracket_id)
+        if bracket: tariff = s.get(Tariff, bracket.tariff_id)
+    lines = [
+        f"Vertragsnummer: {item.contract_number or '-'}",
+        f"Datum: {item.completed_on.strftime('%d.%m.%Y')}",
+        "",
+        f"Kunde: {item.customer_name}",
+        f"Kundentyp: {'Privat' if item.customer_kind == 'privat' else 'Gewerbe'}",
+        "",
+        f"Produkt: {'Strom' if item.product == 'strom' else 'Gas'}",
+        f"Anbieter: {provider.name if provider else '-'}",
+        f"Tarif: {tariff.name if tariff else '-'}",
+        f"Jahresverbrauch: {item.usage_kwh:.0f} kWh",
+        "",
+        f"Vertriebsmitarbeiter: {owner.name if owner else '-'} (VP-Nr. {owner.vp_nummer if owner else '-'})",
+        f"Status: {item.status}",
+    ]
+    name = f"vertrag-{item.id}-{uuid.uuid4().hex[:8]}.pdf"
+    make_pdf(name, f"Auftragsbestätigung {item.customer_name}", lines)
+    item.contract_pdf_name = name
+    return name
+
 @app.post("/api/admin/closures/{closure_id}/review")
 def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin), s: Session = Depends(db)):
     if data.status not in ("bearbeitung", "abgeschlossen", "storno", "klaerung"): raise HTTPException(422,"Ungültiger Prüfstatus")
@@ -699,6 +727,9 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
     if bracket:
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
     if data.expected_commission is not None: item.expected_commission=data.expected_commission
+    if item.status == "abgeschlossen":
+        try: generate_closure_pdf(s, item)
+        except Exception as ex: print(f"[CONTRACT PDF ERROR] {type(ex).__name__}: {ex}", flush=True)
     new_vals={"status":item.status,"provider_id":item.provider_id,"expected_commission":item.expected_commission}
     log(s,e,"Abschluss geprüft",str(item.id),object_type="ClosureEntry",object_id=item.id,old=old_vals,new=new_vals)
     status_label={"abgeschlossen":"abgeschlossen (grün)","storno":"storniert","bearbeitung":"in Bearbeitung","klaerung":"Klärungsbedarf"}.get(item.status,item.status)
