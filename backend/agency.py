@@ -1,4 +1,5 @@
 import base64
+import csv
 import io
 import json
 import os
@@ -371,6 +372,96 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
     item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note)
     s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id)); s.commit(); notify_update()
     return serialize(item)
+
+
+def _parse_import_rows(filename: str, raw: bytes) -> list[dict]:
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext in (".xlsx", ".xlsm"):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header = [str(h or "").strip().lower() for h in next(rows_iter)]
+        out = []
+        for row in rows_iter:
+            if all(v is None for v in row): continue
+            out.append({header[i]: row[i] for i in range(min(len(header), len(row)))})
+        return out
+    text = raw.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text), delimiter=";" if text.split("\n", 1)[0].count(";") >= text.split("\n", 1)[0].count(",") else ",")
+    return [{(k or "").strip().lower(): v for k, v in row.items()} for row in reader]
+
+
+@app.post("/api/admin/closures/import", dependencies=[Depends(require_module("csv_import"))])
+def import_closures(file: UploadFile = File(...), e: Employee = Depends(admin), s: Session = Depends(db)):
+    raw = file.file.read()
+    try:
+        rows = _parse_import_rows(file.filename or "", raw)
+    except Exception as ex:
+        raise HTTPException(422, f"Datei konnte nicht gelesen werden: {ex}")
+    if not rows: raise HTTPException(422, "Keine Datenzeilen gefunden")
+
+    imported, errors = 0, []
+    for idx, row in enumerate(rows, start=2):  # row 1 = header
+        try:
+            emp_ref = str(row.get("mitarbeiter") or row.get("vp-nummer") or row.get("vp_nummer") or "").strip()
+            if not emp_ref: raise ValueError("Mitarbeiter/VP-Nummer fehlt")
+            owner = s.scalar(select(Employee).where(Employee.username == emp_ref))
+            if not owner: owner = s.scalar(select(Employee).where(Employee.name.ilike(emp_ref)))
+            if not owner: raise ValueError(f"Mitarbeiter '{emp_ref}' nicht gefunden")
+
+            customer_name = str(row.get("kunde") or row.get("kundenname") or "").strip()
+            if not customer_name: raise ValueError("Kundenname fehlt")
+
+            product = str(row.get("produkt") or "strom").strip().lower()
+            if product not in ("strom", "gas"): product = "strom"
+
+            usage_raw = row.get("verbrauch") or row.get("verbrauch_kwh") or row.get("verbrauch (kwh)") or 0
+            try: usage_kwh = float(str(usage_raw).replace(",", ".") or 0)
+            except ValueError: usage_kwh = 0
+
+            provider_id, tariff_id, bracket_id, expected_commission = None, None, None, 0.0
+            provider_name = str(row.get("anbieter") or "").strip()
+            if provider_name:
+                provider = s.scalar(select(Provider).where(Provider.name.ilike(provider_name)))
+                if provider:
+                    provider_id = provider.id
+                    tariff_name = str(row.get("tarif") or "").strip()
+                    if tariff_name:
+                        tariff = s.scalar(select(Tariff).where(Tariff.provider_id == provider.id, Tariff.name.ilike(tariff_name)))
+                        if tariff:
+                            tariff_id = tariff.id
+                            bracket = s.scalar(select(CommissionBracket).where(CommissionBracket.tariff_id == tariff.id, CommissionBracket.tier == owner.tier, CommissionBracket.usage_from <= usage_kwh, (CommissionBracket.usage_to.is_(None)) | (CommissionBracket.usage_to >= usage_kwh)).order_by(CommissionBracket.usage_from.desc()))
+                            if bracket:
+                                bracket_id = bracket.id
+                                expected_commission = round(bracket.commission_amount + (bracket.commission_per_kwh or 0) * usage_kwh, 2)
+
+            date_raw = row.get("datum")
+            completed_on = date.today()
+            if date_raw:
+                if isinstance(date_raw, datetime): completed_on = date_raw.date()
+                elif isinstance(date_raw, date): completed_on = date_raw
+                else:
+                    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d.%m.%y"):
+                        try: completed_on = datetime.strptime(str(date_raw).strip(), fmt).date(); break
+                        except ValueError: continue
+
+            item = ClosureEntry(
+                employee_id=owner.id, customer_name=customer_name,
+                contract_number=str(row.get("vertragsnummer") or "").strip() or None,
+                product=product, usage_kwh=usage_kwh, completed_on=completed_on,
+                provider_id=provider_id, bracket_id=bracket_id, expected_commission=expected_commission,
+                note="Importiert per CSV/Excel",
+            )
+            s.add(item)
+            imported += 1
+        except Exception as ex:
+            errors.append(f"Zeile {idx}: {ex}")
+
+    s.commit()
+    log(s, e, "Verträge importiert", f"{imported} erfolgreich, {len(errors)} Fehler")
+    notify_update()
+    return {"imported": imported, "errors": errors}
 
 
 @app.get("/api/employee/performance-calendar")

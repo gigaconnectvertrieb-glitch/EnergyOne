@@ -583,6 +583,7 @@ PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
 PAGE_PROVISION = '''<div class="page" id="page-provision">
 <div class="pageHead" style="--pageAccent:#d97706"><h1>Provision</h1><p>Suche, Prüfung eingereichter Abschlüsse, Team- und Einzelprovision.</p></div>
 <section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput2" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('2')"><div id="provSearchResults2"></div><div id="provCommissionResult2"></div></section>
+<section id="csvImportSection" class="hidden"><h2>Verträge importieren (CSV/Excel)</h2><p><small>Spalten (Groß-/Kleinschreibung egal): Mitarbeiter (VP-Nummer oder Name), Kunde, Produkt (strom/gas), Verbrauch_kWh, Anbieter, Tarif, Vertragsnummer, Datum. Importierte Verträge landen als "eingereicht" zur Prüfung unten.</small></p><input id="importFile" type="file" accept=".csv,.xlsx,.xlsm"><button onclick="importClosures()">Importieren</button><div id="importResult"></div></section>
 <section><h2>Abschlüsse prüfen</h2><p><small>Anbieter/Tarif zuweisen — die Provision wird automatisch nach Stufe des Mitarbeiters berechnet.</small></p><div id="pendingClosures"></div></section>
 <section><h2>Team-Provision Gesamt</h2><p><small>IST = abgeschlossene Verträge. Potenzial = wenn auch alle offenen Verträge abgeschlossen würden. "Details" zeigt, welche Aufträge noch offen sind.</small></p><div class="grid" id="teamProvisionKpi"></div><table><thead><tr><th>Mitarbeiter</th><th>IST-Provision</th><th>Offen</th><th>Potenzial</th><th></th></tr></thead><tbody id="teamProvisionList"></tbody></table></section>
 <section><h2>Stornoquoten</h2><div id="stornoOverview"></div></section>
@@ -818,6 +819,19 @@ async function loadPendingClosures(){let[rows,providers]=await Promise.all([api(
 async function loadRevTariffs(closureId,preselectTariffId){let pid=document.getElementById('revProv'+closureId).value;let sel=document.getElementById('revTariff'+closureId);if(!pid){sel.innerHTML='<option value="">Tarif wählen</option>';return}let rows=await api('/providers/'+pid+'/tariffs');sel.innerHTML='<option value="">Tarif wählen</option>'+rows.map(t=>`<option value="${t.id}" ${t.id===preselectTariffId?'selected':''}>${t.name}</option>`).join('')}
 async function reviewClosure(id){let tariffId=document.getElementById('revTariff'+id).value;let providerId=document.getElementById('revProv'+id).value;let status=document.getElementById('revStatus'+id).value;try{await api('/admin/closures/'+id+'/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,provider_id:providerId?+providerId:null,tariff_id:tariffId?+tariffId:null})});await loadPendingClosures();await loadTeamProvision();await loadTeamBars()}catch(e){alert(e.message)}}
 async function deleteClosure(id){if(!confirm('Abschluss wirklich löschen? Das kann nicht rückgängig gemacht werden.'))return;try{await api('/admin/closures/'+id,{method:'DELETE'});await loadPendingClosures();await loadTeamProvision();await loadTeamBars()}catch(e){alert(e.message)}}
+async function importClosures(){
+let f=importFile.files[0];if(!f){importResult.innerHTML='Bitte Datei wählen.';return}
+let fd=new FormData();fd.append('file',f);
+importResult.innerHTML='Importiere...';
+try{
+let r=await fetch('/api/admin/closures/import',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
+let d=await r.json();
+if(!r.ok)throw Error(d.detail||JSON.stringify(d));
+importResult.innerHTML=`<p style="color:#16a34a;font-weight:700">${d.imported} Verträge importiert.</p>`+(d.errors.length?`<p style="color:#dc2626">${d.errors.length} Fehler:</p><ul>`+d.errors.map(e=>`<li>${e}</li>`).join('')+'</ul>':'');
+importFile.value='';
+await loadPendingClosures();await loadTeamProvision();await loadTeamBars();
+}catch(e){importResult.innerHTML='<p style="color:#dc2626">Fehler: '+e.message+'</p>'}
+}
 async function loadCalendar(){let rows=await api('/planning');calendarList.innerHTML=rows.map(x=>`<tr><td>${x.starts_at.replace('T',' ')}</td><td>${x.ends_at.replace('T',' ')}</td><td>${x.kind}${x.note?' — '+x.note:''}</td></tr>`).join('')||'<p>Keine Termine.</p>'}
 async function createSchedule(){await api('/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee_id:+calEmpId.value,starts_at:calStart.value,ends_at:calEnd.value,kind:'Termin',note:calTitle.value})});calTitle.value='';await loadCalendar()}
 async function loadTrainings(){let rows=await api('/trainings');trainingList.innerHTML=rows.map(x=>`<div class="card"><b>${x.title}</b> · ${x.starts_at.replace('T',' ')} · ${x.participants}${x.max_participants?'/'+x.max_participants:''} Teilnehmer ${x.registered?'✓ angemeldet':`<button onclick="registerTraining(${x.id})">Anmelden</button>`}${isAdmin?` <button onclick="registerAll(${x.id})">Alle anmelden</button>`:''}</div>`).join('')||'<p>Keine Schulungen geplant.</p>'}
@@ -936,6 +950,8 @@ let phaseLabel={1:'Phase 1',2:'Phase 2',3:'Phase 3'};
 moduleList.innerHTML=rows.map(m=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${m.enabled?'#16a34a':'#dc2626'};margin-right:8px"></span><b>${m.name}</b> <small style="color:#8f8ca8">(${phaseLabel[m.phase]||m.phase})</small></div><button onclick="toggleModule('${m.key}')" style="${m.enabled?'background:linear-gradient(90deg,#dc2626,#b91c1c)':''}">${m.enabled?'Deaktivieren':'Aktivieren'}</button></div>`).join('')||'<p class="empty">Keine Module.</p>';
 let esign=rows.find(m=>m.key==='esignatur');
 if(document.getElementById('esignSection')){esignSection.classList.toggle('hidden',!(esign&&esign.enabled));if(esign&&esign.enabled)loadEsignRequests()}
+let csvImp=rows.find(m=>m.key==='csv_import');
+if(document.getElementById('csvImportSection'))csvImportSection.classList.toggle('hidden',!(csvImp&&csvImp.enabled));
 let ownProd=rows.find(m=>m.key==='eigene_produkte');
 let ownProdOn=!!(ownProd&&ownProd.enabled);
 if(document.getElementById('ownProductsSection')){ownProductsSection.classList.toggle('hidden',!ownProdOn);ownOrdersSection.classList.toggle('hidden',!ownProdOn);if(ownProdOn){loadOwnProducts();loadOwnOrders()}}
