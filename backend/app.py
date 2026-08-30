@@ -385,6 +385,22 @@ def static_favicon():
 def static_og():
     p = Path(__file__).parent / "static" / "og.jpg"
     return Response(p.read_bytes(), media_type="image/jpeg")
+@app.get("/static/icon-192.png")
+def static_icon_192():
+    p = Path(__file__).parent / "static" / "icon-192.png"
+    return Response(p.read_bytes(), media_type="image/png")
+@app.get("/static/icon-512.png")
+def static_icon_512():
+    p = Path(__file__).parent / "static" / "icon-512.png"
+    return Response(p.read_bytes(), media_type="image/png")
+@app.get("/static/manifest.json")
+def static_manifest():
+    p = Path(__file__).parent / "static" / "manifest.json"
+    return Response(p.read_bytes(), media_type="application/manifest+json")
+@app.get("/static/sw.js")
+def static_sw():
+    p = Path(__file__).parent / "static" / "sw.js"
+    return Response(p.read_bytes(), media_type="application/javascript")
 @app.get("/static/logo-full.png")
 def static_logo_full():
     p = Path(__file__).parent / "static" / "logo-full.png"
@@ -1011,8 +1027,9 @@ APP_SHELL = '''__LOGIN__
 </div>
 <script>''' + SCRIPT + '''</script></body></html>'''
 
-HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
-HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
+PWA_HEAD = '''<link rel="manifest" href="/static/manifest.json"><meta name="theme-color" content="#0d1320"><link rel="apple-touch-icon" href="/static/icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="E1 Portal"><script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}))</script>'''
+HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title>''' + PWA_HEAD + '''<style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
+HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title>''' + PWA_HEAD + '''<style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
 
 LANDING_JS = '''<script>document.addEventListener('click',function(e){var m=document.getElementById('lLoginMenu');if(!m)return;if(!e.target.closest('.lLoginWrap'))m.classList.remove('open')});
 document.addEventListener('scroll',function(){var h=document.querySelector('.lHeader');if(!h)return;if(window.scrollY>40)h.classList.add('scrolled');else h.classList.remove('scrolled')});
