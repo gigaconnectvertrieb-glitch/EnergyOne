@@ -571,6 +571,8 @@ PAGE_PROVISION = '''<div class="page" id="page-provision">
 <section><h2>Team-Provision Gesamt</h2><p><small>IST = abgeschlossene Verträge. Potenzial = wenn auch alle offenen Verträge abgeschlossen würden. "Details" zeigt, welche Aufträge noch offen sind.</small></p><div class="grid" id="teamProvisionKpi"></div><table><thead><tr><th>Mitarbeiter</th><th>IST-Provision</th><th>Offen</th><th>Potenzial</th><th></th></tr></thead><tbody id="teamProvisionList"></tbody></table></section>
 <section><h2>Stornoquoten</h2><div id="stornoOverview"></div></section>
 <section><h2>Anbieter</h2><input id="provName" placeholder="Anbietername"><input id="provStreet" placeholder="Straße"><input id="provPlz" placeholder="PLZ"><input id="provCity" placeholder="Ort"><input id="provPhone" placeholder="Telefon"><input id="provContact" placeholder="Ansprechpartner"><button onclick="createProvider()">Anbieter anlegen</button><p><small>Tarife &amp; Provisionsstaffeln über <code>/docs</code> (<code>/api/providers/import</code> für Massenimport).</small></p><div id="providerList"></div></section>
+<section id="ownProductsSection" class="hidden"><h2>Eigene Produkte (E1 Strom)</h2><p><small>Läuft unter "E1 Direktvertrieb" als eigenem Anbieter. Preise gelten für Kund:innen, nicht für Provisionen.</small></p><input id="ownProdName" placeholder="Produktname (z.B. E1 Strom Basis)"><select id="ownProdType"><option value="strom">Strom</option><option value="gas">Gas</option></select><label>Grundpreis €/Monat <input id="ownProdBase" type="number" step="0.01"></label><label>Preis €/kWh <input id="ownProdKwh" type="number" step="0.0001"></label><label>Laufzeit Monate <input id="ownProdTerm" type="number"></label><textarea id="ownProdDesc" placeholder="Beschreibung (optional)" rows="2" style="width:100%;box-sizing:border-box"></textarea><button onclick="createOwnProduct()">Produkt anlegen</button><div id="ownProductsList"></div></section>
+<section id="ownOrdersSection" class="hidden"><h2>Bestellungen eigene Produkte</h2><table><thead><tr><th>Datum</th><th>Name</th><th>Produkt</th><th>PLZ</th><th>kWh</th><th>Preis/Monat</th><th>Status</th><th></th></tr></thead><tbody id="ownOrdersList"></tbody></table></section>
 </div>'''
 
 PAGE_BUCHHALTUNG = '''<div class="page" id="page-buchhaltung">
@@ -918,8 +920,28 @@ let phaseLabel={1:'Phase 1',2:'Phase 2',3:'Phase 3'};
 moduleList.innerHTML=rows.map(m=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${m.enabled?'#16a34a':'#dc2626'};margin-right:8px"></span><b>${m.name}</b> <small style="color:#8f8ca8">(${phaseLabel[m.phase]||m.phase})</small></div><button onclick="toggleModule('${m.key}')" style="${m.enabled?'background:linear-gradient(90deg,#dc2626,#b91c1c)':''}">${m.enabled?'Deaktivieren':'Aktivieren'}</button></div>`).join('')||'<p class="empty">Keine Module.</p>';
 let esign=rows.find(m=>m.key==='esignatur');
 if(document.getElementById('esignSection')){esignSection.classList.toggle('hidden',!(esign&&esign.enabled));if(esign&&esign.enabled)loadEsignRequests()}
+let ownProd=rows.find(m=>m.key==='eigene_produkte');
+let ownProdOn=!!(ownProd&&ownProd.enabled);
+if(document.getElementById('ownProductsSection')){ownProductsSection.classList.toggle('hidden',!ownProdOn);ownOrdersSection.classList.toggle('hidden',!ownProdOn);if(ownProdOn){loadOwnProducts();loadOwnOrders()}}
 }
 async function toggleModule(key){try{await api('/modules/'+key+'/toggle',{method:'POST'});await loadModules()}catch(e){alert(e.message)}}
+async function createOwnProduct(){
+if(!ownProdName.value.trim()){alert('Bitte Produktname angeben');return}
+try{
+await api('/own-products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:ownProdName.value,product_type:ownProdType.value,base_price_monthly:+ownProdBase.value||0,price_per_kwh:+ownProdKwh.value||0,contract_term_months:ownProdTerm.value?+ownProdTerm.value:null,description:ownProdDesc.value||null})});
+ownProdName.value='';ownProdBase.value='';ownProdKwh.value='';ownProdTerm.value='';ownProdDesc.value='';
+await loadOwnProducts();
+}catch(e){alert(e.message)}
+}
+async function loadOwnProducts(){
+let rows=await api('/own-products');
+ownProductsList.innerHTML=rows.map(x=>`<div class="card"><b>${x.name}</b> (${x.product_type}) — ${(x.base_price_monthly||0).toFixed(2)} €/Monat + ${(x.price_per_kwh||0).toFixed(4)} €/kWh${x.contract_term_months?', '+x.contract_term_months+' Monate Laufzeit':''}${x.description?'<br><small>'+x.description+'</small>':''}</div>`).join('')||'<p class="empty">Noch keine eigenen Produkte.</p>';
+}
+async function loadOwnOrders(){
+let rows=await api('/own-products/orders');
+ownOrdersList.innerHTML=rows.map(x=>`<tr><td>${new Date(x.created_at).toLocaleDateString('de-DE')}</td><td>${x.name}<br><small>${x.email}</small></td><td>${x.tariff_name}</td><td>${x.postal_code}</td><td>${x.usage_kwh}</td><td>${x.estimated_monthly_price?x.estimated_monthly_price.toFixed(2)+' €':'-'}</td><td>${x.status}</td><td><select onchange="updateOwnOrderStatus(${x.id},this.value)"><option value="">Status ändern...</option><option value="interessent">Interessent</option><option value="bestaetigt">Bestätigt</option><option value="aktiv">Aktiv</option><option value="storniert">Storniert</option></select></td></tr>`).join('')||'<tr><td colspan=8 class="empty">Noch keine Bestellungen.</td></tr>';
+}
+async function updateOwnOrderStatus(id,status){if(!status)return;let fd=new FormData();fd.append('status',status);try{await fetch('/api/own-products/orders/'+id,{method:'PUT',headers:{Authorization:'Bearer '+token},body:fd});await loadOwnOrders()}catch(e){alert(e.message)}}
 async function sendForSignature(){
 if(!esignSignerName.value.trim()||!esignSignerEmail.value.trim()){esignResult.textContent='Bitte Name und E-Mail angeben.';return}
 let f=esignFile.files[0];if(!f){esignResult.textContent='Bitte Dokument wählen.';return}
@@ -1147,6 +1169,39 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <div class="teamCard reveal reveal-delay-4"><h3>Was den Preis beeinflusst</h3><p>Neben dem reinen Energiepreis fließen Netzentgelte, Steuern, Abgaben und Umlagen in den Endpreis ein. Diese Bestandteile sind gesetzlich geregelt und für alle Anbieter weitgehend gleich.</p></div>
 </div>
 </section>
+<section class="section hidden" id="eigeneProdukte">
+<h2>E1 Strom — unser eigener Tarif</h2>
+<p class="lead">Direkt von E1 Direktvertrieb, ohne Umweg über einen Drittanbieter.</p>
+<div id="ownProdCalcWrap" class="teamGrid"></div>
+</section>
+<script>
+fetch('/api/public/own-products').then(r=>r.json()).then(rows=>{
+if(!rows.length)return;
+document.getElementById('eigeneProdukte').classList.remove('hidden');
+let sel=rows.map(p=>`<option value="${p.id}">${p.name} (${p.product_type})</option>`).join('');
+document.getElementById('ownProdCalcWrap').innerHTML=`<div class="teamCard" style="text-align:left;grid-column:1/-1;max-width:520px;margin:0 auto"><select id="opTariff">${sel}</select><input id="opPlz" placeholder="PLZ"><input id="opKwh" type="number" placeholder="Jahresverbrauch kWh"><p id="opEstimate" style="font-weight:700"></p><input id="opName" placeholder="Ihr Name"><input id="opEmail" type="email" placeholder="E-Mail"><input id="opPhone" placeholder="Telefon (optional)"><button onclick="submitOwnProductOrder()">Unverbindlich anfragen</button><p id="opResult"></p></div>`;
+window._ownProducts=rows;
+document.getElementById('opKwh').addEventListener('input',updateOwnProdEstimate);
+document.getElementById('opTariff').addEventListener('change',updateOwnProdEstimate);
+}).catch(()=>{});
+function updateOwnProdEstimate(){
+let p=(window._ownProducts||[]).find(x=>String(x.id)===document.getElementById('opTariff').value);
+let kwh=+document.getElementById('opKwh').value||0;
+if(!p){document.getElementById('opEstimate').textContent='';return}
+let monthly=(p.base_price_monthly||0)+(p.price_per_kwh||0)*kwh/12;
+document.getElementById('opEstimate').textContent='Geschätzt: '+monthly.toFixed(2)+' €/Monat';
+}
+async function submitOwnProductOrder(){
+let name=document.getElementById('opName').value.trim();
+let email=document.getElementById('opEmail').value.trim();
+if(!name||!email){document.getElementById('opResult').textContent='Bitte Name und E-Mail angeben.';return}
+try{
+let r=await fetch('/api/public/own-products/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tariff_id:+document.getElementById('opTariff').value,name,email,phone:document.getElementById('opPhone').value,postal_code:document.getElementById('opPlz').value,usage_kwh:+document.getElementById('opKwh').value||0})});
+if(!r.ok)throw Error(await r.text());
+document.getElementById('opResult').textContent='Danke! Wir melden uns bei Ihnen.';
+}catch(e){document.getElementById('opResult').textContent='Aktuell nicht verfügbar, bitte später erneut versuchen.'}
+}
+</script>
 <section class="section" id="aktuelles">
 <h2>Aktuelles aus dem Energiemarkt</h2>
 <p class="lead">Automatisch aktualisierte Nachrichten rund um Strom und Gas in Deutschland.</p>

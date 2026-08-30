@@ -6,17 +6,17 @@ import smtplib
 import uuid
 from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
 
 
 class ScheduleEntry(Base):
@@ -107,6 +107,7 @@ class Provider(Base):
     contact_person: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_own_product: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Tariff(Base):
@@ -116,6 +117,11 @@ class Tariff(Base):
     name: Mapped[str] = mapped_column(String(200))
     external_id: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    product_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    base_price_monthly: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_per_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    contract_term_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class CommissionBracket(Base):
@@ -128,6 +134,21 @@ class CommissionBracket(Base):
     commission_amount: Mapped[float] = mapped_column(Float, default=0)
     commission_per_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OwnProductOrder(Base):
+    __tablename__ = "eigene_bestellungen"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tariff_id: Mapped[int] = mapped_column(ForeignKey("tarife.id"))
+    name: Mapped[str] = mapped_column(String(150))
+    email: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    postal_code: Mapped[str] = mapped_column(String(10))
+    usage_kwh: Mapped[float] = mapped_column(Float, default=0)
+    estimated_monthly_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="interessent")
+    employee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class ClosureEntry(Base):
@@ -227,7 +248,15 @@ class ProviderIn(BaseModel):
     email: Optional[str] = None
     contact_person: Optional[str] = None
     notes: str = ""
-class TariffIn(BaseModel): name: str = Field(min_length=1, max_length=200); external_id: Optional[str] = None
+    is_own_product: bool = False
+class TariffIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    external_id: Optional[str] = None
+    product_type: Optional[Literal["strom", "gas"]] = None
+    base_price_monthly: Optional[float] = Field(default=None, ge=0)
+    price_per_kwh: Optional[float] = Field(default=None, ge=0)
+    contract_term_months: Optional[int] = Field(default=None, ge=1)
+    description: Optional[str] = None
 class BracketIn(BaseModel):
     tier: int = Field(ge=1, le=3)
     usage_from: float = Field(ge=0, default=0)
@@ -582,6 +611,83 @@ def tariff_brackets(tariff_id: int, _: Employee = Depends(current), s: Session =
 def create_bracket(tariff_id: int, data: BracketIn, e: Employee = Depends(admin), s: Session = Depends(db)):
     if not s.get(Tariff,tariff_id): raise HTTPException(404,"Tarif nicht gefunden")
     item=CommissionBracket(**data.model_dump(),tariff_id=tariff_id); s.add(item); log(s,e,"Provisionsstaffel angelegt",str(tariff_id)); s.commit(); return serialize(item)
+
+
+def get_or_create_own_provider(s: Session) -> Provider:
+    p = s.scalar(select(Provider).where(Provider.is_own_product.is_(True)))
+    if p: return p
+    p = Provider(name="E1 Direktvertrieb", is_own_product=True, notes="Automatisch angelegt für eigene Produkte")
+    s.add(p); s.flush()
+    return p
+
+
+class OwnProductIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    product_type: Literal["strom", "gas"]
+    base_price_monthly: float = Field(ge=0, default=0)
+    price_per_kwh: float = Field(ge=0, default=0)
+    contract_term_months: Optional[int] = Field(default=None, ge=1)
+    description: Optional[str] = None
+
+
+@app.get("/api/own-products")
+def list_own_products(e: Employee = Depends(admin), s: Session = Depends(db)):
+    provider = s.scalar(select(Provider).where(Provider.is_own_product.is_(True)))
+    if not provider: return []
+    return [serialize(x) for x in s.scalars(select(Tariff).where(Tariff.provider_id == provider.id).order_by(Tariff.name))]
+
+
+@app.post("/api/own-products")
+def create_own_product(data: OwnProductIn, e: Employee = Depends(admin), s: Session = Depends(db)):
+    provider = get_or_create_own_provider(s)
+    item = Tariff(provider_id=provider.id, **data.model_dump())
+    s.add(item); log(s, e, "Eigenes Produkt angelegt", item.name); s.commit(); notify_update()
+    return serialize(item)
+
+
+@app.get("/api/public/own-products")
+def public_own_products(s: Session = Depends(db)):
+    if not module_enabled("eigene_produkte", s): return []
+    rows = s.execute(select(Tariff, Provider.name).join(Provider, Provider.id == Tariff.provider_id).where(Provider.is_own_product.is_(True), Provider.active.is_(True), Tariff.active.is_(True)).order_by(Tariff.name)).all()
+    return [{"id": t.id, "name": t.name, "provider_name": pname, "product_type": t.product_type, "base_price_monthly": t.base_price_monthly, "price_per_kwh": t.price_per_kwh, "contract_term_months": t.contract_term_months, "description": t.description} for t, pname in rows]
+
+
+class OwnProductOrderIn(BaseModel):
+    tariff_id: int
+    name: str = Field(min_length=2, max_length=150)
+    email: EmailStr
+    phone: Optional[str] = None
+    postal_code: str = Field(min_length=4, max_length=10)
+    usage_kwh: float = Field(ge=0, default=0)
+
+
+@app.post("/api/public/own-products/order")
+def submit_own_product_order(data: OwnProductOrderIn, s: Session = Depends(db)):
+    if not module_enabled("eigene_abschlussstrecke", s): raise HTTPException(403, "Diese Funktion ist aktuell nicht verfügbar.")
+    tariff = s.get(Tariff, data.tariff_id)
+    if not tariff or not tariff.active: raise HTTPException(404, "Tarif nicht gefunden")
+    provider = s.get(Provider, tariff.provider_id)
+    if not provider or not provider.is_own_product: raise HTTPException(422, "Kein eigenes Produkt")
+    estimated = (tariff.base_price_monthly or 0) + (tariff.price_per_kwh or 0) * data.usage_kwh / 12
+    item = OwnProductOrder(tariff_id=data.tariff_id, name=data.name, email=data.email, phone=data.phone, postal_code=data.postal_code, usage_kwh=data.usage_kwh, estimated_monthly_price=round(estimated, 2))
+    s.add(item); s.commit(); notify_update()
+    return {"status": "received", "estimated_monthly_price": item.estimated_monthly_price}
+
+
+@app.get("/api/own-products/orders")
+def list_own_product_orders(e: Employee = Depends(admin), s: Session = Depends(db)):
+    rows = s.execute(select(OwnProductOrder, Tariff.name).join(Tariff, Tariff.id == OwnProductOrder.tariff_id).order_by(OwnProductOrder.created_at.desc())).all()
+    return [{**serialize(o), "tariff_name": tname} for o, tname in rows]
+
+
+@app.put("/api/own-products/orders/{order_id}")
+def update_own_product_order(order_id: int, status: str = Form(...), e: Employee = Depends(admin), s: Session = Depends(db)):
+    if status not in ("interessent", "bestaetigt", "aktiv", "storniert"): raise HTTPException(422, "Ungültiger Status")
+    item = s.get(OwnProductOrder, order_id)
+    if not item: raise HTTPException(404, "Bestellung nicht gefunden")
+    item.status = status; log(s, e, "Eigene Bestellung aktualisiert", f"{order_id}:{status}")
+    s.commit(); notify_update()
+    return serialize(item)
 @app.post("/api/providers/import")
 def import_providers(data: list[ProviderImportIn], e: Employee = Depends(admin), s: Session = Depends(db)):
     providers_done=tariffs_done=brackets_done=0
