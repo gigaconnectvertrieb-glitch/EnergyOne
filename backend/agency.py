@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, notify, send_email, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
+from .app import Base, Activity, Blacklist, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, notify, send_email, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
 
 
 class ScheduleEntry(Base):
@@ -1319,3 +1319,58 @@ def documents_expiring(days: int = 60, _: Employee = Depends(admin), s: Session 
     cutoff = date.today() + timedelta(days=days)
     rows = s.execute(select(Document, Employee.name).outerjoin(Employee, Employee.id == Document.owner_employee_id).where(Document.expires_on.is_not(None), Document.expires_on <= cutoff).order_by(Document.expires_on)).all()
     return [{**serialize(d), "employee_name": name} for d, name in rows]
+
+
+# Datensicherung: Geschäftsdaten (Kunden, Verträge, Anbieter, Teams, ...) als JSON export-/importierbar.
+# Bewusst NICHT enthalten: Mitarbeiter-Zugangsdaten (TOTP/Backup-Codes/Generalschlüssel), Audit-/Sitzungs-Log,
+# E-Mail-Zugangsdaten sowie die eigentlichen Dateien in STORAGE (nur deren Metadaten-Zeilen) - das hält das
+# Backup frei von Zugangsgeheimnissen und macht ein Wiederherstellen ungefährlich auch bei versehentlicher Weitergabe.
+BACKUP_TABLES = [Team, TeamMember, Blacklist, Provider, Tariff, CommissionBracket, Customer, CustomerHistory, Task,
+                 ClosureEntry, DailyPerformance, ScheduleEntry, News, Incentive, SalesGoal, Expense, Document,
+                 Training, TrainingRegistration, OwnProductOrder]
+
+def _deserialize_row(model, row: dict):
+    kwargs = {}
+    for col in model.__table__.columns:
+        if col.name not in row: continue
+        val = row[col.name]
+        if val is not None:
+            try: pytype = col.type.python_type
+            except NotImplementedError: pytype = None
+            if pytype is datetime and not isinstance(val, datetime): val = datetime.fromisoformat(val)
+            elif pytype is date and not isinstance(val, date): val = date.fromisoformat(val)
+        kwargs[col.name] = val
+    return model(**kwargs)
+
+@app.get("/api/admin/backup/export")
+def export_backup(e: Employee = Depends(admin), s: Session = Depends(db)):
+    tables = {model.__tablename__: [serialize(row) for row in s.scalars(select(model))] for model in BACKUP_TABLES}
+    payload = {"version": 1, "exported_at": datetime.utcnow().isoformat(), "exported_by": e.username, "tables": tables}
+    log(s, e, "Backup exportiert", ",".join(f"{k}:{len(v)}" for k, v in tables.items())); s.commit()
+    fname = f"e1-backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.json"
+    return Response(json.dumps(payload, ensure_ascii=False, default=str), media_type="application/json", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+@app.post("/api/admin/backup/import")
+async def import_backup(file: UploadFile = File(...), e: Employee = Depends(admin), s: Session = Depends(db)):
+    try: payload = json.loads(await file.read())
+    except Exception: raise HTTPException(422, "Ungültige Backup-Datei (kein gültiges JSON)")
+    tables = payload.get("tables")
+    if not isinstance(tables, dict): raise HTTPException(422, "Ungültiges Backup-Format")
+    summary = {}
+    for model in BACKUP_TABLES:
+        rows = tables.get(model.__tablename__, [])
+        inserted = skipped = errors = 0
+        for row in rows:
+            rid = row.get("id") if isinstance(row, dict) else None
+            if rid is not None and s.get(model, rid):
+                skipped += 1; continue
+            try:
+                with s.begin_nested():
+                    s.add(_deserialize_row(model, row))
+                inserted += 1
+            except Exception:
+                errors += 1
+        if inserted or skipped or errors: summary[model.__tablename__] = {"inserted": inserted, "skipped": skipped, "errors": errors}
+    log(s, e, "Backup importiert", json.dumps(summary, ensure_ascii=False))
+    s.commit(); notify_update()
+    return summary
