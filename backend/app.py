@@ -48,6 +48,9 @@ class Employee(Base):
 class Settings(Base):
     __tablename__ = "einstellungen"
     id: Mapped[int] = mapped_column(primary_key=True); master_key_hash: Mapped[str] = mapped_column(String(255))
+class Blacklist(Base):
+    __tablename__ = "sperrliste"
+    id: Mapped[int] = mapped_column(primary_key=True); kind: Mapped[str] = mapped_column(String(10)); value: Mapped[str] = mapped_column(String(255)); reason: Mapped[str] = mapped_column(Text, default=""); created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 class BackupCode(Base):
     __tablename__ = "backup_codes"
     id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); code_hash: Mapped[str] = mapped_column(String(255)); used: Mapped[bool] = mapped_column(Boolean, default=False); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -315,6 +318,20 @@ def toggle_module(key: str, e: Employee = Depends(admin), s: Session = Depends(d
     log(s, e, "Modul umgeschaltet", f"{key} -> {'aktiv' if m.enabled else 'inaktiv'}")
     s.commit(); notify_update()
     return serialize(m)
+class BlacklistIn(BaseModel): kind: Literal["email", "phone"]; value: str = Field(min_length=3, max_length=255); reason: str = ""
+@app.get("/api/blacklist")
+def list_blacklist(e: Employee = Depends(admin), s: Session = Depends(db)):
+    return [serialize(x) for x in s.scalars(select(Blacklist).order_by(Blacklist.created_at.desc()))]
+@app.post("/api/blacklist")
+def create_blacklist_entry(data: BlacklistIn, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = Blacklist(**data.model_dump(), created_by=e.id); s.add(item); log(s, e, "Sperrliste ergänzt", data.value); s.commit()
+    return serialize(item)
+@app.delete("/api/blacklist/{entry_id}")
+def delete_blacklist_entry(entry_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = s.get(Blacklist, entry_id)
+    if not item: raise HTTPException(404, "Eintrag nicht gefunden")
+    s.delete(item); log(s, e, "Sperrlisten-Eintrag gelöscht", item.value); s.commit()
+    return {"status": "deleted"}
 @app.get("/api/audit-log")
 def list_audit_log(employee_id: Optional[int] = None, action: str = "", date_from: Optional[str] = None, date_to: Optional[str] = None, limit: int = 200, offset: int = 0, _: Employee = Depends(admin), s: Session = Depends(db)):
     stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
@@ -344,7 +361,20 @@ def customers(q: str="", limit: int=100, offset: int=0, e: Employee=Depends(curr
     if ids is not None: stmt=stmt.where(Customer.owner_id.in_(ids))
     return [serialize(x) for x in s.scalars(stmt.order_by(Customer.created_at.desc()).limit(limit).offset(offset))]
 @app.post("/api/customers")
-def create_customer(data: CustomerIn, e: Employee=Depends(current), s: Session=Depends(db)):
+def create_customer(data: CustomerIn, force: bool = False, e: Employee=Depends(current), s: Session=Depends(db)):
+    if data.email and s.scalar(select(Blacklist).where(Blacklist.kind=="email", Blacklist.value.ilike(data.email))):
+        raise HTTPException(422, "Diese E-Mail-Adresse steht auf der Sperrliste, Kunde darf nicht kontaktiert werden.")
+    if data.phone and s.scalar(select(Blacklist).where(Blacklist.kind=="phone", Blacklist.value==data.phone)):
+        raise HTTPException(422, "Diese Telefonnummer steht auf der Sperrliste, Kunde darf nicht kontaktiert werden.")
+    if not force:
+        dup_conditions = []
+        if data.email: dup_conditions.append(Customer.email.ilike(data.email))
+        if data.phone: dup_conditions.append(Customer.phone == data.phone)
+        if data.last_name and data.postal_code: dup_conditions.append((Customer.last_name.ilike(data.last_name)) & (Customer.postal_code == data.postal_code))
+        if dup_conditions:
+            dupes = list(s.scalars(select(Customer).where(or_(*dup_conditions)).limit(5)))
+            if dupes:
+                raise HTTPException(409, {"message": "Möglicherweise bereits vorhanden.", "duplicates": [{"id": d.id, "name": d.company or f'{d.first_name or ""} {d.last_name or ""}'.strip(), "postal_code": d.postal_code, "email": d.email, "phone": d.phone} for d in dupes]})
     owner=data.owner_id if e.role=="admin" and data.owner_id else e.id; c=Customer(**data.model_dump(exclude={"owner_id"}),owner_id=owner); s.add(c); s.flush(); s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde angelegt")); log(s,e,"Kunde angelegt",str(c.id)); s.commit(); notify_update(); return serialize(c)
 @app.put("/api/customers/{customer_id}")
 def update_customer(customer_id: int, data: CustomerUpdateIn, e: Employee=Depends(current), s: Session=Depends(db)):
@@ -645,6 +675,7 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 <section><h2>Kunden <button onclick="load()">Aktualisieren</button> <button onclick="downloadFile('/export/customers.csv','kunden.csv')">CSV exportieren</button></h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th><th></th></tr></thead><tbody id="customersAdmin"></tbody></table></section>
 <section><h2>Offene Aufgaben</h2><table><tbody id="tasks"></tbody></table></section>
 <section><h2>Kalender / Termine</h2><div id="calendarAdmin" class="hidden"><input id="calEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="calTitle" placeholder="Titel"><label>Start <input id="calStart" type="datetime-local"></label><label>Ende <input id="calEnd" type="datetime-local"></label><button onclick="createSchedule()">Termin anlegen</button></div><table><thead><tr><th>Start</th><th>Ende</th><th>Art/Titel</th></tr></thead><tbody id="calendarList"></tbody></table></section>
+<section id="blacklistSection" class="hidden"><h2>Sperrliste</h2><p><small>Kunden mit dieser E-Mail/Telefonnummer können nicht mehr neu angelegt werden.</small></p><select id="blEntryKind"><option value="email">E-Mail</option><option value="phone">Telefon</option></select><input id="blEntryValue" placeholder="Wert"><input id="blEntryReason" placeholder="Grund (optional)"><button onclick="createBlacklistEntry()">Sperren</button><div id="blacklistList"></div></section>
 </div>'''
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
@@ -744,7 +775,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist()}
 else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend).';loadEmployees();load()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
@@ -815,16 +846,35 @@ function fillCustomerForm(sfx,c){document.getElementById('kind'+sfx).value=c.kin
 function resetCustomerForm(sfx){['custName','mail','cphone','plz','street','city','usage'].forEach(id=>document.getElementById(id+sfx).value='')}
 function editCustomer(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId=id;fillCustomerForm('',c);custSubmitBtn.textContent='Speichern'}
 function editCustomer2(id){let c=custCache.find(x=>x.id===id);if(!c)return;editingCustomerId2=id;fillCustomerForm('2',c);custStatus2.value=c.status||'neu';custStatus2.classList.remove('hidden');custSubmitBtn2.textContent='Speichern'}
+async function tryCreateCustomer(v){
+try{
+await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});
+return true;
+}catch(ex){
+let dup=null;
+try{let parsed=JSON.parse(ex.message);if(parsed.detail&&parsed.detail.duplicates)dup=parsed.detail.duplicates}catch(e2){}
+if(dup){
+let names=dup.map(d=>d.name+(d.postal_code?' ('+d.postal_code+')':'')).join(', ');
+if(confirm('Möglicherweise schon vorhanden: '+names+'\\n\\nTrotzdem als neuen Kunden anlegen?')){
+await api('/customers?force=true',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});
+return true;
+}
+return false;
+}
+alert('Kunde konnte nicht gespeichert werden: '+ex.message);
+return false;
+}
+}
 async function customer(){if(!custName.value.trim()){alert('Bitte Name/Firma angeben');return}if(!plz.value.trim()){alert('Bitte PLZ angeben');return}let v={kind:kind.value,email:mail.value||null,phone:cphone.value,postal_code:plz.value,street:street.value,city:city.value,usage_kwh:+usage.value||0};if(curProvider.value)v.current_provider_id=+curProvider.value;if(v.kind==='firma')v.company=custName.value;else{let a=custName.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
 try{
-if(editingCustomerId){await api('/customers/'+editingCustomerId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId=null;custSubmitBtn.textContent='Anlegen'}
-else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
+if(editingCustomerId){await api('/customers/'+editingCustomerId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId=null;custSubmitBtn.textContent='Anlegen';resetCustomerForm('');load();return}
+if(!(await tryCreateCustomer(v)))return;
 resetCustomerForm('');load()
 }catch(ex){alert('Kunde konnte nicht gespeichert werden: '+ex.message)}}
 async function customer2(){if(!custName2.value.trim()){alert('Bitte Name/Firma angeben');return}if(!plz2.value.trim()){alert('Bitte PLZ angeben');return}let v={kind:kind2.value,email:mail2.value||null,phone:cphone2.value,postal_code:plz2.value,street:street2.value,city:city2.value,usage_kwh:+usage2.value||0};if(curProvider2.value)v.current_provider_id=+curProvider2.value;if(v.kind==='firma')v.company=custName2.value;else{let a=custName2.value.split(' ');v.first_name=a.shift();v.last_name=a.join(' ')}
 try{
-if(editingCustomerId2){v.status=custStatus2.value;await api('/customers/'+editingCustomerId2,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId2=null;custSubmitBtn2.textContent='Anlegen';custStatus2.classList.add('hidden')}
-else{await api('/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)})}
+if(editingCustomerId2){v.status=custStatus2.value;await api('/customers/'+editingCustomerId2,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});editingCustomerId2=null;custSubmitBtn2.textContent='Anlegen';custStatus2.classList.add('hidden');resetCustomerForm('2');load();return}
+if(!(await tryCreateCustomer(v)))return;
 resetCustomerForm('2');load()
 }catch(ex){alert('Kunde konnte nicht gespeichert werden: '+ex.message)}}
 async function deleteCustomer(id){let c=custCache.find(x=>x.id===id);let name=c?(c.company||c.first_name+' '+(c.last_name||'')):id;if(!confirm('Kunde "'+name+'" wirklich löschen?'))return;try{await api('/customers/'+id,{method:'DELETE'});await load()}catch(e){alert(e.message)}}
@@ -1075,6 +1125,20 @@ if(x.old_values||x.new_values)diff=`<br><small style="color:#8f8ca8">${x.old_val
 return `<div class="card"><small>${new Date(x.timestamp).toLocaleString('de-DE')} · ${x.employee_name||'System'}${x.role?' ('+x.role+')':''} · IP ${x.ip_address||'-'}</small><br><b>${x.action}</b>${x.object_type?' — '+x.object_type+(x.object_id?' #'+x.object_id:''):''}${diff}</div>`;
 }).join('')||'<p class="empty">Keine Einträge.</p>';
 }
+async function loadBlacklist(){
+if(!document.getElementById('blacklistList'))return;
+let rows=await api('/blacklist');
+blacklistList.innerHTML=rows.map(x=>`<div class="card"><b>${x.kind==='email'?'📧':'📞'} ${x.value}</b>${x.reason?' — '+x.reason:''}<br><button onclick="deleteBlacklistEntry(${x.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c);margin-top:6px">Entfernen</button></div>`).join('')||'<p class="empty">Sperrliste ist leer.</p>';
+}
+async function createBlacklistEntry(){
+if(!blEntryValue.value.trim()){alert('Bitte Wert angeben');return}
+try{
+await api('/blacklist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:blEntryKind.value,value:blEntryValue.value,reason:blEntryReason.value})});
+blEntryValue.value='';blEntryReason.value='';
+await loadBlacklist();
+}catch(e){alert(e.message)}
+}
+async function deleteBlacklistEntry(id){if(!confirm('Sperr-Eintrag wirklich entfernen?'))return;try{await api('/blacklist/'+id,{method:'DELETE'});await loadBlacklist()}catch(e){alert(e.message)}}
 async function createOwnProduct(){
 if(!ownProdName.value.trim()){alert('Bitte Produktname angeben');return}
 try{
