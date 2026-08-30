@@ -21,12 +21,17 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .app import Base, Employee, app, admin, db, log, notify_update
 
 MAIL_KEY = os.getenv("MAIL_ENCRYPTION_KEY")
-_fernet = Fernet(MAIL_KEY.encode()) if MAIL_KEY else None
+_fernet = None
+if MAIL_KEY:
+    try:
+        _fernet = Fernet(MAIL_KEY.strip().encode())
+    except Exception as ex:
+        print(f"[MAIL SETUP ERROR] MAIL_ENCRYPTION_KEY ungültig, E-Mail-Modul bleibt deaktiviert: {type(ex).__name__}: {ex}", flush=True)
 
 
 def mail_enabled(_: Employee = Depends(admin)):
     if not _fernet:
-        raise HTTPException(503, "E-Mail-Modul nicht konfiguriert (MAIL_ENCRYPTION_KEY fehlt).")
+        raise HTTPException(503, "E-Mail-Modul nicht konfiguriert (MAIL_ENCRYPTION_KEY fehlt oder ungültig).")
     return _
 
 
