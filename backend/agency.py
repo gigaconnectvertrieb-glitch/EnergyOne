@@ -12,7 +12,7 @@ from typing import Literal, Optional
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, select
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, or_, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
@@ -462,6 +462,30 @@ def import_closures(file: UploadFile = File(...), e: Employee = Depends(admin), 
     log(s, e, "Verträge importiert", f"{imported} erfolgreich, {len(errors)} Fehler")
     notify_update()
     return {"imported": imported, "errors": errors}
+
+
+@app.get("/api/search")
+def global_search(q: str, e: Employee = Depends(current), s: Session = Depends(db)):
+    q = q.strip()
+    if len(q) < 2: return {"customers": [], "employees": [], "closures": []}
+    like = f"%{q}%"
+    ids = visible_employee_ids(e, s)
+
+    cust_stmt = select(Customer).where(or_(Customer.first_name.ilike(like), Customer.last_name.ilike(like), Customer.company.ilike(like), Customer.email.ilike(like), Customer.phone.ilike(like), Customer.postal_code.ilike(like)))
+    if ids is not None: cust_stmt = cust_stmt.where(Customer.owner_id.in_(ids))
+    customers = [{"id": c.id, "name": c.company or f"{c.first_name or ''} {c.last_name or ''}".strip(), "postal_code": c.postal_code, "status": c.status} for c in s.scalars(cust_stmt.limit(15))]
+
+    employees = []
+    if e.role in ("admin", "teamleiter", "buchhaltung"):
+        emp_stmt = select(Employee).where(or_(Employee.name.ilike(like), Employee.username.ilike(like), Employee.email.ilike(like)))
+        if ids is not None: emp_stmt = emp_stmt.where(Employee.id.in_(ids))
+        employees = [{"id": x.id, "name": x.name, "username": x.username, "role": x.role} for x in s.scalars(emp_stmt.limit(15))]
+
+    closure_stmt = select(ClosureEntry).where(or_(ClosureEntry.customer_name.ilike(like), ClosureEntry.contract_number.ilike(like)))
+    if ids is not None: closure_stmt = closure_stmt.where(ClosureEntry.employee_id.in_(ids))
+    closures = [{"id": x.id, "customer_name": x.customer_name, "contract_number": x.contract_number, "status": x.status, "completed_on": x.completed_on.isoformat()} for x in s.scalars(closure_stmt.order_by(ClosureEntry.completed_on.desc()).limit(15))]
+
+    return {"customers": customers, "employees": employees, "closures": closures}
 
 
 @app.get("/api/employee/performance-calendar")

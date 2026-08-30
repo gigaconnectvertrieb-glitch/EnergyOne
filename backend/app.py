@@ -501,6 +501,13 @@ CSS = '''*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,Sego
 .navBrand{display:flex;align-items:center;gap:10px;padding:20px 16px 18px}
 .navBrand b{font-size:14.5px;display:block}
 .navBrand small{color:#8f8ca8;font-size:12px}
+.navSearchWrap{position:relative;padding:0 16px 14px}
+.navSearchWrap input{width:100%;margin:0;font-size:13px;padding:9px 12px}
+#globalSearchResults{position:absolute;top:calc(100% - 8px);left:16px;right:16px;background:#fff;border-radius:12px;box-shadow:0 20px 40px -12px rgba(30,20,70,.25);max-height:340px;overflow-y:auto;z-index:50;padding:8px}
+#globalSearchResults .searchGroup{font-size:11px;font-weight:700;color:#8f8ca8;text-transform:uppercase;padding:8px 8px 2px}
+#globalSearchResults .searchRow{padding:8px;border-radius:8px;cursor:pointer;font-size:13px}
+#globalSearchResults .searchRow:hover{background:#f8f7fd}
+#globalSearchResults .searchRow small{display:block;color:#8f8ca8}
 .navLinks{flex:1;padding:0 12px;display:flex;flex-direction:column;gap:4px}
 .navFooter{padding:14px;border-top:1px solid #eeecf7}
 .navProfile{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -597,6 +604,7 @@ LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-a
 
 NAV = '''<nav class="navcol">
 <div class="navBrand">''' + LOGO_ICON + '''<div><b>E1 Direktvertrieb</b><small id="navPortalLabel">Portal</small></div></div>
+<div class="navSearchWrap"><input id="globalSearch" placeholder="🔍 Suche..." autocomplete="off" oninput="doGlobalSearch()" onfocus="doGlobalSearch()"><div id="globalSearchResults" class="hidden"></div></div>
 <div class="navLinks">
 <button class="navbtn active" id="navDashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
 <button class="navbtn hidden" id="navAufgaben" onclick="showPage('aufgaben',this)">✅ Aufgaben</button>
@@ -713,6 +721,24 @@ function tierBadge(t){const c={1:'#2463eb',2:'#eab308',3:'#7c3aed'}[t]||'#94a3b8
 function statusBadge(s){const c={neu:'#eab308',bearbeitung:'#eab308',abgeschlossen:'#16a34a',storno:'#dc2626',klaerung:'#eab308',eingereicht:'#eab308'}[s]||'#94a3b8';const l={neu:'Neu',bearbeitung:'In Bearbeitung',abgeschlossen:'Abgeschlossen',storno:'Storno',klaerung:'Klärungsbedarf',eingereicht:'Eingereicht'}[s]||s;return `<span style="background:${c};color:#fff;border-radius:4px;padding:2px 8px;font-size:12px">${l}</span>`}
 function bar(pct,scale){const c=scale==='gruen'?'#16a34a':scale==='gelb'?'#eab308':'#dc2626';return `<div style="background:#eef1f6;border-radius:4px;overflow:hidden;height:14px;width:100%"><div style="background:${c};height:14px;width:${Math.min(100,pct)}%"></div></div>`}
 function showPage(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active')}
+let _searchTimer=null;
+function doGlobalSearch(){
+clearTimeout(_searchTimer);
+let q=document.getElementById('globalSearch').value.trim();
+let box=document.getElementById('globalSearchResults');
+if(q.length<2){box.classList.add('hidden');return}
+_searchTimer=setTimeout(async()=>{
+let r=await api('/search?q='+encodeURIComponent(q));
+let html='';
+if(r.customers.length)html+='<div class="searchGroup">Kunden</div>'+r.customers.map(c=>`<div class="searchRow" onclick="goToSearchResult('aufgaben')"><b>${c.name}</b><small>${c.postal_code||''} · ${c.status}</small></div>`).join('');
+if(r.employees.length)html+='<div class="searchGroup">Mitarbeiter</div>'+r.employees.map(x=>`<div class="searchRow" onclick="goToSearchResult('mitarbeiter')"><b>${x.name}</b><small>${x.username} · ${x.role}</small></div>`).join('');
+if(r.closures.length)html+='<div class="searchGroup">Abschlüsse</div>'+r.closures.map(x=>`<div class="searchRow" onclick="goToSearchResult('provision')"><b>${x.customer_name}</b><small>${x.contract_number||'ohne Vertragsnr.'} · ${x.status} · ${x.completed_on}</small></div>`).join('');
+box.innerHTML=html||'<div class="searchRow"><small>Keine Treffer.</small></div>';
+box.classList.remove('hidden');
+},250);
+}
+function goToSearchResult(page){document.getElementById('globalSearchResults').classList.add('hidden');document.getElementById('globalSearch').value='';let btn=[...document.querySelectorAll('.navbtn')].find(b=>b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+page+"'"));if(btn)btn.click()}
+document.addEventListener('click',e=>{if(!e.target.closest('.navSearchWrap'))document.getElementById('globalSearchResults')?.classList.add('hidden')});
 function goToStep2(){if(!username.value.trim())return;vpShown.textContent=username.value;loginStep1.classList.remove('active');loginStep2.classList.add('active');code.focus()}
 function backToStep1(){loginStep2.classList.remove('active');loginStep1.classList.add('active');code.value='';username.focus()}
 function applyRoleUI(admin){
