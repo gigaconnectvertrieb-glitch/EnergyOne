@@ -57,6 +57,9 @@ class Blacklist(Base):
 class BackupCode(Base):
     __tablename__ = "backup_codes"
     id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); code_hash: Mapped[str] = mapped_column(String(255)); used: Mapped[bool] = mapped_column(Boolean, default=False); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+class LoginSession(Base):
+    __tablename__ = "sitzungen"
+    id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); jti: Mapped[str] = mapped_column(String(64), unique=True, index=True); device_label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True); ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True); user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True); revoked: Mapped[bool] = mapped_column(Boolean, default=False); revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 class Customer(Base):
     __tablename__ = "kunden"
     id: Mapped[int] = mapped_column(primary_key=True); kind: Mapped[str] = mapped_column(String(10)); first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True); last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True); company: Mapped[Optional[str]] = mapped_column(String(160), nullable=True); contact_name: Mapped[Optional[str]] = mapped_column(String(160), nullable=True); email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); postal_code: Mapped[str] = mapped_column(String(10)); street: Mapped[Optional[str]] = mapped_column(String(200), nullable=True); city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True); current_provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("anbieter.id"), nullable=True); usage_kwh: Mapped[float] = mapped_column(Float, default=0); status: Mapped[str] = mapped_column(String(40), default="neu"); owner_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -133,12 +136,36 @@ def db():
     s = SessionLocal()
     try: yield s
     finally: s.close()
-def token_for(e: Employee): return jwt.encode({"sub": str(e.id), "role": e.role, "exp": datetime.now(timezone.utc) + timedelta(hours=24)}, SECRET, algorithm="HS256")
+def _client_info():
+    req = _request_ctx.get()
+    if not req: return None, None
+    ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req.client else None)
+    ua = req.headers.get("user-agent")
+    return ip, (ua[:255] if ua else None)
+def _device_label(ua: Optional[str]) -> Optional[str]:
+    if not ua: return None
+    browser = "Chrome" if "Chrome" in ua and "Edg" not in ua else "Edge" if "Edg" in ua else "Firefox" if "Firefox" in ua else "Safari" if "Safari" in ua else "Browser"
+    os_name = "iOS" if ("iPhone" in ua or "iPad" in ua) else "Android" if "Android" in ua else "macOS" if "Mac OS" in ua else "Windows" if "Windows" in ua else "Linux" if "Linux" in ua else ""
+    return f"{browser} · {os_name}" if os_name else browser
+def token_for(e: Employee, s: Session):
+    jti = secrets.token_hex(16)
+    ip, ua = _client_info()
+    s.add(LoginSession(employee_id=e.id, jti=jti, device_label=_device_label(ua), ip_address=ip, user_agent=ua, last_seen_at=datetime.utcnow()))
+    return jwt.encode({"sub": str(e.id), "role": e.role, "jti": jti, "exp": datetime.now(timezone.utc) + timedelta(hours=24)}, SECRET, algorithm="HS256")
 def current(c: HTTPAuthorizationCredentials = Depends(bearer), s: Session = Depends(db)):
-    try: eid = int(jwt.decode(c.credentials, SECRET, algorithms=["HS256"])["sub"])
+    try:
+        payload = jwt.decode(c.credentials, SECRET, algorithms=["HS256"])
+        eid = int(payload["sub"])
     except (JWTError, ValueError): raise HTTPException(401, "Ungültige Anmeldung")
     e = s.get(Employee, eid)
     if not e or not e.active: raise HTTPException(401, "Konto nicht verfügbar")
+    jti = payload.get("jti")
+    if jti:
+        sess = s.scalar(select(LoginSession).where(LoginSession.jti == jti))
+        if sess:
+            if sess.revoked: raise HTTPException(401, "Sitzung wurde beendet")
+            if not sess.last_seen_at or (datetime.utcnow() - sess.last_seen_at) > timedelta(minutes=5):
+                sess.last_seen_at = datetime.utcnow(); s.commit()
     return e
 def admin(e: Employee = Depends(current)):
     if e.role != "admin": raise HTTPException(403, "Admin-Berechtigung erforderlich")
@@ -166,9 +193,7 @@ def serialize(x):
 def serialize_employee(x): return {k: v for k, v in serialize(x).items() if k != "totp_secret"}
 def log(s, emp, action, detail="", object_type=None, object_id=None, old=None, new=None):
     s.add(Activity(employee_id=emp.id if emp else None, action=action, detail=detail))
-    req = _request_ctx.get()
-    ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req and req.client else None) if req else None
-    ua = req.headers.get("user-agent") if req else None
+    ip, ua = _client_info()
     s.add(AuditLog(
         employee_id=emp.id if emp else None, employee_name=emp.name if emp else None, role=emp.role if emp else None,
         action=action, object_type=object_type, object_id=str(object_id) if object_id is not None else None,
@@ -303,7 +328,8 @@ def login(data: Login, s: Session = Depends(db)):
         used_backup_code.used=True; used_backup_code.used_at=datetime.utcnow()
         remaining = s.scalar(select(func.count(BackupCode.id)).where(BackupCode.employee_id==e.id, BackupCode.used.is_(False))) - 1
         log(s,e,"Login mit Backup-Code",f"noch {remaining} übrig")
-    s.commit(); return {"access_token":token_for(e),"employee":serialize_employee(e)}
+    token = token_for(e, s)
+    s.commit(); return {"access_token":token,"employee":serialize_employee(e)}
 @app.get("/api/me")
 def me(e: Employee = Depends(current)): return serialize_employee(e)
 @app.post("/api/auth/master-key")
@@ -324,6 +350,33 @@ def toggle_module(key: str, e: Employee = Depends(admin), s: Session = Depends(d
     log(s, e, "Modul umgeschaltet", f"{key} -> {'aktiv' if m.enabled else 'inaktiv'}")
     s.commit(); notify_update()
     return serialize(m)
+def _own_jti(c: HTTPAuthorizationCredentials) -> Optional[str]:
+    try: return jwt.decode(c.credentials, SECRET, algorithms=["HS256"]).get("jti")
+    except JWTError: return None
+@app.get("/api/sessions")
+def my_sessions(e: Employee = Depends(current), s: Session = Depends(db), c: HTTPAuthorizationCredentials = Depends(bearer)):
+    own_jti = _own_jti(c)
+    rows = s.scalars(select(LoginSession).where(LoginSession.employee_id == e.id, LoginSession.revoked.is_(False)).order_by(LoginSession.last_seen_at.desc().nulls_last(), LoginSession.created_at.desc()))
+    return [{**serialize(row), "is_current": row.jti == own_jti} for row in rows]
+@app.delete("/api/sessions/{sid}")
+def revoke_my_session(sid: int, e: Employee = Depends(current), s: Session = Depends(db)):
+    sess = s.get(LoginSession, sid)
+    if not sess or sess.employee_id != e.id: raise HTTPException(404, "Sitzung nicht gefunden")
+    sess.revoked = True; sess.revoked_at = datetime.utcnow()
+    s.commit(); return {"status": "ok"}
+@app.get("/api/admin/sessions")
+def list_sessions(employee_id: Optional[int] = None, e: Employee = Depends(admin), s: Session = Depends(db), c: HTTPAuthorizationCredentials = Depends(bearer)):
+    own_jti = _own_jti(c)
+    q = select(LoginSession, Employee.name, Employee.username).join(Employee, Employee.id == LoginSession.employee_id).where(LoginSession.revoked.is_(False)).order_by(LoginSession.last_seen_at.desc().nulls_last(), LoginSession.created_at.desc())
+    if employee_id: q = q.where(LoginSession.employee_id == employee_id)
+    return [{**serialize(sess), "employee_name": name, "employee_username": username, "is_current": sess.jti == own_jti} for sess, name, username in s.execute(q).all()]
+@app.delete("/api/admin/sessions/{sid}")
+def revoke_session(sid: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    sess = s.get(LoginSession, sid)
+    if not sess: raise HTTPException(404, "Sitzung nicht gefunden")
+    sess.revoked = True; sess.revoked_at = datetime.utcnow()
+    log(s, e, "Sitzung beendet (Admin)", f"employee_id={sess.employee_id}")
+    s.commit(); return {"status": "ok"}
 class BlacklistIn(BaseModel): kind: Literal["email", "phone"]; value: str = Field(min_length=3, max_length=255); reason: str = ""
 @app.get("/api/blacklist")
 def list_blacklist(e: Employee = Depends(admin), s: Session = Depends(db)):
@@ -731,6 +784,7 @@ PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
 <section><h2>Generalschlüssel</h2><p><small>Universeller Notfall-Zugang für alle Accounts. Nur persönlich/telefonisch weitergeben.</small></p><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
 <section><h2>Module verwalten</h2><p><small>Phase 1 ist sofort nutzbar. Phase 2/3 sind bereits eingebaut, aber standardmäßig deaktiviert — hier gezielt freischalten.</small></p><div id="moduleList"></div></section>
 <section><h2>Audit-Log</h2><p><small>Unveränderbares Protokoll aller sicherheitsrelevanten Vorgänge (wer, wann, was, von wo). Wird nie gelöscht oder bearbeitet.</small></p><input id="auditEmpId" placeholder="Mitarbeiter-ID (optional)" type="number"><input id="auditAction" placeholder="Aktion enthält... (optional)"><label>Von <input id="auditFrom" type="date"></label><label>Bis <input id="auditTo" type="date"></label><button onclick="loadAuditLog()">Filtern</button><div id="auditLogList"></div></section>
+<section><h2>Aktive Sitzungen</h2><p><small>Alle gerade eingeloggten Geräte. Bei Kündigung/Verdacht auf Missbrauch hier sofort abmelden — der Zugang wird augenblicklich gesperrt, unabhängig vom Token-Ablauf.</small></p><table><thead><tr><th>Mitarbeiter</th><th>Gerät</th><th>IP</th><th>Zuletzt aktiv</th><th></th></tr></thead><tbody id="sessionsList"></tbody></table></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
@@ -822,7 +876,7 @@ function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
 loadNotifications();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist();loadSessions()}
 else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend).';loadEmployees();load()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
@@ -1189,6 +1243,12 @@ if(x.old_values||x.new_values)diff=`<br><small style="color:#8f8ca8">${x.old_val
 return `<div class="card"><small>${new Date(x.timestamp).toLocaleString('de-DE')} · ${x.employee_name||'System'}${x.role?' ('+x.role+')':''} · IP ${x.ip_address||'-'}</small><br><b>${x.action}</b>${x.object_type?' — '+x.object_type+(x.object_id?' #'+x.object_id:''):''}${diff}</div>`;
 }).join('')||'<p class="empty">Keine Einträge.</p>';
 }
+async function loadSessions(){
+if(!document.getElementById('sessionsList'))return;
+let rows=await api('/admin/sessions').catch(()=>[]);
+sessionsList.innerHTML=rows.map(x=>`<tr><td>${x.employee_name||'#'+x.employee_id}${x.is_current?' <small>(dieses Gerät)</small>':''}</td><td>${x.device_label||'-'}</td><td>${x.ip_address||'-'}</td><td>${x.last_seen_at?new Date(x.last_seen_at).toLocaleString('de-DE'):new Date(x.created_at).toLocaleString('de-DE')}</td><td><button onclick="revokeSession(${x.id})" style="background:#fee2e2;color:#dc2626">Abmelden</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Keine aktiven Sitzungen.</td></tr>';
+}
+async function revokeSession(id){if(!confirm('Diese Sitzung wirklich beenden? Das Gerät wird sofort ausgeloggt.'))return;await api('/admin/sessions/'+id,{method:'DELETE'});await loadSessions()}
 async function loadNotifications(){
 if(!token||!document.getElementById('notifBadge'))return;
 let rows=await api('/notifications').catch(()=>[]);
