@@ -10,6 +10,9 @@ from typing import Literal, Optional
 from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, or_, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -169,6 +172,14 @@ class ClosureEntry(Base):
     reviewed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     contract_pdf_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    iban: Mapped[Optional[str]] = mapped_column(String(34), nullable=True)
+    account_holder: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    old_customer_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    meter_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    desired_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    sepa_consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    signature_png: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class DailyPerformance(Base):
@@ -238,6 +249,14 @@ class ClosureIn(BaseModel):
     expected_commission: float = Field(default=0, ge=0)
     note: str = ""
     employee_id: Optional[int] = None
+    birth_date: Optional[date] = None
+    iban: Optional[str] = Field(default=None, max_length=34)
+    account_holder: Optional[str] = Field(default=None, max_length=200)
+    old_customer_number: Optional[str] = Field(default=None, max_length=60)
+    meter_number: Optional[str] = Field(default=None, max_length=60)
+    desired_start_date: Optional[date] = None
+    sepa_consent: bool = False
+    signature_png: Optional[str] = None
 class ReviewIn(BaseModel): status: str; note: str = ""; provider_id: Optional[int] = None; tariff_id: Optional[int] = None; bracket_id: Optional[int] = None; usage_kwh: Optional[float] = Field(default=None, ge=0); expected_commission: Optional[float] = Field(default=None, ge=0)
 class ProviderIn(BaseModel):
     name: str = Field(min_length=2, max_length=150)
@@ -340,8 +359,10 @@ def my_closures(e: Employee = Depends(current), s: Session = Depends(db)):
 
 @app.post("/api/employee/closures")
 def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session = Depends(db)):
-    if e.role in ("admin", "buchhaltung"):
-        if not data.employee_id: raise HTTPException(422, "employee_id erforderlich, wenn Admin für einen Mitarbeiter einträgt")
+    if e.role == "buchhaltung":
+        if not data.employee_id: raise HTTPException(422, "employee_id erforderlich, wenn Buchhaltung für einen Mitarbeiter einträgt")
+        owner_id = data.employee_id
+    elif e.role == "admin" and data.employee_id:
         owner_id = data.employee_id
     else:
         owner_id = e.id
@@ -368,7 +389,8 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
         if bracket:
             bracket_id = bracket.id
             expected_commission = round(bracket.commission_amount + (bracket.commission_per_kwh or 0) * data.usage_kwh, 2)
-    item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note)
+    item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note,
+                        birth_date=data.birth_date, iban=(data.iban or "").replace(" ", "").upper() or None, account_holder=data.account_holder, old_customer_number=data.old_customer_number, meter_number=data.meter_number, desired_start_date=data.desired_start_date, sepa_consent=data.sepa_consent, signature_png=data.signature_png)
     s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id))
     notify(s, "Neuer Abschluss zur Prüfung", f"{owner_employee.name}: {customer_name}", admins_only=True, link="provision")
     s.commit(); notify_update()
@@ -691,20 +713,45 @@ def generate_closure_pdf(s: Session, item: "ClosureEntry") -> str:
     lines = [
         f"Vertragsnummer: {item.contract_number or '-'}",
         f"Datum: {item.completed_on.strftime('%d.%m.%Y')}",
+        f"Gewünschter Lieferbeginn: {item.desired_start_date.strftime('%d.%m.%Y') if item.desired_start_date else '-'}",
         "",
         f"Kunde: {item.customer_name}",
         f"Kundentyp: {'Privat' if item.customer_kind == 'privat' else 'Gewerbe'}",
+        f"Geburtsdatum: {item.birth_date.strftime('%d.%m.%Y') if item.birth_date else '-'}",
         "",
         f"Produkt: {'Strom' if item.product == 'strom' else 'Gas'}",
         f"Anbieter: {provider.name if provider else '-'}",
         f"Tarif: {tariff.name if tariff else '-'}",
         f"Jahresverbrauch: {item.usage_kwh:.0f} kWh",
+        f"Zählernummer: {item.meter_number or '-'}",
+        f"Kundennummer beim bisherigen Anbieter: {item.old_customer_number or '-'}",
+        "",
+        f"SEPA-Lastschrift — Kontoinhaber: {item.account_holder or item.customer_name}",
+        f"IBAN: {item.iban or '-'}",
+        f"SEPA-Mandat erteilt: {'Ja' if item.sepa_consent else 'Nein'}",
         "",
         f"Vertriebsmitarbeiter: {owner.name if owner else '-'} (VP-Nr. {owner.vp_nummer if owner else '-'})",
         f"Status: {item.status}",
     ]
     name = f"vertrag-{item.id}-{uuid.uuid4().hex[:8]}.pdf"
-    make_pdf(name, f"Auftragsbestätigung {item.customer_name}", lines)
+    path = STORAGE / name
+    p = canvas.Canvas(str(path), pagesize=A4)
+    title = f"Auftragsbestätigung {item.customer_name}"
+    p.setTitle(title)
+    p.setFont("Helvetica-Bold", 18); p.drawString(50, 800, title)
+    p.setFont("Helvetica", 11)
+    y = 765
+    for line in lines:
+        p.drawString(50, y, str(line)[:115]); y -= 20
+    if item.signature_png:
+        try:
+            raw = item.signature_png.split(",", 1)[-1]
+            img = ImageReader(io.BytesIO(base64.b64decode(raw)))
+            p.setFont("Helvetica", 9); p.drawString(50, y - 12, "Unterschrift Kunde:")
+            p.drawImage(img, 50, y - 92, width=180, height=70, preserveAspectRatio=True, mask="auto")
+        except Exception:
+            pass
+    p.save()
     item.contract_pdf_name = name
     return name
 
@@ -743,6 +790,15 @@ def delete_closure(closure_id: int, e: Employee = Depends(admin), s: Session = D
     if not item: raise HTTPException(404,"Abschluss nicht gefunden")
     s.delete(item); log(s,e,"Abschluss gelöscht",str(closure_id)); s.commit(); notify_update()
     return {"status":"deleted"}
+
+@app.get("/api/admin/closures/{closure_id}/contract.pdf")
+def download_closure_contract(closure_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = s.get(ClosureEntry, closure_id)
+    if not item or not item.contract_pdf_name: raise HTTPException(404, "Kein Vertragsdokument vorhanden")
+    path = STORAGE / item.contract_pdf_name
+    if not path.exists(): raise HTTPException(404, "Datei nicht gefunden")
+    log(s, e, "Vertrags-PDF heruntergeladen", str(closure_id)); s.commit()
+    return Response(path.read_bytes(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="vertrag-{closure_id}.pdf"'})
 
 
 @app.get("/api/providers")
