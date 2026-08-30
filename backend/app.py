@@ -48,6 +48,9 @@ class Employee(Base):
 class Settings(Base):
     __tablename__ = "einstellungen"
     id: Mapped[int] = mapped_column(primary_key=True); master_key_hash: Mapped[str] = mapped_column(String(255))
+class Notification(Base):
+    __tablename__ = "benachrichtigungen"
+    id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); admins_only: Mapped[bool] = mapped_column(Boolean, default=False); title: Mapped[str] = mapped_column(String(150)); body: Mapped[str] = mapped_column(Text, default=""); kind: Mapped[str] = mapped_column(String(20), default="info"); link: Mapped[Optional[str]] = mapped_column(String(60), nullable=True); read: Mapped[bool] = mapped_column(Boolean, default=False); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 class Blacklist(Base):
     __tablename__ = "sperrliste"
     id: Mapped[int] = mapped_column(primary_key=True); kind: Mapped[str] = mapped_column(String(10)); value: Mapped[str] = mapped_column(String(255)); reason: Mapped[str] = mapped_column(Text, default=""); created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -235,6 +238,9 @@ manager = ConnectionManager()
 MAIN_LOOP: Optional[asyncio.AbstractEventLoop] = None
 def notify_update(kind: str = "update"):
     if MAIN_LOOP: asyncio.run_coroutine_threadsafe(manager.broadcast(kind), MAIN_LOOP)
+def notify(s: Session, title: str, body: str = "", employee_id: Optional[int] = None, admins_only: bool = False, kind: str = "info", link: Optional[str] = None):
+    s.add(Notification(employee_id=employee_id, admins_only=admins_only, title=title, body=body, kind=kind, link=link))
+    notify_update("notifications")
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket, token: str = ""):
@@ -332,6 +338,26 @@ def delete_blacklist_entry(entry_id: int, e: Employee = Depends(admin), s: Sessi
     if not item: raise HTTPException(404, "Eintrag nicht gefunden")
     s.delete(item); log(s, e, "Sperrlisten-Eintrag gelöscht", item.value); s.commit()
     return {"status": "deleted"}
+@app.get("/api/notifications")
+def list_notifications(unread_only: bool = False, limit: int = 30, e: Employee = Depends(current), s: Session = Depends(db)):
+    conditions = [Notification.employee_id == e.id]
+    if e.role == "admin": conditions.append(Notification.admins_only.is_(True))
+    stmt = select(Notification).where(or_(*conditions)).order_by(Notification.created_at.desc())
+    if unread_only: stmt = stmt.where(Notification.read.is_(False))
+    return [serialize(x) for x in s.scalars(stmt.limit(limit))]
+@app.post("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int, e: Employee = Depends(current), s: Session = Depends(db)):
+    n = s.get(Notification, notification_id)
+    if not n or (n.employee_id != e.id and not (n.admins_only and e.role == "admin")): raise HTTPException(404, "Nicht gefunden")
+    n.read = True; s.commit()
+    return {"status": "ok"}
+@app.post("/api/notifications/read-all")
+def mark_all_notifications_read(e: Employee = Depends(current), s: Session = Depends(db)):
+    conditions = [Notification.employee_id == e.id]
+    if e.role == "admin": conditions.append(Notification.admins_only.is_(True))
+    for n in s.scalars(select(Notification).where(or_(*conditions), Notification.read.is_(False))): n.read = True
+    s.commit()
+    return {"status": "ok"}
 @app.get("/api/audit-log")
 def list_audit_log(employee_id: Optional[int] = None, action: str = "", date_from: Optional[str] = None, date_to: Optional[str] = None, limit: int = 200, offset: int = 0, _: Employee = Depends(admin), s: Session = Depends(db)):
     stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
@@ -531,6 +557,17 @@ CSS = '''*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,Sego
 .navBrand{display:flex;align-items:center;gap:10px;padding:20px 16px 18px}
 .navBrand b{font-size:14.5px;display:block}
 .navBrand small{color:#8f8ca8;font-size:12px}
+.notifBellWrap{position:relative;margin-left:auto}
+.notifBell{background:transparent;border:0;font-size:17px;padding:4px;position:relative;box-shadow:none;color:inherit}
+.notifBell:hover{opacity:.8;transform:none}
+.notifBadge{position:absolute;top:-3px;right:-3px;background:#dc2626;color:#fff;border-radius:999px;font-size:10px;font-weight:800;padding:1px 5px;line-height:1.3}
+#notifDropdown{position:absolute;top:calc(100% + 6px);right:0;width:300px;max-height:360px;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 20px 40px -12px rgba(30,20,70,.25);z-index:60;padding:6px}
+#notifDropdown .notifRow{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+#notifDropdown .notifRow:hover{background:#f8f7fd}
+#notifDropdown .notifRow.unread{background:#f3f0ff}
+#notifDropdown .notifRow small{display:block;color:#8f8ca8;margin-top:2px}
+#notifDropdown .notifFoot{padding:8px;text-align:center}
+#notifDropdown .notifFoot a{color:#7c3aed;font-size:12.5px;cursor:pointer;text-decoration:none}
 .navSearchWrap{position:relative;padding:0 16px 14px}
 .navSearchWrap input{width:100%;margin:0;font-size:13px;padding:9px 12px}
 #globalSearchResults{position:absolute;top:calc(100% - 8px);left:16px;right:16px;background:#fff;border-radius:12px;box-shadow:0 20px 40px -12px rgba(30,20,70,.25);max-height:340px;overflow-y:auto;z-index:50;padding:8px}
@@ -633,7 +670,7 @@ tr:hover td{background:#faf9ff}
 LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
 
 NAV = '''<nav class="navcol">
-<div class="navBrand">''' + LOGO_ICON + '''<div><b>E1 Direktvertrieb</b><small id="navPortalLabel">Portal</small></div></div>
+<div class="navBrand">''' + LOGO_ICON + '''<div><b>E1 Direktvertrieb</b><small id="navPortalLabel">Portal</small></div><div class="notifBellWrap"><button class="notifBell" onclick="toggleNotifDropdown()">🔔<span id="notifBadge" class="notifBadge hidden">0</span></button><div id="notifDropdown" class="hidden"></div></div></div>
 <div class="navSearchWrap"><input id="globalSearch" placeholder="🔍 Suche..." autocomplete="off" oninput="doGlobalSearch()" onfocus="doGlobalSearch()"><div id="globalSearchResults" class="hidden"></div></div>
 <div class="navLinks">
 <button class="navbtn active" id="navDashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
@@ -775,6 +812,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
+loadNotifications();
 if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist()}
 else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend).';loadEmployees();load()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
@@ -784,7 +822,7 @@ function connectWs(){
 if(ws){try{ws.onclose=null;ws.close()}catch(err){}}
 let proto=location.protocol==='https:'?'wss:':'ws:';
 ws=new WebSocket(proto+'//'+location.host+'/ws?token='+encodeURIComponent(token));
-ws.onmessage=()=>refreshActivePage();
+ws.onmessage=()=>{refreshActivePage();loadNotifications()};
 ws.onclose=()=>{if(token)setTimeout(connectWs,3000)};
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshActivePage()});
@@ -1125,6 +1163,19 @@ if(x.old_values||x.new_values)diff=`<br><small style="color:#8f8ca8">${x.old_val
 return `<div class="card"><small>${new Date(x.timestamp).toLocaleString('de-DE')} · ${x.employee_name||'System'}${x.role?' ('+x.role+')':''} · IP ${x.ip_address||'-'}</small><br><b>${x.action}</b>${x.object_type?' — '+x.object_type+(x.object_id?' #'+x.object_id:''):''}${diff}</div>`;
 }).join('')||'<p class="empty">Keine Einträge.</p>';
 }
+async function loadNotifications(){
+if(!token||!document.getElementById('notifBadge'))return;
+let rows=await api('/notifications').catch(()=>[]);
+let unread=rows.filter(x=>!x.read).length;
+let badge=document.getElementById('notifBadge');
+badge.textContent=unread;badge.classList.toggle('hidden',unread===0);
+let kindColor={success:'#16a34a',warning:'#dc2626',info:'#7c3aed'};
+document.getElementById('notifDropdown').innerHTML=rows.map(x=>`<div class="notifRow ${x.read?'':'unread'}" onclick="markNotifRead(${x.id},'${x.link||''}')"><b style="color:${kindColor[x.kind]||'#1c1a2e'}">${x.title}</b><small>${x.body}</small><small>${new Date(x.created_at).toLocaleString('de-DE')}</small></div>`).join('')+(rows.length?'<div class="notifFoot"><a onclick="markAllNotifRead()">Alle als gelesen markieren</a></div>':'<div class="notifRow"><small>Keine Benachrichtigungen.</small></div>');
+}
+function toggleNotifDropdown(){document.getElementById('notifDropdown').classList.toggle('hidden')}
+async function markNotifRead(id,link){await api('/notifications/'+id+'/read',{method:'POST'});await loadNotifications();document.getElementById('notifDropdown').classList.add('hidden');if(link){let btn=[...document.querySelectorAll('.navbtn')].find(b=>b.getAttribute('onclick')&&b.getAttribute('onclick').includes("'"+link+"'"));if(btn)btn.click()}}
+async function markAllNotifRead(){await api('/notifications/read-all',{method:'POST'});await loadNotifications()}
+document.addEventListener('click',e=>{if(!e.target.closest('.notifBellWrap'))document.getElementById('notifDropdown')?.classList.add('hidden')});
 async function loadBlacklist(){
 if(!document.getElementById('blacklistList'))return;
 let rows=await api('/blacklist');

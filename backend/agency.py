@@ -17,7 +17,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, notify, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
 
 
 class ScheduleEntry(Base):
@@ -370,7 +370,9 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
             bracket_id = bracket.id
             expected_commission = round(bracket.commission_amount + (bracket.commission_per_kwh or 0) * data.usage_kwh, 2)
     item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note)
-    s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id)); s.commit(); notify_update()
+    s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id))
+    notify(s, "Neuer Abschluss zur Prüfung", f"{owner_employee.name}: {customer_name}", admins_only=True, link="provision")
+    s.commit(); notify_update()
     return serialize(item)
 
 
@@ -700,7 +702,10 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
     if data.expected_commission is not None: item.expected_commission=data.expected_commission
     new_vals={"status":item.status,"provider_id":item.provider_id,"expected_commission":item.expected_commission}
-    log(s,e,"Abschluss geprüft",str(item.id),object_type="ClosureEntry",object_id=item.id,old=old_vals,new=new_vals);s.commit();notify_update();return serialize(item)
+    log(s,e,"Abschluss geprüft",str(item.id),object_type="ClosureEntry",object_id=item.id,old=old_vals,new=new_vals)
+    status_label={"abgeschlossen":"abgeschlossen (grün)","storno":"storniert","bearbeitung":"in Bearbeitung","klaerung":"Klärungsbedarf"}.get(item.status,item.status)
+    notify(s,"Abschluss geprüft",f"{item.customer_name}: {status_label}",employee_id=item.employee_id,kind=("success" if item.status=="abgeschlossen" else "warning" if item.status=="storno" else "info"),link="dashboard")
+    s.commit();notify_update();return serialize(item)
 
 
 @app.delete("/api/admin/closures/{closure_id}")
@@ -947,7 +952,7 @@ def submit_application(name: str = Form(...), email: str = Form(...), phone: str
         storage_name = f"apply-{uuid.uuid4().hex}{ext}"
         (STORAGE / storage_name).write_bytes(raw)
     item = JobApplication(name=name, email=email, phone=phone or None, message=message, photo_storage_name=storage_name)
-    s.add(item); s.commit(); notify_update()
+    s.add(item); notify(s, "Neue Bewerbung", f"{name} hat sich beworben.", admins_only=True, link="mitarbeiter"); s.commit(); notify_update()
     recipients = os.getenv("APPLICATION_EMAIL", "luca.marrancone@gmail.com,saloorhan96@gmail.com")
     if recipients:
         body = f"Neue Bewerbung über die Website:\n\nName: {item.name}\nE-Mail: {item.email}\nTelefon: {item.phone or '-'}\n\nNachricht:\n{item.message or '-'}\n\nFoto im Portal unter Bewerbungen einsehbar."
