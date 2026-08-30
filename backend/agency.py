@@ -16,23 +16,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, STORAGE, Task, TaskIn, app, current, admin, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update
-
-
-class Team(Base):
-    __tablename__ = "teams"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True)
-    leader_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-
-class TeamMember(Base):
-    __tablename__ = "team_mitglieder"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
-    employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id"))
-    since: Mapped[date] = mapped_column(Date, default=date.today)
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
 
 
 class ScheduleEntry(Base):
@@ -289,7 +273,8 @@ def scorecards(e: Employee = Depends(current), s: Session = Depends(db)):
     today = date.today(); first = today.replace(day=1)
     goals = list(s.scalars(select(SalesGoal).where(SalesGoal.period_start <= today, SalesGoal.period_end >= today)))
     employees = list(s.scalars(select(Employee).where(Employee.active.is_(True), Employee.role.not_in(("admin", "buchhaltung"))).order_by(Employee.name)))
-    if e.role not in ("admin", "buchhaltung"): employees = [x for x in employees if x.id == e.id]
+    ids = visible_employee_ids(e, s)
+    if ids is not None: employees = [x for x in employees if x.id in ids]
     result = []
     for employee in employees:
         contracts = s.scalar(select(func.count(ClosureEntry.id)).where(ClosureEntry.employee_id == employee.id, ClosureEntry.status == "abgeschlossen", ClosureEntry.completed_on >= first)) or 0

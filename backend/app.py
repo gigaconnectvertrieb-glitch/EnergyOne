@@ -61,9 +61,30 @@ class Activity(Base):
 class JobApplication(Base):
     __tablename__ = "bewerbungen"
     id: Mapped[int] = mapped_column(primary_key=True); name: Mapped[str] = mapped_column(String(150)); email: Mapped[str] = mapped_column(String(255)); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); message: Mapped[str] = mapped_column(Text, default=""); photo_storage_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); seen: Mapped[bool] = mapped_column(Boolean, default=False)
+class Team(Base):
+    __tablename__ = "teams"
+    id: Mapped[int] = mapped_column(primary_key=True); name: Mapped[str] = mapped_column(String(100), unique=True); leader_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); active: Mapped[bool] = mapped_column(Boolean, default=True)
+class TeamMember(Base):
+    __tablename__ = "team_mitglieder"
+    id: Mapped[int] = mapped_column(primary_key=True); team_id: Mapped[int] = mapped_column(ForeignKey("teams.id")); employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); since: Mapped[date] = mapped_column(Date, default=date.today)
+class Module(Base):
+    __tablename__ = "module"
+    key: Mapped[str] = mapped_column(String(50), primary_key=True); name: Mapped[str] = mapped_column(String(120)); phase: Mapped[int] = mapped_column(Integer, default=1); enabled: Mapped[bool] = mapped_column(Boolean, default=False); updated_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+MODULE_SEED = [
+    ("csv_import", "Vertrags-Import (CSV/Excel)", 1, True),
+    ("eigene_produkte", "Eigenes Produktmanagement", 2, False),
+    ("eigene_abschlussstrecke", "Eigene Abschlussstrecke", 2, False),
+    ("esignatur", "eSignatur", 2, False),
+    ("paralleler_verkauf", "Paralleler Verkauf (eigene Produkte)", 2, False),
+    ("erweiterte_analytics", "Erweiterte Analytics", 3, False),
+    ("akademie", "Akademie", 3, False),
+    ("tourenplanung", "Tourenplanung", 3, False),
+    ("qualitaetschecks", "Qualitätschecks", 3, False),
+]
 
 class Login(BaseModel): username: str; code: str
-class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None
+class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "teamleiter", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None
 class MasterKeyIn(BaseModel): new_key: Optional[str] = Field(default=None, min_length=8, max_length=200)
 class CustomerIn(BaseModel): kind: Literal["privat", "firma"]; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: Optional[EmailStr] = None; phone: Optional[str] = None; postal_code: str; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: float = 0; status: str = "neu"; owner_id: Optional[int] = None
 class CustomerUpdateIn(BaseModel):
@@ -88,6 +109,24 @@ def current(c: HTTPAuthorizationCredentials = Depends(bearer), s: Session = Depe
 def admin(e: Employee = Depends(current)):
     if e.role != "admin": raise HTTPException(403, "Admin-Berechtigung erforderlich")
     return e
+def admin_or_lead(e: Employee = Depends(current)):
+    if e.role not in ("admin", "teamleiter"): raise HTTPException(403, "Keine Berechtigung")
+    return e
+def visible_employee_ids(e: Employee, s: Session) -> Optional[list[int]]:
+    if e.role in ("admin", "buchhaltung"): return None
+    if e.role == "teamleiter":
+        led_team_ids = list(s.scalars(select(Team.id).where(Team.leader_id == e.id)))
+        if not led_team_ids: return [e.id]
+        member_ids = list(s.scalars(select(TeamMember.employee_id).where(TeamMember.team_id.in_(led_team_ids))))
+        return list(set(member_ids) | {e.id})
+    return [e.id]
+def module_enabled(key: str, s: Session) -> bool:
+    row = s.get(Module, key)
+    return bool(row and row.enabled)
+def require_module(key: str):
+    def dep(s: Session = Depends(db)):
+        if not module_enabled(key, s): raise HTTPException(403, f"Modul '{key}' ist deaktiviert")
+    return dep
 def serialize(x):
     return {c.name: (getattr(x,c.name).isoformat() if isinstance(getattr(x,c.name),(date,datetime)) else getattr(x,c.name)) for c in x.__table__.columns}
 def serialize_employee(x): return {k: v for k, v in serialize(x).items() if k != "totp_secret"}
@@ -183,6 +222,11 @@ def startup():
             e=Employee(username=username,email=os.getenv("ADMIN_EMAIL"),totp_secret=secret,role="admin",name="Administrator",commission_rate=0); s.add(e); s.commit()
             print(f"[SETUP] Erster Admin-Zugang: Benutzername={username}")
             print(f"[SETUP] TOTP einrichten: {totp_setup(username, secret)['totp_provisioning_uri']}")
+        existing_modules = {m for m in s.scalars(select(Module.key))}
+        for key, name, phase, default_enabled in MODULE_SEED:
+            if key not in existing_modules:
+                s.add(Module(key=key, name=name, phase=phase, enabled=default_enabled))
+        s.commit()
 
 @app.post("/api/auth/login")
 def login(data: Login, s: Session = Depends(db)):
@@ -206,16 +250,29 @@ def rotate_master_key(data: MasterKeyIn, e: Employee=Depends(admin), s: Session=
     if settings: settings.master_key_hash=pwd.hash(new_key)
     else: s.add(Settings(id=1,master_key_hash=pwd.hash(new_key)))
     log(s,e,"Generalschlüssel geändert"); s.commit(); return {"status":"ok","new_key":new_key}
+@app.get("/api/modules")
+def list_modules(_: Employee = Depends(admin), s: Session = Depends(db)):
+    return [serialize(x) for x in s.scalars(select(Module).order_by(Module.phase, Module.name))]
+@app.post("/api/modules/{key}/toggle")
+def toggle_module(key: str, e: Employee = Depends(admin), s: Session = Depends(db)):
+    m = s.get(Module, key)
+    if not m: raise HTTPException(404, "Modul nicht gefunden")
+    m.enabled = not m.enabled; m.updated_by = e.id; m.updated_at = datetime.utcnow()
+    log(s, e, "Modul umgeschaltet", f"{key} -> {'aktiv' if m.enabled else 'inaktiv'}")
+    s.commit(); notify_update()
+    return serialize(m)
 @app.get("/api/dashboard")
 def dashboard(e: Employee = Depends(current), s: Session = Depends(db)):
-    scope = [] if e.role=="admin" else [Customer.owner_id==e.id]
+    ids = visible_employee_ids(e, s)
+    scope = [] if ids is None else [Customer.owner_id.in_(ids)]
     customers=s.scalar(select(func.count(Customer.id)).where(*scope)) or 0
     tasks=s.scalar(select(func.count(Task.id)).where(Task.assignee_id==e.id, Task.status!="erledigt")) or 0
     return {"customers":customers,"open_tasks":tasks,"activities":[serialize(x) for x in s.scalars(select(Activity).order_by(Activity.created_at.desc()).limit(10))]}
 @app.get("/api/customers")
 def customers(q: str="", limit: int=100, offset: int=0, e: Employee=Depends(current), s: Session=Depends(db)):
     stmt=select(Customer).where(or_(Customer.email.ilike(f"%{q}%"),Customer.last_name.ilike(f"%{q}%"),Customer.company.ilike(f"%{q}%"))) if q else select(Customer)
-    if e.role!="admin": stmt=stmt.where(Customer.owner_id==e.id)
+    ids = visible_employee_ids(e, s)
+    if ids is not None: stmt=stmt.where(Customer.owner_id.in_(ids))
     return [serialize(x) for x in s.scalars(stmt.order_by(Customer.created_at.desc()).limit(limit).offset(offset))]
 @app.post("/api/customers")
 def create_customer(data: CustomerIn, e: Employee=Depends(current), s: Session=Depends(db)):
@@ -224,12 +281,16 @@ def create_customer(data: CustomerIn, e: Employee=Depends(current), s: Session=D
 def update_customer(customer_id: int, data: CustomerUpdateIn, e: Employee=Depends(current), s: Session=Depends(db)):
     c=s.get(Customer,customer_id)
     if not c: raise HTTPException(404,"Kunde nicht gefunden")
-    if e.role!="admin" and c.owner_id!=e.id: raise HTTPException(403,"Keine Berechtigung")
+    if e.role!="admin" and c.owner_id!=e.id: raise HTTPException(403,"Keine Berechtigung (nur eigene Kunden bearbeitbar)")
     if data.status is not None and e.role!="admin": raise HTTPException(403,"Nur Admin darf den Status ändern")
     for field,value in data.model_dump(exclude_unset=True).items(): setattr(c,field,value)
     s.add(CustomerHistory(customer_id=c.id,employee_id=e.id,detail="Kunde bearbeitet")); log(s,e,"Kunde bearbeitet",str(c.id)); s.commit(); notify_update(); return serialize(c)
 @app.get("/api/employees")
-def employees(_: Employee=Depends(admin), s: Session=Depends(db)): return [serialize_employee(x) for x in s.scalars(select(Employee).order_by(Employee.name))]
+def employees(e: Employee=Depends(admin_or_lead), s: Session=Depends(db)):
+    stmt = select(Employee).order_by(Employee.name)
+    ids = visible_employee_ids(e, s)
+    if ids is not None: stmt = stmt.where(Employee.id.in_(ids))
+    return [serialize_employee(x) for x in s.scalars(stmt)]
 def generate_vp_nummer(s: Session) -> str:
     n = (s.scalar(select(func.count(Employee.id))) or 0) + 10001
     while s.scalar(select(Employee.id).where(Employee.username==str(n))): n += 1
@@ -488,17 +549,19 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
 <div class="pageHead" style="--pageAccent:#2563eb"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
-<section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
+<section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="teamleiter">Teamleiter</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
 <section><h2>Mitarbeiterliste</h2><p><small>"Website" zeigt Name+Foto öffentlich auf der Landingpage (Vertrauens-Sektion für Besucher).</small></p><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th>Öffentlich</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
 <section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><img id="myPhotoPreview" style="width:56px;height:56px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:12px;background:#eee" onerror="this.style.visibility='hidden'"><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
 <section><h2>Bewerbungen (Website)</h2><table><thead><tr><th>Foto</th><th>Datum</th><th>Name</th><th>E-Mail</th><th>Telefon</th><th>Nachricht</th><th></th></tr></thead><tbody id="applicationsList"></tbody></table></section>
+<section><h2>Teams</h2><p><small>Ein Teamleiter sieht damit automatisch nur die Zahlen/Kunden seines eigenen Teams (nur lesend).</small></p><input id="teamName" placeholder="Teamname"><select id="teamLeaderSelect"><option value="">Kein Leiter</option></select><button onclick="createTeam()">Team anlegen</button><div id="teamList"></div><div style="margin-top:14px"><label>Mitarbeiter <select id="teamMemberEmpSelect"></select></label><label>zu Team <select id="teamMemberTeamSelect"></select></label><button onclick="addTeamMember()">Zuordnen</button></div></section>
 </div>'''
 
 PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
 <div class="pageHead" style="--pageAccent:#dc2626"><h1>Loginzugänge</h1><p>TOTP-Zugang je Mitarbeiter neu einrichten und Generalschlüssel verwalten.</p></div>
 <section><h2>TOTP neu einrichten</h2><p><small>Setzt den Google-Authenticator-Schlüssel des gewählten Mitarbeiters zurück (z.B. bei Handy-Verlust).</small></p><select id="resetEmpId"></select><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
 <section><h2>Generalschlüssel</h2><p><small>Universeller Notfall-Zugang für alle Accounts. Nur persönlich/telefonisch weitergeben.</small></p><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
+<section><h2>Module verwalten</h2><p><small>Phase 1 ist sofort nutzbar. Phase 2/3 sind bereits eingebaut, aber standardmäßig deaktiviert — hier gezielt freischalten.</small></p><div id="moduleList"></div></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
@@ -545,7 +608,7 @@ PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
 <section><h2>EnergyOne Vertriebscoach</h2><p><small>Dein Coach ist jetzt jederzeit über das Chat-Symbol unten rechts erreichbar.</small></p></section>
 </div>'''
 
-SCRIPT = '''let token='';let isAdmin=false;let myTier=null;let myId=null;
+SCRIPT = '''let token='';let isAdmin=false;let myRole='';let myTier=null;let myId=null;
 const api=async(p,o={})=>{o.headers={...(o.headers||{}),Authorization:'Bearer '+token};let r=await fetch('/api'+p,o);if(!r.ok)throw Error(await r.text());return r.json()};
 async function downloadFile(p,filename){let r=await fetch('/api'+p,{headers:{Authorization:'Bearer '+token}});if(!r.ok){alert(await r.text());return}let blob=await r.blob();let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url)}
 function toCsv(rows){if(!rows.length)return'';let headers=Object.keys(rows[0]);return [headers.join(';'),...rows.map(r=>headers.map(h=>String(r[h]??'').replace(/;/g,',')).join(';'))].join('\\n')}
@@ -558,7 +621,8 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules()}
+else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend).';loadEmployees();load()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
 let ws=null;
@@ -573,11 +637,11 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAct
 async function signIn(){try{
 let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username.value,code:code.value})});
 let d=await r.json();if(!r.ok)throw Error(d.detail);
-token=d.access_token;isAdmin=d.employee.role==='admin';myTier=d.employee.tier;myId=d.employee.id;
+token=d.access_token;isAdmin=d.employee.role==='admin';myRole=d.employee.role;myTier=d.employee.tier;myId=d.employee.id;
 localStorage.setItem('e1_token',token);
 who.innerHTML='<b>'+d.employee.name+'</b><small>'+d.employee.role+(d.employee.role==='admin'?'':' · '+tierBadge(d.employee.tier))+'</small>';
 navAvatar.textContent=d.employee.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-portalBadge.textContent=isAdmin?'Admin':'Mitarbeiter';
+portalBadge.textContent=isAdmin?'Admin':(myRole==='teamleiter'?'Teamleiter':'Mitarbeiter');
 login.classList.add('fadeOut');await new Promise(res=>setTimeout(res,350));login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
 load()
@@ -588,10 +652,10 @@ let saved=localStorage.getItem('e1_token');if(!saved)return;
 token=saved;
 try{
 let me=await api('/me');
-isAdmin=me.role==='admin';myTier=me.tier;myId=me.id;
+isAdmin=me.role==='admin';myRole=me.role;myTier=me.tier;myId=me.id;
 who.innerHTML='<b>'+me.name+'</b><small>'+me.role+(me.role==='admin'?'':' · '+tierBadge(me.tier))+'</small>';
 navAvatar.textContent=me.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-portalBadge.textContent=isAdmin?'Admin':'Mitarbeiter';
+portalBadge.textContent=isAdmin?'Admin':(myRole==='teamleiter'?'Teamleiter':'Mitarbeiter');
 login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
 load()
@@ -836,6 +900,23 @@ async function resetTotp(){if(!resetEmpId.value)return;let label=resetEmpId.opti
 async function loadLoginAccess(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');let sel=document.getElementById('resetEmpId');if(sel)sel.innerHTML='<option value="">Mitarbeiter wählen</option>'+rows.map(x=>`<option value="${x.id}">${x.name} (${x.username})</option>`).join('')}
 async function loadApplications(){let rows=await api('/admin/applications');applicationsList.innerHTML=rows.map(x=>`<tr style="${x.seen?'':'font-weight:700'}"><td>${x.photo_url?`<img id="applyPhotoImg${x.id}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:'-'}</td><td>${x.created_at.slice(0,10)}</td><td>${x.name}</td><td>${x.email}</td><td>${x.phone||'-'}</td><td>${x.message||'-'}</td><td>${x.seen?'':`<button onclick="markApplicationSeen(${x.id})">Gesehen</button>`}</td></tr><tr><td></td><td></td><td colspan=5><input id="replyMsg${x.id}" placeholder="Antwort an ${x.name}..." style="width:60%"><button onclick="replyApplication(${x.id})">Antworten</button><span id="replyStatus${x.id}"></span></td></tr>`).join('')||'<tr><td colspan=7 class=empty>Noch keine Bewerbungen.</td></tr>';rows.forEach(x=>{if(x.photo_url)loadAuthImage(x.photo_url,'applyPhotoImg'+x.id)})}
 async function loadAuthImage(url,imgId){let r=await fetch(url,{headers:{Authorization:'Bearer '+token}});if(!r.ok)return;let blob=await r.blob();let img=document.getElementById(imgId);if(img)img.src=URL.createObjectURL(blob)}
+async function loadTeams(){
+let[teams,emps]=await Promise.all([api('/teams'),api('/employees')]);
+let byId={};emps.forEach(x=>byId[x.id]=x.name);
+teamList.innerHTML=teams.map(t=>`<div class="card"><b>${t.name}</b> — Leiter: ${t.leader_id?(byId[t.leader_id]||t.leader_id):'keiner'}</div>`).join('')||'<p class="empty">Noch keine Teams.</p>';
+let leadOpts='<option value="">Kein Leiter</option>'+emps.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+if(document.getElementById('teamLeaderSelect'))teamLeaderSelect.innerHTML=leadOpts;
+if(document.getElementById('teamMemberEmpSelect'))teamMemberEmpSelect.innerHTML=emps.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+if(document.getElementById('teamMemberTeamSelect'))teamMemberTeamSelect.innerHTML=teams.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+}
+async function createTeam(){if(!teamName.value.trim())return;try{await api('/teams',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:teamName.value,leader_id:teamLeaderSelect.value?+teamLeaderSelect.value:null})});teamName.value='';await loadTeams()}catch(e){alert(e.message)}}
+async function addTeamMember(){if(!teamMemberTeamSelect.value||!teamMemberEmpSelect.value)return;try{await api('/teams/members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({team_id:+teamMemberTeamSelect.value,employee_id:+teamMemberEmpSelect.value})});alert('Zugeordnet')}catch(e){alert(e.message)}}
+async function loadModules(){
+let rows=await api('/modules');
+let phaseLabel={1:'Phase 1',2:'Phase 2',3:'Phase 3'};
+moduleList.innerHTML=rows.map(m=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${m.enabled?'#16a34a':'#dc2626'};margin-right:8px"></span><b>${m.name}</b> <small style="color:#8f8ca8">(${phaseLabel[m.phase]||m.phase})</small></div><button onclick="toggleModule('${m.key}')" style="${m.enabled?'background:linear-gradient(90deg,#dc2626,#b91c1c)':''}">${m.enabled?'Deaktivieren':'Aktivieren'}</button></div>`).join('')||'<p class="empty">Keine Module.</p>';
+}
+async function toggleModule(key){try{await api('/modules/'+key+'/toggle',{method:'POST'});await loadModules()}catch(e){alert(e.message)}}
 async function markApplicationSeen(id){await api('/admin/applications/'+id+'/seen',{method:'POST'});await loadApplications()}
 async function replyApplication(id){let msg=document.getElementById('replyMsg'+id).value.trim();if(!msg)return;let status=document.getElementById('replyStatus'+id);try{await api('/admin/applications/'+id+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});status.textContent=' Gesendet.';await loadApplications()}catch(e){status.textContent=' Fehler: '+e.message}}
 async function createProvider(){await api('/providers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:provName.value,street:provStreet.value,postal_code:provPlz.value,city:provCity.value,phone:provPhone.value,contact_person:provContact.value})});await loadProviders()}
