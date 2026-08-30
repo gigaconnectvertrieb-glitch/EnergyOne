@@ -180,6 +180,7 @@ class ClosureEntry(Base):
     desired_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     sepa_consent: Mapped[bool] = mapped_column(Boolean, default=False)
     signature_png: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    self_managed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class DailyPerformance(Base):
@@ -389,10 +390,28 @@ def submit_closure(data: ClosureIn, e: Employee = Depends(current), s: Session =
         if bracket:
             bracket_id = bracket.id
             expected_commission = round(bracket.commission_amount + (bracket.commission_per_kwh or 0) * data.usage_kwh, 2)
-    item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note,
-                        birth_date=data.birth_date, iban=(data.iban or "").replace(" ", "").upper() or None, account_holder=data.account_holder, old_customer_number=data.old_customer_number, meter_number=data.meter_number, desired_start_date=data.desired_start_date, sepa_consent=data.sepa_consent, signature_png=data.signature_png)
+    self_trusted = e.role in ("teamleiter", "admin") and owner_id == e.id
+    initial_status = "bearbeitung" if self_trusted else "eingereicht"
+    item = ClosureEntry(employee_id=owner_id, customer_id=customer_id, customer_name=customer_name, contract_number=data.contract_number, product=data.product, customer_kind=data.customer_kind, usage_kwh=data.usage_kwh, completed_on=data.completed_on, status=initial_status, provider_id=data.provider_id, bracket_id=bracket_id, expected_commission=expected_commission, note=data.note,
+                        birth_date=data.birth_date, iban=(data.iban or "").replace(" ", "").upper() or None, account_holder=data.account_holder, old_customer_number=data.old_customer_number, meter_number=data.meter_number, desired_start_date=data.desired_start_date, sepa_consent=data.sepa_consent, signature_png=data.signature_png, self_managed=self_trusted)
     s.add(item); s.flush(); log(s, e, "Abschluss eingereicht", str(item.id))
-    notify(s, "Neuer Abschluss zur Prüfung", f"{owner_employee.name}: {customer_name}", admins_only=True, link="provision")
+    if self_trusted:
+        notify(s, "Abschluss selbst eingetragen", f"{owner_employee.name}: {customer_name} (in Bearbeitung, keine Prüfung nötig)", admins_only=True, link="provision")
+    else:
+        notify(s, "Neuer Abschluss zur Prüfung", f"{owner_employee.name}: {customer_name}", admins_only=True, link="provision")
+    s.commit(); notify_update()
+    return serialize(item)
+
+@app.post("/api/employee/closures/{closure_id}/activate")
+def activate_own_closure(closure_id: int, e: Employee = Depends(current), s: Session = Depends(db)):
+    if e.role not in ("teamleiter", "admin"): raise HTTPException(403, "Keine Berechtigung")
+    item = s.get(ClosureEntry, closure_id)
+    if not item or item.employee_id != e.id: raise HTTPException(404, "Abschluss nicht gefunden")
+    if item.status != "bearbeitung": raise HTTPException(422, "Nur Abschlüsse in Bearbeitung können aktiviert werden")
+    item.status = "abgeschlossen"; item.reviewed_by = e.id; item.reviewed_at = datetime.utcnow()
+    try: generate_closure_pdf(s, item)
+    except Exception as ex: print(f"[CONTRACT PDF ERROR] {type(ex).__name__}: {ex}", flush=True)
+    log(s, e, "Abschluss selbst aktiviert", str(item.id), object_type="ClosureEntry", object_id=item.id)
     s.commit(); notify_update()
     return serialize(item)
 
