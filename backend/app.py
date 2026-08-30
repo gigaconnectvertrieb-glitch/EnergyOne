@@ -342,12 +342,23 @@ def impressum_page(): return IMPRESSUM_HTML
 def datenschutz_page(): return DATENSCHUTZ_HTML
 
 CSS = '''*{box-sizing:border-box}body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto;margin:0;background:#f3f2fa;color:#1c1a2e}
-header{background:linear-gradient(100deg,#12102a,#221c4d 60%,#2d1f5e);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(20,10,60,.25);position:sticky;top:0;z-index:20}
-header b{letter-spacing:.2px;display:inline-flex;align-items:center;gap:8px}
-.badge{background:rgba(255,255,255,.14);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px;margin-left:10px;text-transform:uppercase;vertical-align:middle}
-.headerRight{display:flex;align-items:center;gap:14px;margin-left:auto}
-.shell{display:flex;max-width:1300px;margin:0 auto;min-height:calc(100vh - 60px)}
-.navcol{width:225px;flex:none;padding:20px 12px;display:flex;flex-direction:column;gap:4px;position:sticky;top:60px;align-self:flex-start;height:calc(100vh - 60px);overflow-y:auto}
+.badge{background:rgba(124,58,237,.12);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;vertical-align:middle}
+.shell{display:flex;max-width:1300px;margin:0 auto;min-height:100vh}
+.navcol{width:225px;flex:none;padding:0;display:flex;flex-direction:column;justify-content:space-between;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;background:#fff;border-right:1px solid #eeecf7}
+.navBrand{display:flex;align-items:center;gap:10px;padding:20px 16px 18px}
+.navBrand b{font-size:14.5px;display:block}
+.navBrand small{color:#8f8ca8;font-size:12px}
+.navLinks{flex:1;padding:0 12px;display:flex;flex-direction:column;gap:4px}
+.navFooter{padding:14px;border-top:1px solid #eeecf7}
+.navProfile{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.navAvatar{width:36px;height:36px;border-radius:50%;flex:none;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+.navProfile #who{font-size:13.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.navProfile #who b{display:block;font-size:13.5px}
+.navProfile #who small{display:block;color:#8f8ca8;font-size:11.5px}
+.navLogoutBtn{width:100%;background:transparent;color:#6b6885;border:1px solid #e3e0f5;padding:9px;font-size:13px;font-weight:600}
+.navLogoutBtn:hover{opacity:1;background:#f8f7fd;border-color:#dcd9ec;transform:none}
+.pages{position:relative}
+.roleBadgeTop{position:absolute;top:24px;right:24px;background:#fff;color:#7c3aed;border:1px solid #e3ddfa;padding:5px 14px;border-radius:999px;font-size:12px;font-weight:700}
 .navbtn{display:flex;align-items:center;gap:10px;background:transparent;color:#4b4768;border:0;text-align:left;padding:11px 14px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;margin:0;transition:background .18s,color .18s,transform .12s}
 .navbtn:hover{background:#efeafd;color:#7c3aed;transform:translateX(2px)}
 .navbtn.active{background:linear-gradient(90deg,#7c3aed,#2563eb);color:#fff;box-shadow:0 6px 16px -6px rgba(124,58,237,.6)}
@@ -417,7 +428,7 @@ tr:hover td{background:#faf9ff}
 #coachWindow .chatWrap{padding:14px;margin:0;max-height:none;flex:1;min-height:120px}
 #coachWindow .chatBar{padding:0 14px 12px}
 @media(max-width:480px){#coachWindow{right:16px;left:16px;width:auto}}
-@media(max-width:900px){.shell{flex-direction:column}.navcol{position:static;flex-direction:row;overflow-x:auto;width:100%;height:auto;padding:10px}.navbtn{white-space:nowrap}}
+@media(max-width:900px){.shell{flex-direction:column}.navcol{position:static;flex-direction:row;overflow-x:auto;width:100%;height:auto;padding:10px;border-right:0;border-bottom:1px solid #eeecf7}.navBrand,.navFooter{display:none}.navLinks{flex-direction:row;padding:0}.navbtn{white-space:nowrap}.roleBadgeTop{position:static;display:inline-block;margin-bottom:14px}}
 #photoCropModal{position:fixed;inset:0;background:rgba(15,10,40,.55);z-index:200;display:flex;align-items:center;justify-content:center}
 #photoCropModal.hidden{display:none}
 .cropBox{background:#fff;border-radius:18px;padding:22px;width:360px;max-width:calc(100vw - 32px);box-shadow:0 24px 60px -12px rgba(20,10,60,.4)}
@@ -429,7 +440,11 @@ tr:hover td{background:#faf9ff}
 .cropBtns{display:flex;gap:10px;justify-content:flex-end}
 .cropBtns button.ghost{background:#e9e7f5;color:#1c1a2e}'''
 
+LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
+
 NAV = '''<nav class="navcol">
+<div class="navBrand">''' + LOGO_ICON + '''<div><b>E1 Direktvertrieb</b><small id="navPortalLabel">Portal</small></div></div>
+<div class="navLinks">
 <button class="navbtn active" id="navDashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
 <button class="navbtn hidden" id="navAufgaben" onclick="showPage('aufgaben',this)">✅ Aufgaben</button>
 <button class="navbtn hidden" id="navMitarbeiter" onclick="showPage('mitarbeiter',this)">👥 Mitarbeiter</button>
@@ -439,6 +454,11 @@ NAV = '''<nav class="navcol">
 <button class="navbtn hidden" id="navBuchhaltung" onclick="showPage('buchhaltung',this)">🧾 Buchhaltung</button>
 <button class="navbtn hidden" id="navEmails" onclick="showPage('emails',this)">📧 E-Mails</button>
 <button class="navbtn" id="navLernpfad" onclick="showPage('lernpfad',this)">🎓 Lernpfad &amp; KI</button>
+</div>
+<div class="navFooter">
+<div class="navProfile"><div class="navAvatar" id="navAvatar">--</div><div id="who"></div></div>
+<button id="logoutBtn" class="hidden navLogoutBtn" onclick="doLogout()">↩ Logout</button>
+</div>
 </nav>'''
 
 PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
@@ -555,8 +575,9 @@ let r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'appl
 let d=await r.json();if(!r.ok)throw Error(d.detail);
 token=d.access_token;isAdmin=d.employee.role==='admin';myTier=d.employee.tier;myId=d.employee.id;
 localStorage.setItem('e1_token',token);
-who.innerHTML=d.employee.name+' · '+d.employee.role+(d.employee.role==='admin'?'':' · '+tierBadge(d.employee.tier));
-portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
+who.innerHTML='<b>'+d.employee.name+'</b><small>'+d.employee.role+(d.employee.role==='admin'?'':' · '+tierBadge(d.employee.tier))+'</small>';
+navAvatar.textContent=d.employee.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+portalBadge.textContent=isAdmin?'Admin':'Mitarbeiter';
 login.classList.add('fadeOut');await new Promise(res=>setTimeout(res,350));login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
 load()
@@ -568,8 +589,9 @@ token=saved;
 try{
 let me=await api('/me');
 isAdmin=me.role==='admin';myTier=me.tier;myId=me.id;
-who.innerHTML=me.name+' · '+me.role+(me.role==='admin'?'':' · '+tierBadge(me.tier));
-portalBadge.textContent=isAdmin?'Admin Portal':'Mitarbeiter Portal';
+who.innerHTML='<b>'+me.name+'</b><small>'+me.role+(me.role==='admin'?'':' · '+tierBadge(me.tier))+'</small>';
+navAvatar.textContent=me.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+portalBadge.textContent=isAdmin?'Admin':'Mitarbeiter';
 login.classList.add('hidden');app.classList.remove('hidden');logoutBtn.classList.remove('hidden');armIdleTimer();
 applyRoleUI(isAdmin);
 load()
@@ -594,7 +616,8 @@ async function saveDaily(){try{let x=await api('/employee/daily-performance',{me
 let custCache=[];let editingCustomerId=null;let editingCustomerId2=null;
 async function load(){let[d,cs,ts]=await Promise.all([api('/dashboard'),api('/customers'),api('/tasks')]);
 custCache=cs;
-kpis.innerHTML=Object.entries({Kunden:d.customers,'Offene Aufgaben':d.open_tasks}).map(([k,v])=>`<div class=card><small>${k}</small><div class=n>${v}</div></div>`).join('');
+let kpiColors=['#7c3aed','#0d9488','#2563eb','#d97706'];
+kpis.innerHTML=Object.entries({Kunden:d.customers,'Offene Aufgaben':d.open_tasks}).map(([k,v],i)=>`<div class=card style="--kpiAccent:${kpiColors[i%kpiColors.length]}"><small>${k}</small><div class=n>${v}</div></div>`).join('');
 if(document.getElementById('customers'))customers.innerHTML=cs.map(x=>`<tr><td>${x.company||x.first_name+' '+(x.last_name||'')}</td><td>${statusBadge(x.status)}</td><td>${x.postal_code}</td><td><button onclick="editCustomer(${x.id})">Bearbeiten</button> <button onclick="quickClosure(${x.id})">Abschluss melden</button> <button onclick="deleteCustomer(${x.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Noch keine Kunden angelegt.</td></tr>';
 if(document.getElementById('clCustomerId'))clCustomerId.innerHTML='<option value="">Kunde wählen...</option>'+cs.map(x=>`<option value="${x.id}">${x.company||x.first_name+' '+(x.last_name||'')}</option>`).join('');
 if(document.getElementById('customersAdmin'))customersAdmin.innerHTML=cs.map(x=>`<tr><td>${x.company||x.first_name+' '+(x.last_name||'')}</td><td>${statusBadge(x.status)}</td><td>${x.postal_code}</td><td><button onclick="editCustomer2(${x.id})">Bearbeiten</button> <button onclick="deleteCustomer(${x.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button></td></tr>`).join('')||'<tr><td colspan=4 class=empty>Noch keine Kunden angelegt.</td></tr>';
@@ -708,9 +731,10 @@ async function loadStaffDocs(){let[rows,emps]=await Promise.all([api('/documents
 async function loadExpiringDocs(){let rows=await api('/admin/documents/expiring');expiringDocs.innerHTML=rows.map(x=>`<tr><td>${x.employee_name||'Agentur'}</td><td>${x.category}</td><td>${x.filename}</td><td>${x.expires_on}</td></tr>`).join('')||'<tr><td colspan=4 class=empty>Nichts läuft bald ab.</td></tr>'}
 async function searchProvider(sfx){let q=document.getElementById('provSearchInput'+sfx).value.trim().toLowerCase();let providers=await api('/providers');let matches=q?providers.filter(p=>p.name.toLowerCase().includes(q)):providers.slice(0,15);document.getElementById('provSearchResults'+sfx).innerHTML=matches.slice(0,25).map(p=>`<span class="searchHit" onclick="showProviderCommission('${sfx}',${p.id},'${p.name.replace(/'/g,"\\'")}')">${p.name}</span>`).join('')||'<p class=empty>Keine Treffer.</p>'}
 async function showProviderCommission(sfx,id,name){let tariffs=await api('/providers/'+id+'/tariffs');let html=`<h3>${name}</h3>`;for(const t of tariffs){let brackets=await api('/tariffs/'+t.id+'/brackets');let byTier={1:[],2:[],3:[]};brackets.forEach(b=>{if(byTier[b.tier])byTier[b.tier].push(b)});let froms=[...new Set(brackets.map(b=>b.usage_from))].sort((a,b)=>a-b);html+=`<div class="card"><b>${t.name}</b><table><thead><tr><th>Verbrauch ab</th><th>Stufe 1</th><th>Stufe 2</th><th>Stufe 3</th></tr></thead><tbody>`+froms.map(f=>`<tr><td>${f} kWh</td>`+[1,2,3].map(tier=>{let b=byTier[tier].find(x=>x.usage_from===f);return `<td>${b?b.commission_amount.toFixed(2)+' €':'-'}</td>`}).join('')+`</tr>`).join('')+'</tbody></table></div>'}document.getElementById('provCommissionResult'+sfx).innerHTML=html}
-async function loadPendingClosures(){let[rows,providers]=await Promise.all([api('/admin/closures'),api('/providers')]);let pending=rows.filter(x=>['eingereicht','bearbeitung','klaerung'].includes(x.status));pendingClosures.innerHTML=pending.map(c=>`<div class="card"><b>${c.customer_name}</b> · ${c.product} · ${c.usage_kwh} kWh · ${c.completed_on} · ${statusBadge(c.status)}<div style="margin-top:8px"><select id="revProv${c.id}" onchange="loadRevTariffs(${c.id})"><option value="">Anbieter wählen</option>${providers.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select><select id="revTariff${c.id}"><option value="">Tarif wählen</option></select><select id="revStatus${c.id}"><option value="bearbeitung">In Bearbeitung</option><option value="abgeschlossen">Abgeschlossen</option><option value="storno">Storno</option><option value="klaerung">Klärungsbedarf</option></select><button onclick="reviewClosure(${c.id})">Prüfen</button></div></div>`).join('')||'<p class=empty>Keine offenen Abschlüsse zur Prüfung.</p>'}
-async function loadRevTariffs(closureId){let pid=document.getElementById('revProv'+closureId).value;let sel=document.getElementById('revTariff'+closureId);if(!pid){sel.innerHTML='<option value="">Tarif wählen</option>';return}let rows=await api('/providers/'+pid+'/tariffs');sel.innerHTML='<option value="">Tarif wählen</option>'+rows.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+async function loadPendingClosures(){let[rows,providers]=await Promise.all([api('/admin/closures'),api('/providers')]);let pending=rows.filter(x=>['eingereicht','bearbeitung','klaerung'].includes(x.status));pendingClosures.innerHTML=pending.map(c=>`<div class="card"><b>${c.customer_name}</b> · ${c.product} · ${c.usage_kwh} kWh · ${c.completed_on} · ${statusBadge(c.status)}<div style="margin-top:8px"><select id="revProv${c.id}" onchange="loadRevTariffs(${c.id})"><option value="">Anbieter wählen</option>${providers.map(p=>`<option value="${p.id}" ${p.id===c.provider_id?'selected':''}>${p.name}</option>`).join('')}</select><select id="revTariff${c.id}"><option value="">Tarif wählen</option></select><select id="revStatus${c.id}"><option value="bearbeitung">In Bearbeitung</option><option value="abgeschlossen">Abgeschlossen</option><option value="storno">Storno</option><option value="klaerung">Klärungsbedarf</option></select><button onclick="reviewClosure(${c.id})">Prüfen</button> <button onclick="deleteClosure(${c.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button></div></div>`).join('')||'<p class=empty>Keine offenen Abschlüsse zur Prüfung.</p>';await Promise.all(pending.filter(c=>c.provider_id).map(c=>loadRevTariffs(c.id,c.tariff_id)))}
+async function loadRevTariffs(closureId,preselectTariffId){let pid=document.getElementById('revProv'+closureId).value;let sel=document.getElementById('revTariff'+closureId);if(!pid){sel.innerHTML='<option value="">Tarif wählen</option>';return}let rows=await api('/providers/'+pid+'/tariffs');sel.innerHTML='<option value="">Tarif wählen</option>'+rows.map(t=>`<option value="${t.id}" ${t.id===preselectTariffId?'selected':''}>${t.name}</option>`).join('')}
 async function reviewClosure(id){let tariffId=document.getElementById('revTariff'+id).value;let providerId=document.getElementById('revProv'+id).value;let status=document.getElementById('revStatus'+id).value;try{await api('/admin/closures/'+id+'/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,provider_id:providerId?+providerId:null,tariff_id:tariffId?+tariffId:null})});await loadPendingClosures();await loadTeamProvision();await loadTeamBars()}catch(e){alert(e.message)}}
+async function deleteClosure(id){if(!confirm('Abschluss wirklich löschen? Das kann nicht rückgängig gemacht werden.'))return;try{await api('/admin/closures/'+id,{method:'DELETE'});await loadPendingClosures();await loadTeamProvision();await loadTeamBars()}catch(e){alert(e.message)}}
 async function loadCalendar(){let rows=await api('/planning');calendarList.innerHTML=rows.map(x=>`<tr><td>${x.starts_at.replace('T',' ')}</td><td>${x.ends_at.replace('T',' ')}</td><td>${x.kind}${x.note?' — '+x.note:''}</td></tr>`).join('')||'<p>Keine Termine.</p>'}
 async function createSchedule(){await api('/planning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee_id:+calEmpId.value,starts_at:calStart.value,ends_at:calEnd.value,kind:'Termin',note:calTitle.value})});calTitle.value='';await loadCalendar()}
 async function loadTrainings(){let rows=await api('/trainings');trainingList.innerHTML=rows.map(x=>`<div class="card"><b>${x.title}</b> · ${x.starts_at.replace('T',' ')} · ${x.participants}${x.max_participants?'/'+x.max_participants:''} Teilnehmer ${x.registered?'✓ angemeldet':`<button onclick="registerTraining(${x.id})">Anmelden</button>`}${isAdmin?` <button onclick="registerAll(${x.id})">Alle anmelden</button>`:''}</div>`).join('')||'<p>Keine Schulungen geplant.</p>'}
@@ -823,8 +847,6 @@ async function loadTeamBars(){let rows=await api('/admin/commission-overview');l
 async function loadTeamLeaderboard(){let rows=await api('/team-leaderboard');let max=Math.max(1,...rows.map(x=>x.contracts_completed));teamLeaderboard.innerHTML=rows.map((x,i)=>`<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><b>${i===0&&x.contracts_completed>0?'🏆 ':''}${x.name}</b> ${tierBadge(x.tier)}<span>${x.contracts_completed} Verträge</span></div><div class="abar"><div data-w="${Math.round(x.contracts_completed/max*100)}"></div></div></div>`).join('')||'<p class=empty>Noch keine Daten.</p>';requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('#teamLeaderboard .abar>div').forEach(el=>el.style.width=el.dataset.w+'%')))}
 async function exportTeamCsv(){let rows=await api('/admin/commission-overview');let blob=new Blob([toCsv(rows)],{type:'text/csv'});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='mitarbeiter-zahlen.csv';a.click();URL.revokeObjectURL(url)}'''
 
-LOGO_ICON = '''<svg width="30" height="30" viewBox="0 0 72 72" style="vertical-align:middle;margin-right:2px"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#2563eb"/></linearGradient></defs><rect width="72" height="72" rx="18" fill="url(#lg1)"/><path d="M39 11 L21 41 H33 L30.5 63 L51 31 H37.5 L39 11 Z" fill="#fff"/></svg>'''
-
 LOGIN_EMPLOYEE = '''<div id="login" class="loginWrap"><div class="loginBox">
 <img src="/static/logo-icon.png" alt="E1 Direktvertrieb" class="loginIconImg">
 <div class="loginWordmark">E1 <b>Direktvertrieb</b></div>
@@ -843,9 +865,8 @@ LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="lo
 <p class="loginHint">Nur für Administratoren.<br><a href="/">Zum Mitarbeiter-Login</a></p>
 </div></div>'''
 
-APP_SHELL = '''<header><div><b>''' + LOGO_ICON + ''' E1 Direktvertrieb</b><span class="badge" id="portalBadge">Portal</span></div><div class="headerRight"><span id="who"></span><button id="logoutBtn" class="hidden" onclick="doLogout()">Logout</button></div></header>
-__LOGIN__
-<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages">''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_EMAILS + PAGE_LERNPFAD + '''</div></div>
+APP_SHELL = '''__LOGIN__
+<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages"><span class="roleBadgeTop" id="portalBadge">Portal</span>''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_EMAILS + PAGE_LERNPFAD + '''</div></div>
 <div id="coachBubble" class="hidden" onclick="toggleCoachWindow()">💬</div>
 <div id="coachWindow" class="hidden">
 <div id="coachWinHeader" class="coachWinHeader"><span>''' + LOGO_ICON.replace('width="30" height="30"','width="20" height="20"') + ''' EnergyOne Coach</span><button class="coachWinClose" onclick="toggleCoachWindow()">✕</button></div>

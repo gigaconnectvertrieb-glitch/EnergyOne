@@ -288,7 +288,7 @@ def leaderboard(_: Employee = Depends(current), s: Session = Depends(db)):
 def scorecards(e: Employee = Depends(current), s: Session = Depends(db)):
     today = date.today(); first = today.replace(day=1)
     goals = list(s.scalars(select(SalesGoal).where(SalesGoal.period_start <= today, SalesGoal.period_end >= today)))
-    employees = list(s.scalars(select(Employee).where(Employee.active.is_(True)).order_by(Employee.name)))
+    employees = list(s.scalars(select(Employee).where(Employee.active.is_(True), Employee.role.not_in(("admin", "buchhaltung"))).order_by(Employee.name)))
     if e.role not in ("admin", "buchhaltung"): employees = [x for x in employees if x.id == e.id]
     result = []
     for employee in employees:
@@ -570,6 +570,14 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
     if data.expected_commission is not None: item.expected_commission=data.expected_commission
     log(s,e,"Abschluss geprüft",str(item.id));s.commit();notify_update();return serialize(item)
+
+
+@app.delete("/api/admin/closures/{closure_id}")
+def delete_closure(closure_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item=s.get(ClosureEntry,closure_id)
+    if not item: raise HTTPException(404,"Abschluss nicht gefunden")
+    s.delete(item); log(s,e,"Abschluss gelöscht",str(closure_id)); s.commit(); notify_update()
+    return {"status":"deleted"}
 
 
 @app.get("/api/providers")
