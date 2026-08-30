@@ -206,12 +206,23 @@ def log(s, emp, action, detail="", object_type=None, object_id=None, old=None, n
 def send_email(to: str, subject: str, body: str):
     host = os.getenv("SMTP_HOST")
     if not host: raise RuntimeError("SMTP ist nicht konfiguriert (SMTP_HOST fehlt).")
-    msg = MIMEText(body, _charset="utf-8"); msg["Subject"] = subject; msg["From"] = os.getenv("SMTP_USER") or "no-reply@energyone.de"; msg["To"] = to
-    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587"))) as smtp:
-        smtp.starttls()
-        user = os.getenv("SMTP_USER")
-        if user: smtp.login(user, os.getenv("SMTP_PASSWORD", ""))
-        smtp.send_message(msg)
+    user = (os.getenv("SMTP_USER") or "").strip()
+    password = (os.getenv("SMTP_PASSWORD") or "").replace(" ", "").strip()
+    msg = MIMEText(body, _charset="utf-8"); msg["Subject"] = subject; msg["From"] = user or "no-reply@energyone.de"; msg["To"] = to
+    try:
+        with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587"))) as smtp:
+            smtp.starttls()
+            if user: smtp.login(user, password)
+            smtp.send_message(msg)
+    except smtplib.SMTPAuthenticationError as ex:
+        raise RuntimeError(
+            f"SMTP-Anmeldung fehlgeschlagen für {user or '(kein SMTP_USER gesetzt)'}: {ex.smtp_error.decode(errors='replace') if isinstance(ex.smtp_error, bytes) else ex.smtp_error}. "
+            "Bei Gmail: SMTP_PASSWORD muss ein App-Passwort sein (nicht das normale Google-Passwort), "
+            "dafür muss die 2-Faktor-Authentifizierung am Google-Konto aktiviert sein. "
+            "App-Passwort erzeugen unter myaccount.google.com/apppasswords, dort erzeugten 16-stelligen Code "
+            "1:1 (Leerzeichen werden automatisch entfernt) als SMTP_PASSWORD in Render setzen, "
+            "und SMTP_USER muss exakt die Gmail-Adresse sein, für die das App-Passwort erzeugt wurde."
+        ) from ex
 def make_pdf(name, title, lines):
     path = STORAGE / name; p = canvas.Canvas(str(path), pagesize=A4); p.setTitle(title); p.setFont("Helvetica-Bold", 18); p.drawString(50, 800, title); p.setFont("Helvetica", 11); y=765
     for line in lines: p.drawString(50, y, str(line)[:115]); y -= 20
@@ -745,6 +756,7 @@ NAV = '''<nav class="navcol">
 <div class="navSearchWrap"><input id="globalSearch" placeholder="🔍 Suche..." autocomplete="off" oninput="doGlobalSearch()" onfocus="doGlobalSearch()"><div id="globalSearchResults" class="hidden"></div></div>
 <div class="navLinks">
 <button class="navbtn active" id="navDashboard" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+<button class="navbtn hidden" id="navBuchung" onclick="showPage('buchung',this)">📝 Vertrag buchen</button>
 <button class="navbtn hidden" id="navAufgaben" onclick="showPage('aufgaben',this)">✅ Aufgaben</button>
 <button class="navbtn hidden" id="navMitarbeiter" onclick="showPage('mitarbeiter',this)">👥 Mitarbeiter</button>
 <button class="navbtn hidden" id="navProvision" onclick="showPage('provision',this)">💶 Provision</button>
@@ -766,8 +778,21 @@ PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
 <div id="empDashboardExtra" class="hidden">
 <section><h2>Neuer Kunde</h2><input id="custName" placeholder="Name / Firma"><input id="mail" placeholder="E-Mail"><input id="cphone" placeholder="Telefon"><input id="plz" placeholder="PLZ"><input id="street" placeholder="Straße, Nr."><input id="city" placeholder="Ort"><input id="usage" placeholder="Verbrauch kWh" type="number"><select id="kind"><option value="privat">Privat</option><option value="firma">Firma</option></select><select id="curProvider"><option value="">Aktueller Anbieter (optional)</option></select><button id="custSubmitBtn" onclick="customer()">Anlegen</button></section>
 <section><h2>Meine Kunden</h2><table><thead><tr><th>Name</th><th>Status</th><th>PLZ</th><th></th></tr></thead><tbody id="customers"></tbody></table></section>
-<section><h2>Abschluss melden</h2><select id="clCustomerId" onchange="fillClosureFromCustomer()"><option value="">Neuer Kunde (unten eintragen)</option></select><span id="clNewCustomerFields"><input id="clCustName" placeholder="Kundenname"><input id="clPlz" placeholder="PLZ"><input id="clPhone" placeholder="Telefonnummer"></span><br><select id="clProviderId" onchange="loadClTariffs()"><option value="">Anbieter wählen</option></select><select id="clTariffId" onchange="updateLiveCommission()"><option value="">Tarif wählen</option></select><select id="clProduct"><option value="strom">Strom</option><option value="gas">Gas</option></select><select id="clKind"><option value="privat">Privat</option><option value="firma">Firma</option></select><input id="clUsage" placeholder="Verbrauch kWh" type="number" oninput="updateLiveCommission()"><input id="clNote" placeholder="Bemerkung (optional)"><div id="clCommissionPreview"></div>
-<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13.5px">Vertragsdaten für Lieferantenwechsel (optional, direkt am Tablet erfassbar)</summary><div style="margin-top:10px">
+<section><h2>Meine Tagesmeldung</h2><label>Datum <input id="dailyDate" type="date"></label><button onclick="changeDaily(-1,'contracts')">−</button><b id="contractsCount">0</b><button onclick="changeDaily(1,'contracts')">+</button> Verträge <button onclick="changeDaily(-1,'cancellations')">−</button><b id="cancellationsCount">0</b><button onclick="changeDaily(1,'cancellations')">+</button> Stornos<br><input id="dailyNote" placeholder="Bemerkung (optional)"><button onclick="saveDaily()">Tagesmeldung speichern</button><p id="dailyResult"></p></section>
+<section><h2>Meine Provisionen &amp; Vertragsstatus</h2><div class="grid" id="commissionKpis"></div><table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Status</th><th>Provision</th></tr></thead><tbody id="closureList"></tbody></table></section>
+<section><h2>Team-Rangliste</h2><p><small>Wer steht wo — zur gegenseitigen Motivation.</small></p><div id="teamLeaderboard"></div></section>
+<section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('')"><div id="provSearchResults"></div><div id="provCommissionResult"></div></section>
+<section><h2>Meine Unterlagen</h2><select id="myDocCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="myDocFile" type="file"><label>Ablaufdatum (optional) <input id="myDocExpires" type="date"></label><button onclick="uploadMyDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="myDocumentList"></tbody></table></section>
+</div>
+<section id="adminDashboard" class="hidden"><h2>Team-Übersicht <button onclick="exportTeamCsv()" style="float:right">CSV exportieren</button></h2><div id="teamBars"></div></section>
+<section id="adminDailyOverview" class="hidden"><h2>Tagesmeldungen (alle Mitarbeiter)</h2><table><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Verträge</th><th>Stornos</th><th>Netto</th></tr></thead><tbody id="allDailyList"></tbody></table></section>
+</div>'''
+
+PAGE_BUCHUNG = '''<div class="page" id="page-buchung">
+<div class="pageHead" style="--pageAccent:#2563eb"><h1>Vertrag buchen</h1><p>Kunde erfassen, Anbieter &amp; Tarif wählen, Wechseldaten und Unterschrift direkt am Tablet aufnehmen.</p></div>
+<section><h2>Kunde</h2><select id="clCustomerId" onchange="fillClosureFromCustomer()"><option value="">Neuer Kunde (unten eintragen)</option></select><span id="clNewCustomerFields"><input id="clCustName" placeholder="Kundenname"><input id="clPlz" placeholder="PLZ"><input id="clPhone" placeholder="Telefonnummer"></span></section>
+<section><h2>Vertragsdetails</h2><select id="clProviderId" onchange="loadClTariffs()"><option value="">Anbieter wählen</option></select><select id="clTariffId" onchange="updateLiveCommission()"><option value="">Tarif wählen</option></select><select id="clProduct"><option value="strom">Strom</option><option value="gas">Gas</option></select><select id="clKind"><option value="privat">Privat</option><option value="firma">Firma</option></select><input id="clUsage" placeholder="Verbrauch kWh" type="number" oninput="updateLiveCommission()"><input id="clNote" placeholder="Bemerkung (optional)"><div id="clCommissionPreview"></div></section>
+<section><h2>Wechseldaten (SEPA / Lieferantenwechsel)</h2><p><small>Optional, aber für den tatsächlichen Wechsel beim neuen Anbieter erforderlich.</small></p>
 <label style="font-size:12px">Geburtsdatum <input id="clBirthDate" type="date"></label>
 <label style="font-size:12px">Gewünschter Lieferbeginn <input id="clStartDate" type="date"></label>
 <input id="clMeterNumber" placeholder="Zählernummer">
@@ -775,19 +800,10 @@ PAGE_DASHBOARD = '''<div class="page active" id="page-dashboard">
 <input id="clAccountHolder" placeholder="Kontoinhaber (falls abweichend)">
 <input id="clIban" placeholder="IBAN">
 <label style="font-size:13px;font-weight:600;display:block;margin-top:8px"><input type="checkbox" id="clSepaConsent" style="width:auto;margin:0 6px 0 0"> Kunde erteilt SEPA-Lastschriftmandat</label>
-<p style="font-size:12px;font-weight:600;margin:10px 0 4px">Unterschrift Kunde</p>
-<canvas id="clSigCanvas" width="340" height="130" style="border:1px solid #d8d5ea;border-radius:8px;touch-action:none;cursor:crosshair;background:#fff;max-width:100%"></canvas><br>
-<button type="button" onclick="clearSignature()" style="background:#e9e7f5;color:#1c1a2e;margin-top:6px">Unterschrift löschen</button>
-</div></details>
-<button onclick="submitClosure()">Melden</button><p id="closureResult"></p></section>
-<section><h2>Meine Tagesmeldung</h2><label>Datum <input id="dailyDate" type="date"></label><button onclick="changeDaily(-1,'contracts')">−</button><b id="contractsCount">0</b><button onclick="changeDaily(1,'contracts')">+</button> Verträge <button onclick="changeDaily(-1,'cancellations')">−</button><b id="cancellationsCount">0</b><button onclick="changeDaily(1,'cancellations')">+</button> Stornos<br><input id="dailyNote" placeholder="Bemerkung (optional)"><button onclick="saveDaily()">Tagesmeldung speichern</button><p id="dailyResult"></p></section>
-<section><h2>Meine Provisionen &amp; Vertragsstatus</h2><div class="grid" id="commissionKpis"></div><table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Status</th><th>Provision</th><th></th></tr></thead><tbody id="closureList"></tbody></table></section>
-<section><h2>Team-Rangliste</h2><p><small>Wer steht wo — zur gegenseitigen Motivation.</small></p><div id="teamLeaderboard"></div></section>
-<section><h2>Provision suchen</h2><p><small>Anbieter eingeben, um die Provision je Stufe für alle Tarife zu sehen.</small></p><input id="provSearchInput" placeholder="Anbieter suchen (z. B. Vattenfall)" oninput="searchProvider('')"><div id="provSearchResults"></div><div id="provCommissionResult"></div></section>
-<section><h2>Meine Unterlagen</h2><select id="myDocCategory"><option value="gewerbeanmeldung">Gewerbeanmeldung</option><option value="fuehrungszeugnis">Führungszeugnis</option><option value="rechnung">Rechnung/Beleg</option><option value="sonstiges">Sonstiges</option></select><input id="myDocFile" type="file"><label>Ablaufdatum (optional) <input id="myDocExpires" type="date"></label><button onclick="uploadMyDocument()">Hochladen</button><table><thead><tr><th>Kategorie</th><th>Datei</th><th>Ablauf</th><th></th></tr></thead><tbody id="myDocumentList"></tbody></table></section>
-</div>
-<section id="adminDashboard" class="hidden"><h2>Team-Übersicht <button onclick="exportTeamCsv()" style="float:right">CSV exportieren</button></h2><div id="teamBars"></div></section>
-<section id="adminDailyOverview" class="hidden"><h2>Tagesmeldungen (alle Mitarbeiter)</h2><table><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Verträge</th><th>Stornos</th><th>Netto</th></tr></thead><tbody id="allDailyList"></tbody></table></section>
+</section>
+<section><h2>Unterschrift Kunde</h2><canvas id="clSigCanvas" width="500" height="180" style="border:1px solid #d8d5ea;border-radius:8px;touch-action:none;cursor:crosshair;background:#fff;max-width:100%;width:100%"></canvas><br><button type="button" onclick="clearSignature()" style="background:#e9e7f5;color:#1c1a2e;margin-top:8px">Unterschrift löschen</button></section>
+<button onclick="submitClosure()" style="font-size:15px;padding:12px 28px">Vertrag einreichen</button><p id="closureResult"></p>
+<section id="myBookingsSection" class="hidden"><h2>Meine offenen Buchungen</h2><p><small>Sobald der Vertrag beim Anbieter aktiv geschaltet ist, hier abschließen — keine Admin-Prüfung nötig.</small></p><table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Provision</th><th></th></tr></thead><tbody id="myBookingsList"></tbody></table></section>
 </div>'''
 
 PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
@@ -908,9 +924,9 @@ function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
 loadNotifications();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');empDashboardExtra.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist();loadSessions();loadClProviders();initSignaturePad();loadCommissions();loadMyDocuments()}
-else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');empDashboardExtra.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend) — eigene Abschlüsse kannst du unten selbst melden.';loadEmployees();load();initSignaturePad();loadCommissions();loadMyDocuments()}
-else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard();initSignaturePad()}
+if(admin){navBuchung.classList.remove('hidden');navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');blacklistSection.classList.remove('hidden');empDashboardExtra.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog();loadBlacklist();loadSessions();loadClProviders();initSignaturePad();loadCommissions();loadMyDocuments();loadMyBookings()}
+else if(myRole==='teamleiter'){navBuchung.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');empDashboardExtra.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend) — eigene Verträge buchst du über "Vertrag buchen".';loadEmployees();load();initSignaturePad();loadCommissions();loadMyDocuments();loadMyBookings()}
+else{navBuchung.classList.remove('hidden');empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard();initSignaturePad();loadMyBookings()}
 }
 let ws=null;
 function connectWs(){
@@ -954,6 +970,7 @@ function refreshActivePage(){
 if(!token||document.hidden)return;
 let active=document.querySelector('.page.active');if(!active)return;
 if(active.id==='page-dashboard'){if(isAdmin){loadTeamBars();loadAllDaily();load()}else{loadCommissions();loadTeamLeaderboard()}}
+else if(active.id==='page-buchung'){loadMyBookings()}
 else if(active.id==='page-provision'){loadTeamProvision();loadStornoOverview();loadPendingClosures()}
 else if(active.id==='page-ziele'){loadCharts()}
 else if(active.id==='page-mitarbeiter'){loadEmployees()}
@@ -1039,10 +1056,11 @@ await api('/employee/closures',{method:'POST',headers:{'Content-Type':'applicati
 clCustomerId.value='';clCustName.value='';clPlz.value='';clPhone.value='';clUsage.value='';clNote.value='';clProviderId.value='';clTariffId.innerHTML='<option value="">Tarif wählen</option>';clCommissionPreview.innerHTML='';fillClosureFromCustomer();
 clBirthDate.value='';clStartDate.value='';clMeterNumber.value='';clOldCustNumber.value='';clAccountHolder.value='';clIban.value='';clSepaConsent.checked=false;clearSignature();
 closureResult.textContent='Abschluss gemeldet — wird von der Agentur geprüft.';
-await loadCommissions();await load()
+await loadCommissions();await loadMyBookings();await load()
 }catch(e){alert(e.message)}}
-async function loadCommissions(){let c=await api('/employee/commission-overview');commissionKpis.innerHTML=Object.entries({'IST-Provision (abgeschlossen)':c.total_commission.toFixed(2)+' €','Offene Provision':c.pending_commission.toFixed(2)+' €','Potenzial (wenn alles abgeschlossen)':(c.total_commission+c.pending_commission).toFixed(2)+' €',Abgeschlossen:c.contracts_completed,Offen:c.contracts_pending}).map(([k,v])=>`<div class=card><small>${k}</small><div class=n>${v}</div></div>`).join('');let rows=await api('/employee/closures');closureList.innerHTML=rows.map(x=>`<tr><td>${x.customer_name}</td><td>${x.product}</td><td>${x.completed_on}</td><td>${statusBadge(x.status)}</td><td>${x.expected_commission.toFixed(2)} €</td><td>${(myRole==='teamleiter'||myRole==='admin')&&x.status==='bearbeitung'?`<button onclick="activateClosure(${x.id})">Vertrag aktiv → Abschließen</button>`:''}</td></tr>`).join('')||'<tr><td colspan=6 class=empty>Noch keine Abschlüsse gemeldet.</td></tr>'}
-async function activateClosure(id){if(!confirm('Vertrag ist aktiv geschaltet und wird abgeschlossen — Provision wird final berechnet. Fortfahren?'))return;try{await api('/employee/closures/'+id+'/activate',{method:'POST'});await loadCommissions()}catch(e){alert(e.message)}}
+async function loadCommissions(){let c=await api('/employee/commission-overview');commissionKpis.innerHTML=Object.entries({'IST-Provision (abgeschlossen)':c.total_commission.toFixed(2)+' €','Offene Provision':c.pending_commission.toFixed(2)+' €','Potenzial (wenn alles abgeschlossen)':(c.total_commission+c.pending_commission).toFixed(2)+' €',Abgeschlossen:c.contracts_completed,Offen:c.contracts_pending}).map(([k,v])=>`<div class=card><small>${k}</small><div class=n>${v}</div></div>`).join('');let rows=await api('/employee/closures');closureList.innerHTML=rows.map(x=>`<tr><td>${x.customer_name}</td><td>${x.product}</td><td>${x.completed_on}</td><td>${statusBadge(x.status)}</td><td>${x.expected_commission.toFixed(2)} €</td></tr>`).join('')||'<tr><td colspan=5 class=empty>Noch keine Abschlüsse gemeldet.</td></tr>'}
+async function activateClosure(id){if(!confirm('Vertrag ist aktiv geschaltet und wird abgeschlossen — Provision wird final berechnet. Fortfahren?'))return;try{await api('/employee/closures/'+id+'/activate',{method:'POST'});await loadMyBookings();await loadCommissions()}catch(e){alert(e.message)}}
+async function loadMyBookings(){if(!document.getElementById('myBookingsSection'))return;if(myRole!=='teamleiter'&&myRole!=='admin'){myBookingsSection.classList.add('hidden');return}myBookingsSection.classList.remove('hidden');let rows=(await api('/employee/closures')).filter(x=>x.status==='bearbeitung');myBookingsList.innerHTML=rows.map(x=>`<tr><td>${x.customer_name}</td><td>${x.product}</td><td>${x.completed_on}</td><td>${x.expected_commission.toFixed(2)} €</td><td><button onclick="activateClosure(${x.id})">Vertrag aktiv → Abschließen</button></td></tr>`).join('')||'<tr><td colspan=5 class=empty>Keine offenen Buchungen.</td></tr>'}
 async function loadStornoOverview(){let rows=await api('/admin/commission-overview');stornoOverview.innerHTML='<table><thead><tr><th>Mitarbeiter</th><th>Stornoquote</th><th>Storno</th><th>Abgeschlossen</th></tr></thead><tbody>'+rows.map(x=>`<tr><td>${x.name}</td><td style="color:${x.storno_alert?'#dc2626':'#16a34a'};font-weight:700">${x.cancellation_rate} %</td><td>${x.contracts_cancelled}</td><td>${x.contracts_completed}</td></tr>`).join('')+'</tbody></table>'}
 async function loadTeamProvision(){let rows=await api('/admin/commission-overview');let total=rows.reduce((s,x)=>s+x.total_commission,0);let potential=rows.reduce((s,x)=>s+x.total_commission+x.pending_commission,0);teamProvisionKpi.innerHTML=`<div class="card"><small>IST-Provision Team (abgeschlossen)</small><div class="n">${total.toFixed(2)} €</div></div><div class="card"><small>Potenzial (wenn alle Verträge abgeschlossen)</small><div class="n">${potential.toFixed(2)} €</div></div>`;teamProvisionList.innerHTML=rows.map(x=>`<tr><td>${x.name}</td><td>${x.total_commission.toFixed(2)} €</td><td>${x.pending_commission.toFixed(2)} €</td><td>${(x.total_commission+x.pending_commission).toFixed(2)} €</td><td><button onclick="toggleEmployeeClosureDetail(${x.employee_id})">Details</button></td></tr><tr id="empClosureDetail${x.employee_id}" class="hidden"><td colspan=5><div id="empClosureDetailBody${x.employee_id}"></div></td></tr>`).join('')||'<tr><td colspan=5 class=empty>Noch keine Daten.</td></tr>'}
 async function toggleEmployeeClosureDetail(id){let row=document.getElementById('empClosureDetail'+id);let wasHidden=row.classList.contains('hidden');document.querySelectorAll('[id^=empClosureDetail]').forEach(r=>r.classList.add('hidden'));if(!wasHidden)return;row.classList.remove('hidden');let all=await api('/admin/closures');let rows=all.filter(x=>x.employee_id===id);document.getElementById('empClosureDetailBody'+id).innerHTML='<table><thead><tr><th>Kunde</th><th>Produkt</th><th>Datum</th><th>Status</th><th>Provision</th></tr></thead><tbody>'+rows.map(x=>`<tr><td>${x.customer_name}</td><td>${x.product}</td><td>${x.completed_on}</td><td>${statusBadge(x.status)}</td><td>${x.expected_commission.toFixed(2)} €</td></tr>`).join('')+'</tbody></table>'||'<p class=empty>Keine Abschlüsse.</p>'}
@@ -1390,7 +1408,7 @@ LOGIN_ADMIN = '''<div id="login" class="loginWrap adminLoginWrap"><div class="lo
 </div></div>'''
 
 APP_SHELL = '''__LOGIN__
-<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages"><span class="roleBadgeTop" id="portalBadge">Portal</span>''' + PAGE_DASHBOARD + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_EMAILS + PAGE_LERNPFAD + '''</div></div>
+<div id="app" class="hidden"><div class="shell">''' + NAV + '''<div class="pages"><span class="roleBadgeTop" id="portalBadge">Portal</span>''' + PAGE_DASHBOARD + PAGE_BUCHUNG + PAGE_AUFGABEN + PAGE_MITARBEITER + PAGE_PROVISION + PAGE_LOGINZUGAENGE + PAGE_BUCHHALTUNG + PAGE_ZIELE + PAGE_EMAILS + PAGE_LERNPFAD + '''</div></div>
 <div id="coachBubble" class="hidden" onclick="toggleCoachWindow()">💬</div>
 <div id="coachWindow" class="hidden">
 <div id="coachWinHeader" class="coachWinHeader"><span>''' + LOGO_ICON.replace('width="30" height="30"','width="20" height="20"') + ''' EnergyOne Coach</span><button class="coachWinClose" onclick="toggleCoachWindow()">✕</button></div>
