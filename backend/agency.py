@@ -661,6 +661,7 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
     if data.status not in ("bearbeitung", "abgeschlossen", "storno", "klaerung"): raise HTTPException(422,"Ungültiger Prüfstatus")
     item=s.get(ClosureEntry,closure_id)
     if not item: raise HTTPException(404,"Abschluss nicht gefunden")
+    old_vals={"status":item.status,"provider_id":item.provider_id,"expected_commission":item.expected_commission}
     item.status=data.status; item.note=(item.note+"\n"+data.note).strip(); item.reviewed_by=e.id; item.reviewed_at=datetime.utcnow()
     if data.provider_id: item.provider_id=data.provider_id
     if data.usage_kwh is not None: item.usage_kwh=data.usage_kwh
@@ -674,7 +675,8 @@ def review_closure(closure_id: int, data: ReviewIn, e: Employee = Depends(admin)
     if bracket:
         item.bracket_id=bracket.id; item.expected_commission=round(bracket.commission_amount+(bracket.commission_per_kwh or 0)*item.usage_kwh,2)
     if data.expected_commission is not None: item.expected_commission=data.expected_commission
-    log(s,e,"Abschluss geprüft",str(item.id));s.commit();notify_update();return serialize(item)
+    new_vals={"status":item.status,"provider_id":item.provider_id,"expected_commission":item.expected_commission}
+    log(s,e,"Abschluss geprüft",str(item.id),object_type="ClosureEntry",object_id=item.id,old=old_vals,new=new_vals);s.commit();notify_update();return serialize(item)
 
 
 @app.delete("/api/admin/closures/{closure_id}")

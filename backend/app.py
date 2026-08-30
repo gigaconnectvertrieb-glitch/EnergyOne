@@ -1,7 +1,9 @@
 import asyncio
 import base64
+import contextvars
 import csv
 import io
+import json
 import os
 import secrets
 import time
@@ -58,6 +60,21 @@ class Task(Base):
 class Activity(Base):
     __tablename__ = "aktivitaeten_log"
     id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True); action: Mapped[str] = mapped_column(String(120)); detail: Mapped[str] = mapped_column(Text, default=""); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    employee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
+    employee_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    action: Mapped[str] = mapped_column(String(150))
+    object_type: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    object_id: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    old_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Bewusst kein UPDATE-/DELETE-Endpoint fuer diese Tabelle - unveraenderlich per Design.
 class JobApplication(Base):
     __tablename__ = "bewerbungen"
     id: Mapped[int] = mapped_column(primary_key=True); name: Mapped[str] = mapped_column(String(150)); email: Mapped[str] = mapped_column(String(255)); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); message: Mapped[str] = mapped_column(Text, default=""); photo_storage_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); seen: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -92,6 +109,14 @@ class CustomerUpdateIn(BaseModel):
 class TaskIn(BaseModel): title: str; description: str = ""; assignee_id: int; due_date: Optional[date] = None; customer_id: Optional[int] = None
 
 app = FastAPI(title="E1 Direktvertrieb Vertriebsportal", version="1.0.0")
+_request_ctx: contextvars.ContextVar[Optional[Request]] = contextvars.ContextVar("_request_ctx", default=None)
+@app.middleware("http")
+async def _capture_request_ctx(request: Request, call_next):
+    token = _request_ctx.set(request)
+    try:
+        return await call_next(request)
+    finally:
+        _request_ctx.reset(token)
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
@@ -130,7 +155,18 @@ def require_module(key: str):
 def serialize(x):
     return {c.name: (getattr(x,c.name).isoformat() if isinstance(getattr(x,c.name),(date,datetime)) else getattr(x,c.name)) for c in x.__table__.columns}
 def serialize_employee(x): return {k: v for k, v in serialize(x).items() if k != "totp_secret"}
-def log(s, emp, action, detail=""): s.add(Activity(employee_id=emp.id if emp else None, action=action, detail=detail))
+def log(s, emp, action, detail="", object_type=None, object_id=None, old=None, new=None):
+    s.add(Activity(employee_id=emp.id if emp else None, action=action, detail=detail))
+    req = _request_ctx.get()
+    ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip() or (req.client.host if req and req.client else None) if req else None
+    ua = req.headers.get("user-agent") if req else None
+    s.add(AuditLog(
+        employee_id=emp.id if emp else None, employee_name=emp.name if emp else None, role=emp.role if emp else None,
+        action=action, object_type=object_type, object_id=str(object_id) if object_id is not None else None,
+        old_values=json.dumps(old, default=str, ensure_ascii=False) if old is not None else None,
+        new_values=json.dumps(new, default=str, ensure_ascii=False) if new is not None else None,
+        ip_address=ip, user_agent=(ua[:255] if ua else None),
+    ))
 def make_pdf(name, title, lines):
     path = STORAGE / name; p = canvas.Canvas(str(path), pagesize=A4); p.setTitle(title); p.setFont("Helvetica-Bold", 18); p.drawString(50, 800, title); p.setFont("Helvetica", 11); y=765
     for line in lines: p.drawString(50, y, str(line)[:115]); y -= 20
@@ -261,6 +297,21 @@ def toggle_module(key: str, e: Employee = Depends(admin), s: Session = Depends(d
     log(s, e, "Modul umgeschaltet", f"{key} -> {'aktiv' if m.enabled else 'inaktiv'}")
     s.commit(); notify_update()
     return serialize(m)
+@app.get("/api/audit-log")
+def list_audit_log(employee_id: Optional[int] = None, action: str = "", date_from: Optional[str] = None, date_to: Optional[str] = None, limit: int = 200, offset: int = 0, _: Employee = Depends(admin), s: Session = Depends(db)):
+    stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
+    if employee_id: stmt = stmt.where(AuditLog.employee_id == employee_id)
+    if action: stmt = stmt.where(AuditLog.action.ilike(f"%{action}%"))
+    if date_from: stmt = stmt.where(AuditLog.timestamp >= datetime.fromisoformat(date_from))
+    if date_to: stmt = stmt.where(AuditLog.timestamp <= datetime.fromisoformat(date_to) + timedelta(days=1))
+    rows = s.scalars(stmt.limit(min(limit, 1000)).offset(offset))
+    return [{
+        "id": x.id, "timestamp": x.timestamp.isoformat(), "employee_name": x.employee_name, "role": x.role,
+        "action": x.action, "object_type": x.object_type, "object_id": x.object_id,
+        "old_values": json.loads(x.old_values) if x.old_values else None,
+        "new_values": json.loads(x.new_values) if x.new_values else None,
+        "ip_address": x.ip_address,
+    } for x in rows]
 @app.get("/api/dashboard")
 def dashboard(e: Employee = Depends(current), s: Session = Depends(db)):
     ids = visible_employee_ids(e, s)
@@ -325,9 +376,12 @@ def create_task(data: TaskIn,e: Employee=Depends(current),s: Session=Depends(db)
 def update_employee(employee_id: int, data: dict, e: Employee=Depends(admin), s: Session=Depends(db)):
     x=s.get(Employee,employee_id)
     if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
+    old_vals, new_vals = {}, {}
     for field in ("name","phone","commission_rate","tier","vp_nummer","role","active","email","show_on_website"):
-        if field in data: setattr(x,field,data[field])
-    log(s,e,"Mitarbeiter geändert",x.username); s.commit(); notify_update(); return serialize_employee(x)
+        if field in data and data[field] != getattr(x, field):
+            old_vals[field] = getattr(x, field); new_vals[field] = data[field]
+            setattr(x,field,data[field])
+    log(s,e,"Mitarbeiter geändert",x.username,object_type="Employee",object_id=x.id,old=old_vals or None,new=new_vals or None); s.commit(); notify_update(); return serialize_employee(x)
 @app.post("/api/employees/{employee_id}/photo")
 def upload_employee_photo(employee_id: int, file: UploadFile = File(...), e: Employee=Depends(admin), s: Session=Depends(db)):
     x=s.get(Employee,employee_id)
@@ -578,6 +632,7 @@ PAGE_LOGINZUGAENGE = '''<div class="page" id="page-loginzugaenge">
 <section><h2>TOTP neu einrichten</h2><p><small>Setzt den Google-Authenticator-Schlüssel des gewählten Mitarbeiters zurück (z.B. bei Handy-Verlust).</small></p><select id="resetEmpId"></select><button onclick="resetTotp()">Neu einrichten</button><div id="resetQr"></div></section>
 <section><h2>Generalschlüssel</h2><p><small>Universeller Notfall-Zugang für alle Accounts. Nur persönlich/telefonisch weitergeben.</small></p><input id="newMasterKey" placeholder="Eigener Schlüssel (leer = automatisch generieren)"><button onclick="rotateMasterKey()">Neu setzen</button><p id="masterKeyResult"></p></section>
 <section><h2>Module verwalten</h2><p><small>Phase 1 ist sofort nutzbar. Phase 2/3 sind bereits eingebaut, aber standardmäßig deaktiviert — hier gezielt freischalten.</small></p><div id="moduleList"></div></section>
+<section><h2>Audit-Log</h2><p><small>Unveränderbares Protokoll aller sicherheitsrelevanten Vorgänge (wer, wann, was, von wo). Wird nie gelöscht oder bearbeitet.</small></p><input id="auditEmpId" placeholder="Mitarbeiter-ID (optional)" type="number"><input id="auditAction" placeholder="Aktion enthält... (optional)"><label>Von <input id="auditFrom" type="date"></label><label>Bis <input id="auditTo" type="date"></label><button onclick="loadAuditLog()">Filtern</button><div id="auditLogList"></div></section>
 </div>'''
 
 PAGE_PROVISION = '''<div class="page" id="page-provision">
@@ -641,7 +696,7 @@ function backToStep1(){loginStep2.classList.remove('active');loginStep1.classLis
 function applyRoleUI(admin){
 coachBubble.classList.remove('hidden');
 connectWs();
-if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules()}
+if(admin){navAufgaben.classList.remove('hidden');navMitarbeiter.classList.remove('hidden');navProvision.classList.remove('hidden');navZiele.classList.remove('hidden');navLoginzugaenge.classList.remove('hidden');navBuchhaltung.classList.remove('hidden');navEmails.classList.remove('hidden');adminDashboard.classList.remove('hidden');adminDailyOverview.classList.remove('hidden');trainingAdmin.classList.remove('hidden');calendarAdmin.classList.remove('hidden');dashTitle.textContent='Admin Dashboard';dashSub.textContent='Live-Übersicht über alle Mitarbeiter und Tagesmeldungen.';loadEmployees();loadLoginAccess();loadMyPublicProfile();loadApplications();loadTeamBars();loadAllDaily();loadTeamProvision();loadStornoOverview();loadExpiringDocs();loadDocuments();loadStaffDocs();loadPendingClosures();loadMailAccounts();loadTeams();loadModules();loadAuditLog()}
 else if(myRole==='teamleiter'){navMitarbeiter.classList.remove('hidden');dashTitle.textContent='Team-Dashboard';dashSub.textContent='Zahlen und Kunden deines Teams (nur lesend).';loadEmployees();load()}
 else{empDashboardExtra.classList.remove('hidden');coachHint.classList.remove('hidden');loadCommissions();loadMyDocuments();loadTeamLeaderboard()}
 }
@@ -957,6 +1012,20 @@ let ownProdOn=!!(ownProd&&ownProd.enabled);
 if(document.getElementById('ownProductsSection')){ownProductsSection.classList.toggle('hidden',!ownProdOn);ownOrdersSection.classList.toggle('hidden',!ownProdOn);if(ownProdOn){loadOwnProducts();loadOwnOrders()}}
 }
 async function toggleModule(key){try{await api('/modules/'+key+'/toggle',{method:'POST'});await loadModules()}catch(e){alert(e.message)}}
+async function loadAuditLog(){
+if(!document.getElementById('auditLogList'))return;
+let params=new URLSearchParams();
+if(auditEmpId.value)params.set('employee_id',auditEmpId.value);
+if(auditAction.value)params.set('action',auditAction.value);
+if(auditFrom.value)params.set('date_from',auditFrom.value);
+if(auditTo.value)params.set('date_to',auditTo.value);
+let rows=await api('/audit-log?'+params.toString());
+auditLogList.innerHTML=rows.map(x=>{
+let diff='';
+if(x.old_values||x.new_values)diff=`<br><small style="color:#8f8ca8">${x.old_values?'Vorher: '+JSON.stringify(x.old_values)+' ':''}${x.new_values?'Nachher: '+JSON.stringify(x.new_values):''}</small>`;
+return `<div class="card"><small>${new Date(x.timestamp).toLocaleString('de-DE')} · ${x.employee_name||'System'}${x.role?' ('+x.role+')':''} · IP ${x.ip_address||'-'}</small><br><b>${x.action}</b>${x.object_type?' — '+x.object_type+(x.object_id?' #'+x.object_id:''):''}${diff}</div>`;
+}).join('')||'<p class="empty">Keine Einträge.</p>';
+}
 async function createOwnProduct(){
 if(!ownProdName.value.trim()){alert('Bitte Produktname angeben');return}
 try{
