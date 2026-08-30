@@ -6,8 +6,10 @@ import io
 import json
 import os
 import secrets
+import smtplib
 import time
 from datetime import date, datetime, timedelta, timezone
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -113,7 +115,7 @@ MODULE_SEED = [
 ]
 
 class Login(BaseModel): username: str; code: str
-class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "teamleiter", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None
+class EmployeeIn(BaseModel): email: Optional[EmailStr] = None; name: str; role: Literal["admin", "teamleiter", "vertrieb", "support", "buchhaltung"] = "vertrieb"; commission_rate: float = 0; tier: int = Field(default=1, ge=1, le=3); phone: Optional[str] = None; send_welcome_email: bool = True
 class MasterKeyIn(BaseModel): new_key: Optional[str] = Field(default=None, min_length=8, max_length=200)
 class CustomerIn(BaseModel): kind: Literal["privat", "firma"]; first_name: Optional[str] = None; last_name: Optional[str] = None; company: Optional[str] = None; contact_name: Optional[str] = None; email: Optional[EmailStr] = None; phone: Optional[str] = None; postal_code: str; street: Optional[str] = None; city: Optional[str] = None; current_provider_id: Optional[int] = None; usage_kwh: float = 0; status: str = "neu"; owner_id: Optional[int] = None
 class CustomerUpdateIn(BaseModel):
@@ -201,6 +203,15 @@ def log(s, emp, action, detail="", object_type=None, object_id=None, old=None, n
         new_values=json.dumps(new, default=str, ensure_ascii=False) if new is not None else None,
         ip_address=ip, user_agent=(ua[:255] if ua else None),
     ))
+def send_email(to: str, subject: str, body: str):
+    host = os.getenv("SMTP_HOST")
+    if not host: raise RuntimeError("SMTP ist nicht konfiguriert (SMTP_HOST fehlt).")
+    msg = MIMEText(body, _charset="utf-8"); msg["Subject"] = subject; msg["From"] = os.getenv("SMTP_USER") or "no-reply@energyone.de"; msg["To"] = to
+    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587"))) as smtp:
+        smtp.starttls()
+        user = os.getenv("SMTP_USER")
+        if user: smtp.login(user, os.getenv("SMTP_PASSWORD", ""))
+        smtp.send_message(msg)
 def make_pdf(name, title, lines):
     path = STORAGE / name; p = canvas.Canvas(str(path), pagesize=A4); p.setTitle(title); p.setFont("Helvetica-Bold", 18); p.drawString(50, 800, title); p.setFont("Helvetica", 11); y=765
     for line in lines: p.drawString(50, y, str(line)[:115]); y -= 20
@@ -476,9 +487,16 @@ def generate_vp_nummer(s: Session) -> str:
 @app.post("/api/employees")
 def create_employee(data: EmployeeIn, e: Employee=Depends(admin), s: Session=Depends(db)):
     vp = generate_vp_nummer(s)
-    secret=pyotp.random_base32(); x=Employee(**data.model_dump(),username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); s.flush()
+    fields = data.model_dump(exclude={"send_welcome_email"})
+    secret=pyotp.random_base32(); x=Employee(**fields,username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); s.flush()
     codes = generate_backup_codes(s, x.id)
     log(s,e,"Mitarbeiter angelegt",vp); s.commit(); notify_update()
+    if data.send_welcome_email and x.email:
+        try:
+            portal_url = os.getenv("PORTAL_URL", "https://e1direktvertrieb.de/admin")
+            body = f"Hallo {x.name},\n\nwillkommen bei E1 Direktvertrieb! Dein Zugang zum Vertriebsportal ist eingerichtet.\n\nBenutzername (VP-Nummer): {vp}\nPortal: {portal_url}\n\nDen QR-Code für den Google Authenticator sowie deine Backup-Codes erhältst du persönlich von deiner Führungskraft — bitte nicht per E-Mail weitergeben.\n\nViele Grüße\nDein E1 Direktvertrieb Team"
+            send_email(x.email, "Willkommen bei E1 Direktvertrieb", body)
+        except Exception as ex: print(f"[WELCOME EMAIL ERROR] {type(ex).__name__}: {ex}", flush=True)
     return {**serialize_employee(x), **totp_setup(x.username, secret), "backup_codes": codes}
 @app.post("/api/employees/{employee_id}/reset-totp")
 def reset_totp(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
@@ -770,7 +788,7 @@ PAGE_AUFGABEN = '''<div class="page" id="page-aufgaben">
 
 PAGE_MITARBEITER = '''<div class="page" id="page-mitarbeiter">
 <div class="pageHead" style="--pageAccent:#2563eb"><h1>Mitarbeiter</h1><p>Anlegen, Rollen, Stufen und Status.</p></div>
-<section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="teamleiter">Teamleiter</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
+<section><h2>Mitarbeiter anlegen</h2><p><small>Die VP-Nummer (Benutzername) wird automatisch vergeben.</small></p><input id="empName" placeholder="Name"><input id="empEmail" placeholder="E-Mail (optional)"><label>Rolle <select id="empRole"><option value="vertrieb">Vertriebler</option><option value="teamleiter">Teamleiter</option><option value="support">Support</option><option value="buchhaltung">Buchhaltung</option><option value="admin">Admin</option></select></label><label>Status/Stufe <select id="empTier"><option value="1">Stufe 1</option><option value="2">Stufe 2</option><option value="3">Stufe 3</option></select></label><label style="font-size:13px;font-weight:600"><input type="checkbox" id="empWelcomeMail" checked style="width:auto;margin:0 6px 0 0"> Willkommens-E-Mail senden (falls E-Mail angegeben)</label><button onclick="createEmployee()">Anlegen</button><div id="empQr"></div></section>
 <section><h2>Mitarbeiterliste</h2><p><small>"Website" zeigt Name+Foto öffentlich auf der Landingpage (Vertrauens-Sektion für Besucher).</small></p><table><thead><tr><th>ID</th><th>Benutzername</th><th>Name</th><th>Rolle</th><th>Stufe</th><th>Status</th><th>Öffentlich</th><th></th></tr></thead><tbody id="employeeList"></tbody></table></section>
 <section><h2>Mein öffentliches Profil (Teamleitung)</h2><p><small>Erscheint mit auf der Landingpage, wenn aktiviert.</small></p><img id="myPhotoPreview" style="width:56px;height:56px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:12px;background:#eee" onerror="this.style.visibility='hidden'"><label style="font-size:13px;font-weight:600"><input type="checkbox" id="myShowOnWebsite" onchange="toggleMyShowOnWebsite(this.checked)" style="width:auto;margin:0 6px 0 0"> Auf Website zeigen</label><label class="fileBtn" style="margin-left:12px">📷 Foto hochladen<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadMyPhoto(this)"></label></section>
 <section><h2>Kundennachtrag (falls Mitarbeiter vergessen hat)</h2><input id="closureEmpId" placeholder="Mitarbeiter-ID" type="number"><input id="closureCustName" placeholder="Kundenname"><input id="closureProduct" placeholder="Produkt (strom/gas)"><input id="closureUsage" placeholder="Verbrauch kWh" type="number"><button onclick="submitClosureForEmployee()">Eintragen</button></section>
@@ -1126,9 +1144,9 @@ if(fileInput.files[0]){let fd=new FormData();fd.append('file',fileInput.files[0]
 else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:input.value})})}
 input.value='';await loadCoach()
 }catch(e){alert('Coach-Nachricht fehlgeschlagen: '+e.message)}}
-async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'+backupCodesHtml(r.backup_codes);empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
+async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value,send_welcome_email:empWelcomeMail.checked})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'+backupCodesHtml(r.backup_codes);empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
 function backupCodesHtml(codes){return `<div class="card" style="border:1px dashed #dc2626"><b>Backup-Codes (jeder nur 1x nutzbar, jetzt sichern — werden nie wieder angezeigt):</b><p style="font-family:monospace;font-size:15px;letter-spacing:1px">${codes.join(' · ')}</p></div>`}
-async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td>${x.photo_storage_name?`<img src="/api/employees/${x.id}/photo?t=${Date.now()}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">`:''}<label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
+async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}${x.last_login?'':' <span style="color:#d97706;font-weight:700;font-size:11px">· Onboarding: noch nicht eingeloggt</span>'}</td><td>${x.photo_storage_name?`<img src="/api/employees/${x.id}/photo?t=${Date.now()}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">`:''}<label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
 async function toggleShowOnWebsite(id,checked){await api('/employees/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
 function uploadEmployeePhoto(id,input){let f=input.files[0];if(!f)return;openCropModal(f,id);input.value=''}
 async function loadMyPublicProfile(){let me=await api('/me');let cb=document.getElementById('myShowOnWebsite');if(cb)cb.checked=!!me.show_on_website;let prev=document.getElementById('myPhotoPreview');if(prev)prev.src='/api/employees/'+myId+'/photo?t='+Date.now()}

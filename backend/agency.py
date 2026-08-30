@@ -3,10 +3,8 @@ import csv
 import io
 import json
 import os
-import smtplib
 import uuid
 from datetime import date, datetime, timedelta
-from email.mime.text import MIMEText
 from typing import Literal, Optional
 
 from fastapi import Depends, File, Form, HTTPException, UploadFile
@@ -17,7 +15,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 import pyotp
 
-from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, notify, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
+from .app import Base, Activity, Customer, CustomerHistory, CustomerIn, Employee, EmployeeIn, JobApplication, MasterKeyIn, Module, MODULE_SEED, STORAGE, Task, TaskIn, Team, TeamMember, app, current, admin, admin_or_lead, db, log, module_enabled, notify, send_email, serialize, serialize_employee, create_customer, create_task, create_employee, reset_totp, rotate_master_key, make_pdf, notify_update, require_module, visible_employee_ids
 
 
 class ScheduleEntry(Base):
@@ -930,16 +928,6 @@ def coach_instructions_for(e: Employee) -> str:
     else:
         persona = f"Du sprichst gerade mit {e.name}, Vertriebsmitarbeiter/in (Stufe {e.tier}) bei E1 Direktvertrieb. Sprich sie/ihn mit Namen an, wenn es passt, und beziehe dich auf ihre/seine eigene Stufe/Provision, wenn relevant. Team- oder andere-Mitarbeiter-Daten bespricht du nicht mit ihr/ihm."
     return COACH_INSTRUCTIONS_BASE + "\n\n" + persona
-
-def send_email(to: str, subject: str, body: str):
-    host=os.getenv("SMTP_HOST")
-    if not host: raise RuntimeError("SMTP ist nicht konfiguriert (SMTP_HOST fehlt).")
-    msg=MIMEText(body,_charset="utf-8"); msg["Subject"]=subject; msg["From"]=os.getenv("SMTP_USER") or "no-reply@energyone.de"; msg["To"]=to
-    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT","587"))) as smtp:
-        smtp.starttls()
-        user=os.getenv("SMTP_USER")
-        if user: smtp.login(user, os.getenv("SMTP_PASSWORD",""))
-        smtp.send_message(msg)
 
 @app.post("/api/public/apply")
 def submit_application(name: str = Form(...), email: str = Form(...), phone: str = Form(""), message: str = Form(""), photo: Optional[UploadFile] = File(None), s: Session = Depends(db)):
