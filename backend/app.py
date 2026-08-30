@@ -662,7 +662,13 @@ mailMessageList.innerHTML=rows.map(m=>`<tr style="cursor:pointer;${m.is_read?'':
 async function openMailMessage(id){
 let m=await api('/mail/messages/'+id);
 mailOpenMessage=m;
-mailReadPane.innerHTML=`<div class="card"><b>${escHtml(m.subject)||'(kein Betreff)'}</b><br><small>${m.direction==='out'?'An: '+escHtml(m.to_addrs):'Von: '+(m.sender_name?escHtml(m.sender_name)+' &lt;'+escHtml(m.sender_email)+'&gt;':escHtml(m.sender_email))}</small><p style="white-space:pre-wrap">${escHtml(m.body_text)}</p><button onclick="openMailComposer(true)">Antworten</button></div>`;
+mailReadPane.innerHTML=`<div class="card"><b>${escHtml(m.subject)||'(kein Betreff)'}</b><br><small>${m.direction==='out'?'An: '+escHtml(m.to_addrs):'Von: '+(m.sender_name?escHtml(m.sender_name)+' &lt;'+escHtml(m.sender_email)+'&gt;':escHtml(m.sender_email))}</small><p style="white-space:pre-wrap">${escHtml(m.body_text)}</p><button onclick="openMailComposer(true)">Antworten</button> <button onclick="deleteMailMessage(${m.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button></div>`;
+await loadMailMessages(selectedMailAccountId);await loadMailAccounts();
+}
+async function deleteMailMessage(id){
+if(!confirm('Nachricht wirklich löschen? (Nur hier im Portal, nicht im echten Postfach)'))return;
+await api('/mail/messages/'+id,{method:'DELETE'});
+mailOpenMessage=null;mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>';
 await loadMailMessages(selectedMailAccountId);await loadMailAccounts();
 }
 function openMailComposer(reply){

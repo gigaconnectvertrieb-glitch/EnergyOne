@@ -250,6 +250,15 @@ def get_mail_message(message_id: int, e: Employee = Depends(mail_enabled), s: Se
     return serialize_message(m)
 
 
+@app.delete("/api/mail/messages/{message_id}")
+def delete_mail_message(message_id: int, e: Employee = Depends(mail_enabled), s: Session = Depends(db)):
+    m = s.get(MailMessage, message_id)
+    if not m: raise HTTPException(404, "Nachricht nicht gefunden")
+    account_id = m.account_id
+    s.delete(m); log(s, e, "E-Mail gelöscht", m.subject or ""); s.commit(); notify_update("mail")
+    return {"status": "deleted", "account_id": account_id}
+
+
 @app.post("/api/mail/accounts/{account_id}/send")
 def send_mail(account_id: int, data: MailSendIn, e: Employee = Depends(mail_enabled), s: Session = Depends(db)):
     acc = s.get(MailAccount, account_id)
