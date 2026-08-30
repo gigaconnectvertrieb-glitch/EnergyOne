@@ -316,6 +316,14 @@ def static_logo():
 def static_logo_icon():
     p = Path(__file__).parent / "static" / "logo-icon.png"
     return Response(p.read_bytes(), media_type="image/png")
+@app.get("/static/favicon.svg")
+def static_favicon():
+    p = Path(__file__).parent / "static" / "favicon.svg"
+    return Response(p.read_bytes(), media_type="image/svg+xml")
+@app.get("/static/og.jpg")
+def static_og():
+    p = Path(__file__).parent / "static" / "og.jpg"
+    return Response(p.read_bytes(), media_type="image/jpeg")
 @app.get("/static/logo-full.png")
 def static_logo_full():
     p = Path(__file__).parent / "static" / "logo-full.png"
@@ -854,7 +862,11 @@ __LOGIN__
 HTML = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Vertriebsportal</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_EMPLOYEE)
 HTML_ADMIN = ('''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb · Admin</title><style>''' + CSS + '''</style></head><body>''' + APP_SHELL).replace("__LOGIN__", LOGIN_ADMIN)
 
-LANDING_JS = '''<script>document.addEventListener('click',function(e){var m=document.getElementById('lLoginMenu');if(!m)return;if(!e.target.closest('.lLoginWrap'))m.classList.remove('open')});</script>'''
+LANDING_JS = '''<script>document.addEventListener('click',function(e){var m=document.getElementById('lLoginMenu');if(!m)return;if(!e.target.closest('.lLoginWrap'))m.classList.remove('open')});
+document.addEventListener('scroll',function(){var h=document.querySelector('.lHeader');if(!h)return;if(window.scrollY>40)h.classList.add('scrolled');else h.classList.remove('scrolled')});
+(function(){var els=document.querySelectorAll('.reveal');if(!els.length)return;var io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting)e.target.classList.add('visible')})},{threshold:.12,rootMargin:'0px 0px -40px 0px'});els.forEach(function(el){io.observe(el)});window.addEventListener('load',function(){els.forEach(function(el){var r=el.getBoundingClientRect();if(r.top<window.innerHeight-80)el.classList.add('visible')})})})();
+</script>'''
+SEO_HEAD = '''<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><meta name="description" content="Persönliche Energieberatung für Strom &amp; Gas. Echter Mensch statt Callcenter. Transparent, ohne Druck. E1 Direktvertrieb."><meta property="og:title" content="E1 Direktvertrieb"><meta property="og:description" content="Energie, die zu Ihnen passt. Persönliche Energieberatung, kein Callcenter."><meta property="og:image" content="/static/og.jpg"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">'''
 
 LANDING_CSS = '''*{box-sizing:border-box}
 body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2e;background:#fff}
@@ -935,12 +947,34 @@ body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto;color:#1c1a2
 .benefitCard p{margin:0;color:#6b6885;font-size:13.5px}
 .profileList{max-width:640px;margin:0 auto;text-align:left}
 .profileList li{margin-bottom:12px;padding-left:28px;position:relative;color:#3d3a52}
-.profileList li:before{content:"✓";position:absolute;left:0;color:#16a34a;font-weight:800}'''
+.profileList li:before{content:"✓";position:absolute;left:0;color:#16a34a;font-weight:800}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+@keyframes pulseGlow{0%,100%{filter:drop-shadow(0 0 12px rgba(245,158,11,.35))}50%{filter:drop-shadow(0 0 24px rgba(245,158,11,.55))}}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
+.reveal-delay-4{transition-delay:.4s}
+.lHeader{transition:box-shadow .35s ease}
+.lHeader.scrolled{box-shadow:0 4px 30px rgba(0,0,0,.3)}
+.heroEyebrow{display:block;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fbbf24;margin-bottom:14px}
+.heroArt img{animation:float 7s ease-in-out infinite,pulseGlow 4s ease-in-out infinite}
+.featCard,.teamCard{transition:transform .35s cubic-bezier(.4,0,.2,1),box-shadow .35s ease}
+.featCard:hover,.teamCard:hover{transform:translateY(-6px);box-shadow:0 20px 40px -14px rgba(30,20,70,.25)}
+.step{transition:transform .3s ease}
+.step:hover{transform:translateY(-4px)}
+.step .num{transition:filter .3s ease}
+.step:hover .num{filter:drop-shadow(0 0 10px rgba(124,58,237,.45))}
+.benefitCard{transition:transform .3s ease,box-shadow .3s ease}
+.benefitCard:hover{transform:translateY(-4px);box-shadow:0 14px 30px -12px rgba(30,20,70,.2)}'''
 
-LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E1 Direktvertrieb</title>''' + SEO_HEAD + '''<style>''' + LANDING_CSS + '''</style></head><body>
 <header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <section class="hero"><div class="heroWrap">
 <div>
+<span class="heroEyebrow">Persönliche Energieberatung · Deutschland</span>
 <h1>Ein Gesicht für Ihre <span>Energieberatung</span>. Kein Callcenter.</h1>
 <p>Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 Direktvertrieb macht es anders: Wir kommen persönlich vorbei, hören zu und finden gemeinsam den passenden Tarif. Fair, transparent und ohne Druck.</p>
 <div class="heroBtns"><a class="btnPrimary" href="#leistungen">Warum E1?</a><a class="btnGhost" href="#kontakt">Kontakt aufnehmen</a></div>
@@ -951,36 +985,36 @@ LANDING_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><me
 <h2>Warum Kund:innen uns vertrauen</h2>
 <p class="lead">Wir sind kein Konzern ohne Gesicht. Wir stehen mit unserem Namen dafür ein, dass Beratung wieder persönlich wird.</p>
 <div class="grid3">
-<div class="featCard" style="--accent:#7c3aed;--accentSoft:#ede9fe"><div class="ico">🤝</div><h3>Ein echter Mensch, kein Skript</h3><p>Sie sprechen mit jemandem, der Ihre Situation wirklich versteht, nicht mit einer Warteschleife.</p></div>
-<div class="featCard" style="--accent:#0d9488;--accentSoft:#ccfbf1"><div class="ico">🔍</div><h3>Volle Transparenz</h3><p>Wir zeigen Ihnen genau, was Sie zahlen und warum. Keine versteckten Kosten, kein Kleingedrucktes, das überrascht.</p></div>
-<div class="featCard" style="--accent:#ea580c;--accentSoft:#ffedd5"><div class="ico">🛡️</div><h3>Beratung ohne Druck</h3><p>Sie entscheiden in Ihrem Tempo. Unser Ziel ist eine Empfehlung, die zu Ihnen passt, nicht der schnellste Abschluss.</p></div>
+<div class="featCard reveal reveal-delay-1" style="--accent:#7c3aed;--accentSoft:#ede9fe"><div class="ico">🤝</div><h3>Ein echter Mensch, kein Skript</h3><p>Sie sprechen mit jemandem, der Ihre Situation wirklich versteht, nicht mit einer Warteschleife.</p></div>
+<div class="featCard reveal reveal-delay-2" style="--accent:#0d9488;--accentSoft:#ccfbf1"><div class="ico">🔍</div><h3>Volle Transparenz</h3><p>Wir zeigen Ihnen genau, was Sie zahlen und warum. Keine versteckten Kosten, kein Kleingedrucktes, das überrascht.</p></div>
+<div class="featCard reveal reveal-delay-3" style="--accent:#ea580c;--accentSoft:#ffedd5"><div class="ico">🛡️</div><h3>Beratung ohne Druck</h3><p>Sie entscheiden in Ihrem Tempo. Unser Ziel ist eine Empfehlung, die zu Ihnen passt, nicht der schnellste Abschluss.</p></div>
 </div>
 </section>
 <section class="section" id="ablauf">
 <h2>So läuft Ihre Beratung ab</h2>
 <p class="lead">Drei einfache Schritte, keine Verpflichtung.</p>
 <div class="steps">
-<div class="step" style="--stepGrad:linear-gradient(135deg,#7c3aed,#2563eb)"><div class="num">1</div><h3>Persönliches Gespräch</h3><p>Wir kommen zu Ihnen und hören uns Ihre aktuelle Situation und Ihren Verbrauch an.</p></div>
-<div class="step" style="--stepGrad:linear-gradient(135deg,#0d9488,#0891b2)"><div class="num">2</div><h3>Individueller Vergleich</h3><p>Wir zeigen transparent, welcher Tarif zu Ihnen passt, inklusive aller Kosten.</p></div>
-<div class="step" style="--stepGrad:linear-gradient(135deg,#ea580c,#d97706)"><div class="num">3</div><h3>Sie entscheiden</h3><p>Keine Hektik, kein Druck. Der Wechsel läuft erst, wenn Sie wirklich überzeugt sind.</p></div>
+<div class="step reveal reveal-delay-1" style="--stepGrad:linear-gradient(135deg,#7c3aed,#2563eb)"><div class="num">1</div><h3>Persönliches Gespräch</h3><p>Wir kommen zu Ihnen und hören uns Ihre aktuelle Situation und Ihren Verbrauch an.</p></div>
+<div class="step reveal reveal-delay-2" style="--stepGrad:linear-gradient(135deg,#0d9488,#0891b2)"><div class="num">2</div><h3>Individueller Vergleich</h3><p>Wir zeigen transparent, welcher Tarif zu Ihnen passt, inklusive aller Kosten.</p></div>
+<div class="step reveal reveal-delay-3" style="--stepGrad:linear-gradient(135deg,#ea580c,#d97706)"><div class="num">3</div><h3>Sie entscheiden</h3><p>Keine Hektik, kein Druck. Der Wechsel läuft erst, wenn Sie wirklich überzeugt sind.</p></div>
 </div>
 </section>
 <section class="section" id="team">
 <h2>Die Köpfe hinter E1</h2>
 <p class="lead">Wir stehen mit unserem Namen für persönliche, ehrliche Beratung.</p>
 <div class="teamGrid">
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Head of Sales &amp; Team, Mitgründer</div><p>Verantwortet gemeinsam mit Luca-Marco Vertrieb, Teamaufbau und Organisation bei E1 Direktvertrieb. Orhan steht selbst im direkten Kundenkontakt und lebt vor, wie faire Beratung funktioniert.</p></div>
-<div class="teamCard"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Head of Sales &amp; Team, Mitgründer</div><p>Verantwortet gemeinsam mit Orhan Vertrieb, Teamaufbau und Organisation bei E1 Direktvertrieb. Luca-Marco sorgt dafür, dass aus Einzelkämpfern ein eingespieltes Team wird.</p></div>
+<div class="teamCard reveal reveal-delay-1"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#f59e0b,#ea580c)">OS</div><h3>Orhan Salo</h3><div class="role">Head of Sales &amp; Team, Mitgründer</div><p>Verantwortet gemeinsam mit Luca-Marco Vertrieb, Teamaufbau und Organisation bei E1 Direktvertrieb. Orhan steht selbst im direkten Kundenkontakt und lebt vor, wie faire Beratung funktioniert.</p></div>
+<div class="teamCard reveal reveal-delay-2"><div class="avatar" style="--avatarGrad:linear-gradient(135deg,#ea580c,#dc2626)">LM</div><h3>Luca-Marco Marrancone</h3><div class="role">Head of Sales &amp; Team, Mitgründer</div><p>Verantwortet gemeinsam mit Orhan Vertrieb, Teamaufbau und Organisation bei E1 Direktvertrieb. Luca-Marco sorgt dafür, dass aus Einzelkämpfern ein eingespieltes Team wird.</p></div>
 </div>
 </section>
 <section class="section" id="wissen">
 <h2>Strom &amp; Gas: Was Sie wissen sollten</h2>
 <p class="lead">Ein paar grundlegende Fakten zum deutschen Energiemarkt, unabhängig davon, mit wem Sie am Ende sprechen.</p>
 <div class="teamGrid">
-<div class="teamCard"><h3>Freie Anbieterwahl</h3><p>Der Strom- und Gasmarkt in Deutschland ist liberalisiert. Jeder Haushalt kann den Anbieter frei wählen, unabhängig vom örtlichen Netzbetreiber, der weiterhin für Leitungen und Versorgungssicherheit zuständig bleibt.</p></div>
-<div class="teamCard"><h3>Grundversorgung als Auffangnetz</h3><p>Ohne aktiven Vertrag beliefert automatisch der örtliche Grundversorger. Das ist rechtlich abgesichert, in der Regel aber teurer als ein regulärer Tarif, ein Wechsel lohnt sich meist.</p></div>
-<div class="teamCard"><h3>Wechsel ohne Versorgungslücke</h3><p>Ein Anbieterwechsel läuft im Hintergrund über die Netzbetreiber ab. Der Strom bzw. das Gas fließt währenddessen ununterbrochen weiter, es kommt zu keiner Versorgungsunterbrechung.</p></div>
-<div class="teamCard"><h3>Was den Preis beeinflusst</h3><p>Neben dem reinen Energiepreis fließen Netzentgelte, Steuern, Abgaben und Umlagen in den Endpreis ein. Diese Bestandteile sind gesetzlich geregelt und für alle Anbieter weitgehend gleich.</p></div>
+<div class="teamCard reveal reveal-delay-1"><h3>Freie Anbieterwahl</h3><p>Der Strom- und Gasmarkt in Deutschland ist liberalisiert. Jeder Haushalt kann den Anbieter frei wählen, unabhängig vom örtlichen Netzbetreiber, der weiterhin für Leitungen und Versorgungssicherheit zuständig bleibt.</p></div>
+<div class="teamCard reveal reveal-delay-2"><h3>Grundversorgung als Auffangnetz</h3><p>Ohne aktiven Vertrag beliefert automatisch der örtliche Grundversorger. Das ist rechtlich abgesichert, in der Regel aber teurer als ein regulärer Tarif, ein Wechsel lohnt sich meist.</p></div>
+<div class="teamCard reveal reveal-delay-3"><h3>Wechsel ohne Versorgungslücke</h3><p>Ein Anbieterwechsel läuft im Hintergrund über die Netzbetreiber ab. Der Strom bzw. das Gas fließt währenddessen ununterbrochen weiter, es kommt zu keiner Versorgungsunterbrechung.</p></div>
+<div class="teamCard reveal reveal-delay-4"><h3>Was den Preis beeinflusst</h3><p>Neben dem reinen Energiepreis fließen Netzentgelte, Steuern, Abgaben und Umlagen in den Endpreis ein. Diese Bestandteile sind gesetzlich geregelt und für alle Anbieter weitgehend gleich.</p></div>
 </div>
 </section>
 <section class="section" id="aktuelles">
@@ -1024,7 +1058,7 @@ return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">${x.r
 ''' + LANDING_JS + '''
 </body></html>'''
 
-KARRIERE_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Karriere · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+KARRIERE_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Karriere · E1 Direktvertrieb</title>''' + SEO_HEAD + '''<style>''' + LANDING_CSS + '''</style></head><body>
 <header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <section class="careerHero">
 <h1>Verkaufen, ohne sich zu <span>verbiegen</span>.</h1>
@@ -1083,7 +1117,7 @@ document.getElementById('applyResult').textContent='Danke! Wir melden uns bei Ih
 ''' + LANDING_JS + '''
 </body></html>'''
 
-IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Impressum · E1 Direktvertrieb</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><style>''' + LANDING_CSS + '''</style></head><body>
 <header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Impressum</h1>
@@ -1102,7 +1136,7 @@ IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><
 ''' + LANDING_JS + '''
 </body></html>'''
 
-DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><style>''' + LANDING_CSS + '''</style></head><body>
+DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Datenschutz · E1 Direktvertrieb</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><style>''' + LANDING_CSS + '''</style></head><body>
 <header class="lHeader"><a class="lLogo" href="/"><img src="/static/logo-icon.png" alt="E1"> E1 Direktvertrieb</a><nav class="lNav"><a href="/karriere">Karriere</a><a href="/#kontakt">Kontakt</a></nav><div class="lLoginWrap"><button class="lLoginBtn" onclick="document.getElementById('lLoginMenu').classList.toggle('open')">Login</button><div class="lLoginMenu" id="lLoginMenu"><a href="/login">Mitarbeiter-Login<small>Für Vertriebspartner</small></a><a href="/admin">Admin-Login<small>Für Teamleitung</small></a></div></div></header>
 <div class="legal">
 <h1>Datenschutzerklärung</h1>
