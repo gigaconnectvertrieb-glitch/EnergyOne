@@ -773,6 +773,15 @@ PAGE_EMAILS = '''<div class="page" id="page-emails">
 <div style="flex:1;min-width:280px" id="mailReadPane"><p class="empty">Nachricht auswählen.</p></div>
 </div>
 </section>
+<section id="mailTemplatesSection" class="hidden"><h2>Vorlagen &amp; Signatur</h2>
+<p><small>Signatur für das aktuell gewählte Postfach — wird automatisch bei neuen E-Mails eingefügt.</small></p>
+<textarea id="mailSigInput" rows="3" style="width:100%;box-sizing:border-box" placeholder="Signatur (z.B. Mit freundlichen Grüßen, ...)"></textarea>
+<button onclick="saveMailSignature()">Signatur speichern</button>
+<p style="margin-top:18px"><small>Vorlagen (für jedes Postfach nutzbar):</small></p>
+<input id="mailTplName" placeholder="Name der Vorlage"><input id="mailTplSubject" placeholder="Betreff"><textarea id="mailTplBody" rows="3" style="width:100%;box-sizing:border-box" placeholder="Text"></textarea>
+<button onclick="createMailTemplate()">Vorlage anlegen</button>
+<div id="mailTemplatesList"></div>
+</section>
 </div>'''
 
 PAGE_LERNPFAD = '''<div class="page" id="page-lernpfad">
@@ -951,7 +960,11 @@ mailAccountsCache=rows;
 mailAccountList.innerHTML=rows.map(a=>`<button class="navbtn${a.id===selectedMailAccountId?' active':''}" style="padding:8px 14px;font-size:13px" onclick="selectMailAccount(${a.id})">${escHtml(a.display_name||a.address)}${a.unread_count?` <span style="background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px">${a.unread_count}</span>`:''} <span onclick="event.stopPropagation();deleteMailAccount(${a.id})" style="opacity:.6">✕</span></button>`).join('')||'<p class="empty">Noch kein Postfach hinterlegt.</p>';
 if(rows.length && !selectedMailAccountId){selectMailAccount(rows[0].id)}
 }
-function selectMailAccount(id){selectedMailAccountId=id;mailWorkArea.classList.remove('hidden');mailOpenMessage=null;let a=mailAccountsCache.find(x=>x.id===id);mailWorkTitle.textContent='Nachrichten · '+(a?(a.display_name||a.address):'');mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>';loadMailAccounts();loadMailMessages(id)}
+function selectMailAccount(id){selectedMailAccountId=id;mailWorkArea.classList.remove('hidden');mailTemplatesSection.classList.remove('hidden');mailOpenMessage=null;let a=mailAccountsCache.find(x=>x.id===id);mailWorkTitle.textContent='Nachrichten · '+(a?(a.display_name||a.address):'');mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>';document.getElementById('mailSigInput').value=(a&&a.signature)||'';loadMailAccounts();loadMailMessages(id);loadMailTemplatesList()}
+async function saveMailSignature(){if(!selectedMailAccountId)return;try{await api('/mail/accounts/'+selectedMailAccountId+'/signature',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({signature:document.getElementById('mailSigInput').value})});await loadMailAccounts();alert('Signatur gespeichert')}catch(e){alert(e.message)}}
+async function loadMailTemplatesList(){let rows=await api('/mail/templates').catch(()=>[]);mailTemplatesList.innerHTML=rows.map(t=>`<div class="card"><b>${escHtml(t.name)}</b><br><small>${escHtml(t.subject)}</small><br><button onclick="deleteMailTemplate(${t.id})" style="background:linear-gradient(90deg,#dc2626,#b91c1c);margin-top:6px">Löschen</button></div>`).join('')||'<p class="empty">Noch keine Vorlagen.</p>'}
+async function createMailTemplate(){if(!mailTplName.value.trim()){alert('Bitte Namen angeben');return}try{await api('/mail/templates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:mailTplName.value,subject:mailTplSubject.value,body:mailTplBody.value})});mailTplName.value='';mailTplSubject.value='';mailTplBody.value='';await loadMailTemplatesList()}catch(e){alert(e.message)}}
+async function deleteMailTemplate(id){if(!confirm('Vorlage wirklich löschen?'))return;try{await api('/mail/templates/'+id,{method:'DELETE'});await loadMailTemplatesList()}catch(e){alert(e.message)}}
 async function deleteMailAccount(id){if(!confirm('Postfach und alle zwischengespeicherten Nachrichten wirklich entfernen?'))return;await api('/mail/accounts/'+id,{method:'DELETE'});if(selectedMailAccountId===id){selectedMailAccountId=null;mailWorkArea.classList.add('hidden')}await loadMailAccounts()}
 async function loadMailMessages(id){
 let rows=await api('/mail/accounts/'+id+'/messages').catch(()=>[]);
@@ -969,11 +982,24 @@ await api('/mail/messages/'+id,{method:'DELETE'});
 mailOpenMessage=null;mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>';
 await loadMailMessages(selectedMailAccountId);await loadMailAccounts();
 }
-function openMailComposer(reply){
+async function openMailComposer(reply){
 let pre=reply?mailOpenMessage:null;
 let to=pre?(pre.direction==='out'?(pre.to_addrs||''):pre.sender_email):'';
 let subject=pre?('Re: '+(pre.subject||'').replace(/^Re: /i,'')):'';
-mailReadPane.innerHTML=`<div class="card"><h3>${reply?'Antworten':'Neue E-Mail'}</h3><input id="mailToInput" placeholder="An" value="${escHtml(to)}"><input id="mailSubjectInput" placeholder="Betreff" value="${escHtml(subject)}"><textarea id="mailBodyInput" rows="8" style="width:100%;box-sizing:border-box" placeholder="Nachricht"></textarea><button onclick="sendMailMessage()">Senden</button> <button onclick="cancelMailComposer()" style="background:#e9e7f5;color:#1c1a2e">Abbrechen</button><p id="mailSendResult"></p></div>`;
+let acc=mailAccountsCache.find(a=>a.id===selectedMailAccountId);
+let sigBlock=acc&&acc.signature?'\\n\\n'+acc.signature:'';
+let body=reply?'':sigBlock;
+let templates=await api('/mail/templates').catch(()=>[]);
+let tplOptions='<option value="">Vorlage wählen...</option>'+templates.map(t=>`<option value="${t.id}">${escHtml(t.name)}</option>`).join('');
+window._mailTemplates=templates;window._mailSigBlock=sigBlock;
+mailReadPane.innerHTML=`<div class="card"><h3>${reply?'Antworten':'Neue E-Mail'}</h3>${templates.length?`<select id="mailTplSelect" onchange="applyMailTemplate()">${tplOptions}</select>`:''}<input id="mailToInput" placeholder="An" value="${escHtml(to)}"><input id="mailSubjectInput" placeholder="Betreff" value="${escHtml(subject)}"><textarea id="mailBodyInput" rows="8" style="width:100%;box-sizing:border-box" placeholder="Nachricht">${escHtml(body)}</textarea><button onclick="sendMailMessage()">Senden</button> <button onclick="cancelMailComposer()" style="background:#e9e7f5;color:#1c1a2e">Abbrechen</button><p id="mailSendResult"></p></div>`;
+}
+function applyMailTemplate(){
+let id=+document.getElementById('mailTplSelect').value;
+let t=(window._mailTemplates||[]).find(x=>x.id===id);
+if(!t)return;
+if(t.subject)document.getElementById('mailSubjectInput').value=t.subject;
+document.getElementById('mailBodyInput').value=t.body+(window._mailSigBlock||'');
 }
 function cancelMailComposer(){if(mailOpenMessage)openMailMessage(mailOpenMessage.id);else mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>'}
 async function sendMailMessage(){

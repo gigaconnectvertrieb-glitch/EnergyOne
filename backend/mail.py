@@ -55,6 +55,17 @@ class MailAccount(Base):
     smtp_port: Mapped[int] = mapped_column(Integer, default=587)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_uid: Mapped[int] = mapped_column(Integer, default=0)
+    signature: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MailTemplate(Base):
+    __tablename__ = "mail_vorlagen"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    subject: Mapped[str] = mapped_column(String(255), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("mitarbeiter.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -201,8 +212,33 @@ def list_mail_accounts(e: Employee = Depends(mail_enabled), s: Session = Depends
     out = []
     for a in rows:
         cnt = len(list(s.scalars(select(MailMessage.id).where(MailMessage.account_id == a.id, MailMessage.is_read.is_(False), MailMessage.direction == "in"))))
-        out.append({"id": a.id, "address": a.address, "display_name": a.display_name, "active": a.active, "unread_count": cnt})
+        out.append({"id": a.id, "address": a.address, "display_name": a.display_name, "active": a.active, "unread_count": cnt, "signature": a.signature})
     return out
+
+
+class SignatureIn(BaseModel): signature: str = ""
+@app.put("/api/mail/accounts/{account_id}/signature", dependencies=[Depends(mail_enabled)])
+def update_mail_signature(account_id: int, data: SignatureIn, e: Employee = Depends(admin), s: Session = Depends(db)):
+    acc = s.get(MailAccount, account_id)
+    if not acc: raise HTTPException(404, "Postfach nicht gefunden")
+    acc.signature = data.signature or None; s.commit()
+    return {"status": "ok"}
+
+
+class MailTemplateIn(BaseModel): name: str = Field(min_length=1, max_length=120); subject: str = ""; body: str = ""
+@app.get("/api/mail/templates", dependencies=[Depends(mail_enabled)])
+def list_mail_templates(e: Employee = Depends(admin), s: Session = Depends(db)):
+    return [{"id": t.id, "name": t.name, "subject": t.subject, "body": t.body} for t in s.scalars(select(MailTemplate).order_by(MailTemplate.name))]
+@app.post("/api/mail/templates", dependencies=[Depends(mail_enabled)])
+def create_mail_template(data: MailTemplateIn, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = MailTemplate(**data.model_dump(), created_by=e.id); s.add(item); log(s, e, "E-Mail-Vorlage angelegt", item.name); s.commit()
+    return {"id": item.id, "name": item.name, "subject": item.subject, "body": item.body}
+@app.delete("/api/mail/templates/{template_id}", dependencies=[Depends(mail_enabled)])
+def delete_mail_template(template_id: int, e: Employee = Depends(admin), s: Session = Depends(db)):
+    item = s.get(MailTemplate, template_id)
+    if not item: raise HTTPException(404, "Vorlage nicht gefunden")
+    s.delete(item); log(s, e, "E-Mail-Vorlage gelöscht", item.name); s.commit()
+    return {"status": "deleted"}
 
 
 @app.post("/api/mail/accounts")
