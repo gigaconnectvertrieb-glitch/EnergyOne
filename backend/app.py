@@ -48,6 +48,9 @@ class Employee(Base):
 class Settings(Base):
     __tablename__ = "einstellungen"
     id: Mapped[int] = mapped_column(primary_key=True); master_key_hash: Mapped[str] = mapped_column(String(255))
+class BackupCode(Base):
+    __tablename__ = "backup_codes"
+    id: Mapped[int] = mapped_column(primary_key=True); employee_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); code_hash: Mapped[str] = mapped_column(String(255)); used: Mapped[bool] = mapped_column(Boolean, default=False); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow); used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 class Customer(Base):
     __tablename__ = "kunden"
     id: Mapped[int] = mapped_column(primary_key=True); kind: Mapped[str] = mapped_column(String(10)); first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True); last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True); company: Mapped[Optional[str]] = mapped_column(String(160), nullable=True); contact_name: Mapped[Optional[str]] = mapped_column(String(160), nullable=True); email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True); phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True); postal_code: Mapped[str] = mapped_column(String(10)); street: Mapped[Optional[str]] = mapped_column(String(200), nullable=True); city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True); current_provider_id: Mapped[Optional[int]] = mapped_column(ForeignKey("anbieter.id"), nullable=True); usage_kwh: Mapped[float] = mapped_column(Float, default=0); status: Mapped[str] = mapped_column(String(40), default="neu"); owner_id: Mapped[int] = mapped_column(ForeignKey("mitarbeiter.id")); created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -175,6 +178,13 @@ def totp_setup(username: str, secret: str):
     uri = pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name=ISSUER)
     buf = io.BytesIO(); qrcode.make(uri).save(buf, format="PNG")
     return {"totp_provisioning_uri": uri, "totp_qr_base64": base64.b64encode(buf.getvalue()).decode(), "totp_secret": secret}
+def generate_backup_codes(s: Session, employee_id: int, count: int = 8) -> list[str]:
+    for old in s.scalars(select(BackupCode).where(BackupCode.employee_id == employee_id, BackupCode.used.is_(False))):
+        s.delete(old)
+    codes = [secrets.token_hex(4).upper() for _ in range(count)]
+    for c in codes:
+        s.add(BackupCode(employee_id=employee_id, code_hash=pwd.hash(c)))
+    return codes
 
 _login_attempts: dict[str, tuple[int, float]] = {}
 def check_rate_limit(username: str):
@@ -272,10 +282,18 @@ def login(data: Login, s: Session = Depends(db)):
         register_failed_login(data.username); raise HTTPException(401,"Benutzername oder Code falsch")
     settings=s.get(Settings,1)
     used_master_key = bool(settings) and pwd.verify(data.code, settings.master_key_hash)
+    used_backup_code = None
     if not used_master_key and not pyotp.TOTP(e.totp_secret).verify(data.code, valid_window=1):
-        register_failed_login(data.username); raise HTTPException(401,"Benutzername oder Code falsch")
+        for bc in s.scalars(select(BackupCode).where(BackupCode.employee_id==e.id, BackupCode.used.is_(False))):
+            if pwd.verify(data.code, bc.code_hash): used_backup_code = bc; break
+        if not used_backup_code:
+            register_failed_login(data.username); raise HTTPException(401,"Benutzername oder Code falsch")
     reset_login_attempts(data.username); e.last_login=datetime.utcnow()
     if used_master_key: log(s,e,"Notfallzugang (Generalschlüssel)",data.username)
+    if used_backup_code:
+        used_backup_code.used=True; used_backup_code.used_at=datetime.utcnow()
+        remaining = s.scalar(select(func.count(BackupCode.id)).where(BackupCode.employee_id==e.id, BackupCode.used.is_(False))) - 1
+        log(s,e,"Login mit Backup-Code",f"noch {remaining} übrig")
     s.commit(); return {"access_token":token_for(e),"employee":serialize_employee(e)}
 @app.get("/api/me")
 def me(e: Employee = Depends(current)): return serialize_employee(e)
@@ -349,14 +367,18 @@ def generate_vp_nummer(s: Session) -> str:
 @app.post("/api/employees")
 def create_employee(data: EmployeeIn, e: Employee=Depends(admin), s: Session=Depends(db)):
     vp = generate_vp_nummer(s)
-    secret=pyotp.random_base32(); x=Employee(**data.model_dump(),username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); log(s,e,"Mitarbeiter angelegt",vp); s.commit(); notify_update()
-    return {**serialize_employee(x), **totp_setup(x.username, secret)}
+    secret=pyotp.random_base32(); x=Employee(**data.model_dump(),username=vp,vp_nummer=vp,totp_secret=secret); s.add(x); s.flush()
+    codes = generate_backup_codes(s, x.id)
+    log(s,e,"Mitarbeiter angelegt",vp); s.commit(); notify_update()
+    return {**serialize_employee(x), **totp_setup(x.username, secret), "backup_codes": codes}
 @app.post("/api/employees/{employee_id}/reset-totp")
 def reset_totp(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
     x=s.get(Employee,employee_id)
     if not x: raise HTTPException(404,"Mitarbeiter nicht gefunden")
-    x.totp_secret=pyotp.random_base32(); log(s,e,"TOTP zurückgesetzt",x.username); s.commit()
-    return totp_setup(x.username, x.totp_secret)
+    x.totp_secret=pyotp.random_base32()
+    codes = generate_backup_codes(s, x.id)
+    log(s,e,"TOTP zurückgesetzt",x.username); s.commit()
+    return {**totp_setup(x.username, x.totp_secret), "backup_codes": codes}
 @app.post("/api/employees/{employee_id}/toggle-active")
 def toggle_employee_active(employee_id: int, e: Employee=Depends(admin), s: Session=Depends(db)):
     x=s.get(Employee,employee_id)
@@ -910,7 +932,8 @@ if(fileInput.files[0]){let fd=new FormData();fd.append('file',fileInput.files[0]
 else{await api('/training/coach/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:input.value})})}
 input.value='';await loadCoach()
 }catch(e){alert('Coach-Nachricht fehlgeschlagen: '+e.message)}}
-async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">';empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
+async function createEmployee(){let r=await api('/employees',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:empName.value,email:empEmail.value||null,role:empRole.value,tier:+empTier.value})});empQr.innerHTML='<p>Neue VP-Nummer: <b>'+r.username+'</b> — QR scannen (oder Schlüssel manuell eingeben: <code>'+r.totp_secret+'</code>):</p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'+backupCodesHtml(r.backup_codes);empName.value='';empEmail.value='';await loadEmployees();await loadLoginAccess()}
+function backupCodesHtml(codes){return `<div class="card" style="border:1px dashed #dc2626"><b>Backup-Codes (jeder nur 1x nutzbar, jetzt sichern — werden nie wieder angezeigt):</b><p style="font-family:monospace;font-size:15px;letter-spacing:1px">${codes.join(' · ')}</p></div>`}
 async function loadEmployees(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');employeeList.innerHTML=rows.map(x=>`<tr><td>${x.id}</td><td>${x.username}</td><td>${x.name}</td><td>${x.role}</td><td>${tierBadge(x.tier)}</td><td>${x.active?'Aktiv':'<span style="color:#dc2626;font-weight:700">Inaktiv</span>'}</td><td>${x.photo_storage_name?`<img src="/api/employees/${x.id}/photo?t=${Date.now()}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">`:''}<label style="font-size:12px;font-weight:600"><input type="checkbox" ${x.show_on_website?'checked':''} onchange="toggleShowOnWebsite(${x.id},this.checked)" style="width:auto;margin:0 4px 0 0"> Website</label> <label class="fileBtn" style="padding:6px 10px;font-size:12px">📷<input type="file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadEmployeePhoto(${x.id},this)"></label></td><td><button onclick="downloadFile('/employees/${x.id}/report.pdf','report-${x.username}.pdf')">PDF</button> <button onclick="toggleEmployeeActive(${x.id})">${x.active?'Deaktivieren':'Aktivieren'}</button> <button onclick="deleteEmployeeAccount(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:linear-gradient(90deg,#dc2626,#b91c1c)">Löschen</button> <button onclick="purgeEmployee(${x.id},'${x.name.replace(/'/g,"\\'")}')" style="background:#7f1d1d">Endgültig löschen</button></td></tr>`).join('')}
 async function toggleShowOnWebsite(id,checked){await api('/employees/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({show_on_website:checked})})}
 function uploadEmployeePhoto(id,input){let f=input.files[0];if(!f)return;openCropModal(f,id);input.value=''}
@@ -984,7 +1007,7 @@ function uploadMyPhoto(input){let f=input.files[0];if(!f)return;openCropModal(f,
 async function toggleEmployeeActive(id){if(!confirm('Status wirklich ändern?'))return;try{await api('/employees/'+id+'/toggle-active',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function deleteEmployeeAccount(id,name){if(!confirm('Account von "'+name+'" löschen? Login/TOTP werden entfernt, Kunden/Provisionen bleiben für die Buchhaltung erhalten.'))return;try{await api('/employees/'+id+'/delete-account',{method:'POST'});await loadEmployees()}catch(e){alert(e.message)}}
 async function purgeEmployee(id,name){if(!confirm('ACHTUNG: "'+name+'" WIRKLICH ALLES löschen? Kunden, Abschlüsse, Provisionen, Tagesmeldungen und Dokumente werden unwiderruflich entfernt. Das kann nicht rückgängig gemacht werden!'))return;if(prompt('Zum Bestätigen "LÖSCHEN" eingeben:')!=='LÖSCHEN')return;try{await api('/employees/'+id,{method:'DELETE'});await loadEmployees()}catch(e){alert(e.message)}}
-async function resetTotp(){if(!resetEmpId.value)return;let label=resetEmpId.options[resetEmpId.selectedIndex].textContent;let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Neuer Schlüssel für <b>'+label+'</b> — manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'}
+async function resetTotp(){if(!resetEmpId.value)return;let label=resetEmpId.options[resetEmpId.selectedIndex].textContent;let r=await api('/employees/'+resetEmpId.value+'/reset-totp',{method:'POST'});resetQr.innerHTML='<p>Neuer Schlüssel für <b>'+label+'</b> — manuell: <code>'+r.totp_secret+'</code></p><img src="data:image/png;base64,'+r.totp_qr_base64+'">'+backupCodesHtml(r.backup_codes)}
 async function loadLoginAccess(){let rows=(await api('/employees')).filter(x=>x.role!=='admin');let sel=document.getElementById('resetEmpId');if(sel)sel.innerHTML='<option value="">Mitarbeiter wählen</option>'+rows.map(x=>`<option value="${x.id}">${x.name} (${x.username})</option>`).join('')}
 async function loadApplications(){let rows=await api('/admin/applications');applicationsList.innerHTML=rows.map(x=>`<tr style="${x.seen?'':'font-weight:700'}"><td>${x.photo_url?`<img id="applyPhotoImg${x.id}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`:'-'}</td><td>${x.created_at.slice(0,10)}</td><td>${x.name}</td><td>${x.email}</td><td>${x.phone||'-'}</td><td>${x.message||'-'}</td><td>${x.seen?'':`<button onclick="markApplicationSeen(${x.id})">Gesehen</button>`}</td></tr><tr><td></td><td></td><td colspan=5><input id="replyMsg${x.id}" placeholder="Antwort an ${x.name}..." style="width:60%"><button onclick="replyApplication(${x.id})">Antworten</button><span id="replyStatus${x.id}"></span></td></tr>`).join('')||'<tr><td colspan=7 class=empty>Noch keine Bewerbungen.</td></tr>';rows.forEach(x=>{if(x.photo_url)loadAuthImage(x.photo_url,'applyPhotoImg'+x.id)})}
 async function loadAuthImage(url,imgId){let r=await fetch(url,{headers:{Authorization:'Bearer '+token}});if(!r.ok)return;let blob=await r.blob();let img=document.getElementById(imgId);if(img)img.src=URL.createObjectURL(blob)}
