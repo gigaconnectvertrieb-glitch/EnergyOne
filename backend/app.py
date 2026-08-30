@@ -579,6 +579,7 @@ PAGE_BUCHHALTUNG = '''<div class="page" id="page-buchhaltung">
 <section><h2>Mitarbeiter-Abrechnung hochladen</h2><input id="abrEmpId" placeholder="Mitarbeiter-ID" type="number"><select id="abrCategory"><option value="abrechnung">Provisionsabrechnung</option><option value="lohnabrechnung">Lohnabrechnung</option></select><input id="abrFile" type="file"><label>Betrag € (optional) <input id="abrAmount" type="number"></label><button onclick="uploadStaffDocument()">Hochladen</button></section>
 <section><h2>Abrechnungen &amp; Unterlagen der Mitarbeiter</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Betrag</th><th></th></tr></thead><tbody id="staffDocsList"></tbody></table></section>
 <section><h2>Ablaufende Unterlagen</h2><table><thead><tr><th>Mitarbeiter</th><th>Kategorie</th><th>Datei</th><th>Ablauf</th></tr></thead><tbody id="expiringDocs"></tbody></table></section>
+<section id="esignSection" class="hidden"><h2>eSignatur (DocuSign)</h2><p><small>Vertragsdokument zur elektronischen Unterschrift versenden.</small></p><input id="esignSignerName" placeholder="Name des Unterzeichners"><input id="esignSignerEmail" type="email" placeholder="E-Mail des Unterzeichners"><input id="esignCustomerId" placeholder="Kunden-ID (optional)" type="number"><input id="esignFile" type="file" accept=".pdf,.doc,.docx"><button onclick="sendForSignature()">Zur Unterschrift senden</button><p id="esignResult"></p><table><thead><tr><th>Dokument</th><th>Unterzeichner</th><th>Status</th><th>Gesendet</th><th></th></tr></thead><tbody id="esignList"></tbody></table></section>
 </div>'''
 
 PAGE_ZIELE = '''<div class="page" id="page-ziele">
@@ -915,8 +916,29 @@ async function loadModules(){
 let rows=await api('/modules');
 let phaseLabel={1:'Phase 1',2:'Phase 2',3:'Phase 3'};
 moduleList.innerHTML=rows.map(m=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${m.enabled?'#16a34a':'#dc2626'};margin-right:8px"></span><b>${m.name}</b> <small style="color:#8f8ca8">(${phaseLabel[m.phase]||m.phase})</small></div><button onclick="toggleModule('${m.key}')" style="${m.enabled?'background:linear-gradient(90deg,#dc2626,#b91c1c)':''}">${m.enabled?'Deaktivieren':'Aktivieren'}</button></div>`).join('')||'<p class="empty">Keine Module.</p>';
+let esign=rows.find(m=>m.key==='esignatur');
+if(document.getElementById('esignSection')){esignSection.classList.toggle('hidden',!(esign&&esign.enabled));if(esign&&esign.enabled)loadEsignRequests()}
 }
 async function toggleModule(key){try{await api('/modules/'+key+'/toggle',{method:'POST'});await loadModules()}catch(e){alert(e.message)}}
+async function sendForSignature(){
+if(!esignSignerName.value.trim()||!esignSignerEmail.value.trim()){esignResult.textContent='Bitte Name und E-Mail angeben.';return}
+let f=esignFile.files[0];if(!f){esignResult.textContent='Bitte Dokument wählen.';return}
+let fd=new FormData();fd.append('signer_name',esignSignerName.value);fd.append('signer_email',esignSignerEmail.value);fd.append('file',f);
+if(esignCustomerId.value)fd.append('customer_id',esignCustomerId.value);
+esignResult.textContent='Wird gesendet...';
+try{
+let r=await fetch('/api/esign/send',{method:'POST',headers:{Authorization:'Bearer '+token},body:fd});
+if(!r.ok)throw Error(await r.text());
+esignSignerName.value='';esignSignerEmail.value='';esignCustomerId.value='';esignFile.value='';
+esignResult.textContent='Gesendet.';
+await loadEsignRequests();
+}catch(e){esignResult.textContent='Fehler: '+e.message}
+}
+async function loadEsignRequests(){
+let rows=await api('/esign/requests');
+esignList.innerHTML=rows.map(x=>`<tr><td>${x.document_name}</td><td>${x.signer_name}</td><td>${x.status}</td><td>${new Date(x.created_at).toLocaleDateString('de-DE')}</td><td><button onclick="refreshEsign(${x.id})">Status aktualisieren</button></td></tr>`).join('')||'<tr><td colspan=5 class="empty">Noch keine Anfragen.</td></tr>';
+}
+async function refreshEsign(id){try{await api('/esign/requests/'+id+'/refresh',{method:'POST'});await loadEsignRequests()}catch(e){alert(e.message)}}
 async function markApplicationSeen(id){await api('/admin/applications/'+id+'/seen',{method:'POST'});await loadApplications()}
 async function replyApplication(id){let msg=document.getElementById('replyMsg'+id).value.trim();if(!msg)return;let status=document.getElementById('replyStatus'+id);try{await api('/admin/applications/'+id+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});status.textContent=' Gesendet.';await loadApplications()}catch(e){status.textContent=' Fehler: '+e.message}}
 async function createProvider(){await api('/providers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:provName.value,street:provStreet.value,postal_code:provPlz.value,city:provCity.value,phone:provPhone.value,contact_person:provContact.value})});await loadProviders()}
@@ -1263,3 +1285,4 @@ DATENSCHUTZ_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"
 
 from . import agency
 from . import mail
+from . import esignature

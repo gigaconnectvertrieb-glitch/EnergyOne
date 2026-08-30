@@ -5,3 +5,5 @@ __pycache__/
 agentur.db
 storage/
 *.log
+secrets_local/
+test_*.db
