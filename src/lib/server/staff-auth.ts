@@ -6,6 +6,14 @@ import { generateTotpSecret, verifyTotp } from "@/lib/totp.server";
 import { can, type Role, ROLES } from "@/lib/e1";
 import { nid } from "@/lib/utils";
 import { requireProfile, sql } from "./helpers";
+import {
+  assertAuthAllowed,
+  auditAuth,
+  clientIp,
+  recordAuthFail,
+  recordAuthOk,
+  sha256,
+} from "./auth-guard.server";
 
 function fiveDigit() {
   return String(10000 + Math.floor(Math.random() * 90000));
@@ -19,12 +27,24 @@ function digitsOnly(v: string, n: number) {
   return v.replace(/\D+/g, "").slice(0, n);
 }
 
-async function masterKey() {
+async function masterKeyOk(key: string) {
+  const hashed = sha256(key);
   const fromEnv = process.env.E1_ADMIN_MASTER_KEY?.replace(/\D+/g, "");
-  if (fromEnv && fromEnv.length === 12) return fromEnv;
+  if (fromEnv && fromEnv.length === 12) {
+    return safeEqual(hashed, sha256(fromEnv));
+  }
   const db = await sql();
   const [row] = await db<{ value: string }>`select value from settings where key = 'admin_master_key'`;
-  return (row?.value || "482917365018").replace(/\D+/g, "");
+  let stored = row?.value || "";
+  if (!stored.startsWith("sha256:")) {
+    const plain = (stored.replace(/\D+/g, "") || "482917365018");
+    stored = `sha256:${sha256(plain)}`;
+    await db`
+      insert into settings (key, value) values ('admin_master_key', ${stored})
+      on conflict (key) do update set value = excluded.value
+    `;
+  }
+  return safeEqual(hashed, stored.slice("sha256:".length));
 }
 
 function safeEqual(a: string, b: string) {
@@ -111,9 +131,20 @@ export const loginMaster = createServerFn({ method: "POST" })
   .validator((d: { key: string }) => d)
   .handler(async ({ data }) => {
     const key = digitsOnly(data.key, 12);
-    if (key.length !== 12) throw new Error("Der Generalschlüssel hat 12 Ziffern.");
-    const expected = await masterKey();
-    if (!safeEqual(key, expected)) throw new Error("Generalschlüssel ungültig.");
+    const ip = await clientIp();
+    await assertAuthAllowed("master", ip);
+    if (key.length !== 12) {
+      await recordAuthFail("master", ip);
+      throw new Error("Generalschlüssel ungültig.");
+    }
+    const ok = await masterKeyOk(key);
+    if (!ok) {
+      await recordAuthFail("master", ip);
+      await auditAuth("auth.master_fail", ip);
+      throw new Error("Generalschlüssel ungültig.");
+    }
+    await recordAuthOk("master", ip);
+    await auditAuth("auth.master_ok", ip);
     const admin = await ensureAdminUser();
     return issueSession(admin.email, admin.id);
   });
@@ -123,8 +154,11 @@ export const startInvite = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const staffId = staffIdOf(data.staffId);
     const code = digitsOnly(data.code, 5);
-    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
-    if (code.length !== 5) throw new Error("Der Registrierungs-Code hat 5 Ziffern.");
+    await assertAuthAllowed("invite", staffId || "x");
+    if (!staffId || code.length !== 5) {
+      await recordAuthFail("invite", staffId || "x");
+      throw new Error("Mitarbeiter-ID oder Code ungültig.");
+    }
     const db = await sql();
     const [row] = await db<{
       user_id: string;
@@ -139,11 +173,12 @@ export const startInvite = createServerFn({ method: "POST" })
       left join "user" u on u.id = p.user_id
       where p.invite_code = ${code}
     `;
-    if (!row) throw new Error("Code unbekannt. Bitte bei der Leitung nachfragen.");
-    if (staffIdOf(row.staff_id || "") !== staffId) {
-      throw new Error("Mitarbeiter-ID und Code passen nicht zusammen.");
+    if (!row || staffIdOf(row.staff_id || "") !== staffId) {
+      await recordAuthFail("invite", staffId);
+      throw new Error("Mitarbeiter-ID oder Code ungültig.");
     }
     if (row.totp_enabled) throw new Error("Schon registriert. Bitte anmelden.");
+    await recordAuthOk("invite", staffId);
     const secret = generateTotpSecret();
     await db`update profiles set totp_secret = ${secret} where user_id = ${row.user_id}`;
     const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
@@ -164,6 +199,7 @@ export const finishInvite = createServerFn({ method: "POST" })
     const staffId = staffIdOf(data.staffId);
     const code = digitsOnly(data.code, 5);
     const totp = digitsOnly(data.totp, 6);
+    await assertAuthAllowed("invite-totp", staffId || "x");
     const db = await sql();
     const [row] = await db<{
       user_id: string;
@@ -177,16 +213,17 @@ export const finishInvite = createServerFn({ method: "POST" })
       left join "user" u on u.id = p.user_id
       where p.invite_code = ${code}
     `;
-    if (!row?.totp_secret) throw new Error("Bitte zuerst ID und Code prüfen.");
-    if (staffIdOf(row.staff_id || "") !== staffId) {
-      throw new Error("Mitarbeiter-ID und Code passen nicht zusammen.");
+    if (!row?.totp_secret || staffIdOf(row.staff_id || "") !== staffId || !verifyTotp(row.totp_secret, totp)) {
+      await recordAuthFail("invite-totp", staffId || "x");
+      throw new Error("Registrierung fehlgeschlagen.");
     }
-    if (!verifyTotp(row.totp_secret, totp)) throw new Error("Authenticator-Code ungültig.");
     await db`
       update profiles
       set totp_enabled = true, totp_enrolled_at = now(), status = 'active', onboarding_status = 'aktiv'
       where user_id = ${row.user_id}
     `;
+    await recordAuthOk("invite-totp", staffId);
+    await auditAuth("auth.register_ok", await clientIp(), { id: staffId });
     const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
     return issueSession(email, row.user_id);
   });
@@ -196,25 +233,31 @@ export const loginTotp = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const staffId = staffIdOf(data.staffId);
     const totp = digitsOnly(data.totp, 6);
-    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
-    if (totp.length !== 6) throw new Error("Authenticator-Code hat 6 Ziffern.");
+    await assertAuthAllowed("totp", staffId || "x");
+    if (!staffId || totp.length !== 6) {
+      await recordAuthFail("totp", staffId || "x");
+      throw new Error("Anmeldung fehlgeschlagen.");
+    }
     const db = await sql();
     const [row] = await db<{
       user_id: string;
       totp_secret: string | null;
       totp_enabled: boolean;
       email: string | null;
+      status: string;
     }>`
-      select p.user_id, p.totp_secret, p.totp_enabled, u.email
+      select p.user_id, p.totp_secret, p.totp_enabled, p.status, u.email
       from profiles p
       left join "user" u on u.id = p.user_id
       where lower(p.staff_id) = ${staffId}
     `;
-    if (!row) throw new Error("Mitarbeiter-ID unbekannt.");
-    if (!row.totp_enabled || !row.totp_secret) {
-      throw new Error("Noch nicht registriert. Bitte zuerst den 5-stelligen Schlüssel nutzen.");
+    if (!row?.totp_enabled || !row.totp_secret || row.status === "blocked" || !verifyTotp(row.totp_secret, totp)) {
+      await recordAuthFail("totp", staffId);
+      await auditAuth("auth.login_fail", await clientIp(), { id: staffId });
+      throw new Error("Anmeldung fehlgeschlagen.");
     }
-    if (!verifyTotp(row.totp_secret, totp)) throw new Error("Authenticator-Code ungültig.");
+    await recordAuthOk("totp", staffId);
+    await auditAuth("auth.login_ok", await clientIp(), { id: staffId });
     const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
     return issueSession(email, row.user_id);
   });
