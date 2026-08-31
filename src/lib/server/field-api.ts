@@ -219,6 +219,8 @@ export const deleteTerritory = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+export const logFieldVisit = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: {
     doorId?: string;
