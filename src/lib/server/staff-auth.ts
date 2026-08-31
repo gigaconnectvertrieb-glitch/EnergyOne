@@ -86,35 +86,53 @@ async function issueSession(email: string, userId: string) {
   return { ok: true as const, email };
 }
 
-async function ensureAdminUser() {
+const FOUNDERS: Record<string, { first: string; last: string; email: string }> = {
+  orhan: { first: "Orhan", last: "Salo", email: "orhan.salo@e1direktvertrieb.de" },
+  luca: { first: "Luca-Marco", last: "Marrancone", email: "luca.marrancone@e1direktvertrieb.de" },
+};
+
+async function ensureFounder(staffId: string) {
+  const spec = FOUNDERS[staffId];
+  if (!spec) throw new Error("Kein Geschäftsführer-Zugang.");
   const db = await sql();
-  const email = "business@e1direktvertrieb.de";
-  const [existing] = await db<{ id: string }>`select id from "user" where email = ${email}`;
-  if (existing) {
-    const [p] = await db`select user_id from profiles where user_id = ${existing.id}`;
-    if (!p) {
-      await db`
-        insert into profiles (user_id, first_name, last_name, role, status, onboarding_status)
-        values (${existing.id}, 'Orhan', 'Salo', 'super_admin', 'active', 'aktiv')
-      `;
-    } else {
-      await db`update profiles set role = 'super_admin', status = 'active' where user_id = ${existing.id}`;
-    }
-    return { id: existing.id, email };
+  const [byStaff] = await db<{ user_id: string; email: string | null }>`
+    select p.user_id, u.email
+    from profiles p
+    left join "user" u on u.id = p.user_id
+    where lower(p.staff_id) = ${staffId}
+  `;
+  if (byStaff) {
+    await db`
+      update profiles
+      set role = 'super_admin', status = 'active', onboarding_status = 'aktiv',
+          first_name = ${spec.first}, last_name = ${spec.last}, staff_id = ${staffId}
+      where user_id = ${byStaff.user_id}
+    `;
+    return { id: byStaff.user_id, email: byStaff.email || spec.email };
+  }
+  const [byMail] = await db<{ id: string }>`select id from "user" where lower(email) = ${spec.email}`;
+  if (byMail) {
+    await db`
+      insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id)
+      values (${byMail.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId})
+      on conflict (user_id) do update set
+        role = 'super_admin', status = 'active', staff_id = ${staffId},
+        first_name = ${spec.first}, last_name = ${spec.last}
+    `;
+    return { id: byMail.id, email: spec.email };
   }
   const ctx = await auth.$context;
   const created = await ctx.internalAdapter.createUser({
-    email,
-    name: "Orhan Salo",
+    email: spec.email,
+    name: `${spec.first} ${spec.last}`,
     emailVerified: true,
   });
-  const adminId = created.id;
   await db`
-    insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id)
-    values (${adminId}, 'Orhan', 'Salo', 'super_admin', 'active', 'aktiv', 'reg-sued')
-    on conflict (user_id) do update set role = 'super_admin', status = 'active'
+    insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id)
+    values (${created.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId})
+    on conflict (user_id) do update set role = 'super_admin', status = 'active', staff_id = ${staffId}
   `;
-  return { id: adminId, email };
+  return { id: created.id, email: spec.email };
 }
 
 export async function uniqueInviteCode() {
@@ -128,24 +146,25 @@ export async function uniqueInviteCode() {
 }
 
 export const loginMaster = createServerFn({ method: "POST" })
-  .validator((d: { key: string }) => d)
+  .validator((d: { staffId: string; key: string }) => d)
   .handler(async ({ data }) => {
+    const staffId = staffIdOf(data.staffId);
     const key = digitsOnly(data.key, 12);
     const ip = await clientIp();
     await assertAuthAllowed("master", ip);
-    if (key.length !== 12) {
+    if (!FOUNDERS[staffId] || key.length !== 12) {
       await recordAuthFail("master", ip);
-      throw new Error("Generalschlüssel ungültig.");
+      throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
     const ok = await masterKeyOk(key);
     if (!ok) {
       await recordAuthFail("master", ip);
-      await auditAuth("auth.master_fail", ip);
-      throw new Error("Generalschlüssel ungültig.");
+      await auditAuth("auth.master_fail", ip, { id: staffId });
+      throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
     await recordAuthOk("master", ip);
-    await auditAuth("auth.master_ok", ip);
-    const admin = await ensureAdminUser();
+    await auditAuth("auth.master_ok", ip, { id: staffId });
+    const admin = await ensureFounder(staffId);
     return issueSession(admin.email, admin.id);
   });
 

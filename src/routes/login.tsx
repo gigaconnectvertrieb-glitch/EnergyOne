@@ -60,7 +60,7 @@ function Login() {
     e.preventDefault();
     setBusy(true);
     try {
-      await loginMaster({ data: { key: master } });
+      await loginMaster({ data: { staffId, key: master } });
       await goPortal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generalschlüssel ungültig");
@@ -198,6 +198,15 @@ function Login() {
 
           {mode === "admin" ? (
             <form className="mt-5 grid gap-3" onSubmit={onAdmin}>
+              <Field label="Benutzername">
+                <Input
+                  autoComplete="username"
+                  value={staffId}
+                  onChange={(e) => setStaffId(e.target.value)}
+                  required
+                  placeholder="orhan oder luca"
+                />
+              </Field>
               <Field label="12-stelliger Generalschlüssel">
                 <Input
                   inputMode="numeric"
@@ -209,7 +218,7 @@ function Login() {
                   maxLength={12}
                 />
               </Field>
-              <p className="text-xs text-muted">Ohne Google Authenticator. Nur Geschäftsführung.</p>
+              <p className="text-xs text-muted">Ohne Google Authenticator. Getrennte Logins.</p>
               <Button type="submit" disabled={busy} className="mt-1 w-full">
                 Admin-Zugang
               </Button>
