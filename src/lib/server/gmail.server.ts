@@ -1,5 +1,5 @@
 import { MAIL_DOMAIN, mailAddress } from "@/lib/mail";
-import { googleAccessToken, workspaceAdminReady } from "./workspace.server";
+import { googleAccessToken } from "./workspace.server";
 
 export type GmailAttachmentIn = {
   filename: string;
@@ -194,17 +194,32 @@ export function buildRawMime(input: {
 }
 
 export async function gmailListRecent(mailbox: string, max = 40) {
-  if (!workspaceAdminReady()) return { ok: false as const, error: "Kein Workspace-Token", messages: [] as ParsedGmailMessage[] };
-  const list = await gmailApi(mailbox, `/messages?maxResults=${max}&labelIds=INBOX`);
-  if (!list.ok) return { ok: false as const, error: list.text.slice(0, 200), messages: [] as ParsedGmailMessage[] };
-  const ids = ((list.json as { messages?: Array<{ id: string }> })?.messages ?? []).map((m) => m.id);
-  const messages: ParsedGmailMessage[] = [];
-  for (const id of ids) {
-    const got = await gmailApi(mailbox, `/messages/${id}?format=full`);
-    if (!got.ok || !got.json || typeof got.json !== "object") continue;
-    messages.push(parseGmailMessage(got.json as Record<string, unknown>));
+  const address = mailbox.includes("@") ? mailbox : mailAddress(mailbox, MAIL_DOMAIN);
+  const token = await googleAccessToken(address);
+  if (token) {
+    const list = await gmailApi(mailbox, `/messages?maxResults=${max}&labelIds=INBOX`);
+    if (!list.ok) return { ok: false as const, error: list.text.slice(0, 200), messages: [] as ParsedGmailMessage[] };
+    const ids = ((list.json as { messages?: Array<{ id: string }> })?.messages ?? []).map((m) => m.id);
+    const messages: ParsedGmailMessage[] = [];
+    for (const id of ids) {
+      const got = await gmailApi(mailbox, `/messages/${id}?format=full`);
+      if (!got.ok || !got.json || typeof got.json !== "object") continue;
+      messages.push(parseGmailMessage(got.json as Record<string, unknown>));
+    }
+    return { ok: true as const, error: null as string | null, messages };
   }
-  return { ok: true as const, error: null as string | null, messages };
+  const { gmailAppPasswordReady } = await import("./smtp-gmail.server");
+  if (gmailAppPasswordReady()) {
+    const { imapListRecent } = await import("./imap-gmail.server");
+    const imap = await imapListRecent(max);
+    if (!imap.ok) return { ok: false as const, error: imap.error || "IMAP fehlgeschlagen", messages: [] as ParsedGmailMessage[] };
+    return { ok: true as const, error: null as string | null, messages: imap.messages };
+  }
+  return {
+    ok: false as const,
+    error: "Kein Workspace-Token. In Render GMAIL_APP_PASSWORD setzen (Google-Konto → App-Passwort) und in Gmail IMAP einschalten.",
+    messages: [] as ParsedGmailMessage[],
+  };
 }
 
 export async function gmailSendRaw(mailbox: string, raw: string) {

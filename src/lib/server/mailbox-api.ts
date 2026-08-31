@@ -386,15 +386,6 @@ export const syncMailbox = createServerFn({ method: "POST" })
     const mailbox = data.mailbox.replace(/@.*$/, "");
     assertCanRead(me, mailbox, boxes);
     const { gmailListRecent, folderFromLabels } = await import("./gmail.server");
-    const { workspaceAdminReady } = await import("./workspace.server");
-    if (!workspaceAdminReady()) {
-      await db`
-        insert into mailbox_sync (mailbox, last_sync_at, last_error)
-        values (${mailbox}, now(), 'Kein Service-Account. Lokaler Posteingang, Website-Anfragen werden trotzdem zugeordnet.')
-        on conflict (mailbox) do update set last_sync_at = now(), last_error = excluded.last_error
-      `;
-      return { ok: true, synced: 0, source: "local" as const };
-    }
     const result = await gmailListRecent(mailbox);
     if (!result.ok) {
       await db`
