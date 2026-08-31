@@ -152,7 +152,7 @@ export const bootstrapMe = createServerFn({ method: "POST" }).middleware([authMi
     flags,
     unread: num(unread[0]?.c),
     mailUnread,
-    require_2fa: require2fa,
+    require_2fa: false,
   };
 });
 export const getMe = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -991,7 +991,8 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
     ...mapProfile(r),
     email: r.email ? asStr(r.email) : null,
     orders: num(r.orders),
-    stornos: num(r.stornos)
+    stornos: num(r.stornos),
+    invite_code: r.invite_code && !r.totp_enabled ? asStr(r.invite_code) : null,
   }));
 });
 export const updateUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ context, data }) => {

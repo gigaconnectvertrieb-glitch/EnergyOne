@@ -12,7 +12,6 @@ const NAV = [
   { to: "/energie", label: "Energie" },
   { to: "/karriere", label: "Karriere" },
   { to: "/agb", label: "AGB" },
-  { to: "/vorschau", label: "Vorschau" },
 ];
 
 export function PublicShell({ children }: { children: ReactNode }) {

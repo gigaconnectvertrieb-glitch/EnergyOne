@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { finishInvite, loginMaster, loginTotp, startInvite } from "@/lib/server/staff-auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { BrandLockup } from "@/components/logo";
@@ -8,28 +8,62 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
+type Mode = "in" | "reg" | "admin";
+
 function Login() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<Mode>("in");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [totp, setTotp] = useState("");
+  const [invite, setInvite] = useState("");
+  const [master, setMaster] = useState("");
+  const [setup, setSetup] = useState<{ secret: string; uri: string; firstName: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onEmail(e: FormEvent) {
+  async function goPortal() {
+    nav({ to: "/portal" });
+  }
+
+  async function onLogin(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === "up") {
-        const { error } = await authClient.signUp.email({ email, password, name });
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await authClient.signIn.email({ email, password });
-        if (error) throw new Error(error.message);
-      }
-      nav({ to: "/portal" });
+      await loginTotp({ data: { email, totp } });
+      await goPortal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onInvite(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (!setup) {
+        const started = await startInvite({ data: { code: invite } });
+        setSetup(started);
+        toast.success("Schlüssel passt. Authenticator einrichten.");
+      } else {
+        await finishInvite({ data: { code: invite, totp } });
+        await goPortal();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Registrierung fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onAdmin(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await loginMaster({ data: { key: master } });
+      await goPortal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generalschlüssel ungültig");
     } finally {
       setBusy(false);
     }
@@ -48,75 +82,131 @@ function Login() {
         <div className="mt-8 rounded-3xl bg-surface/90 p-6 gold-hairline backdrop-blur">
           <h1 className="font-display text-3xl">Mitarbeiter-Portal</h1>
           <p className="mt-2 text-sm text-muted">
-            Für das E1-Team und Partner. Der erste Zugang wird Super-Admin.
+            Mitarbeiter: Google Authenticator. Leitung: Generalschlüssel.
           </p>
-          <Link to="/vorschau" className="mt-4 block">
-            <Button variant="outline" className="w-full" type="button">
-              Vorschau Admin und Mitarbeiter
-            </Button>
-          </Link>
-          <Link to="/app" className="mt-2 block">
-            <Button variant="outline" className="w-full" type="button">
-              Feld-App (iPhone & Android)
-            </Button>
-          </Link>
-          {authEnabled ? (
-            <>
-              <div className="mt-5 grid gap-2">
-                {GROK_PROVIDERS.map((p) => (
-                  <Button
-                    key={p.providerId}
-                    type="button"
-                    variant="outline"
-                    onClick={() => signIn(p.providerId, { callbackURL: "/portal" })}
-                  >
-                    Weiter mit {p.label}
-                  </Button>
-                ))}
-              </div>
-              <p className="my-4 text-center text-xs uppercase tracking-[0.2em] text-muted">
-                oder per E-Mail
-              </p>
-              <form className="grid gap-3" onSubmit={onEmail}>
-                {mode === "up" ? (
-                  <Field label="Name">
-                    <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                  </Field>
-                ) : null}
-                <Field label="E-Mail">
-                  <Input
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </Field>
-                <Field label="Passwort">
-                  <Input
-                    type="password"
-                    autoComplete={mode === "up" ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={8}
-                  />
-                </Field>
-                <Button type="submit" disabled={busy} className="mt-1 w-full">
-                  {mode === "in" ? "Anmelden" : "Konto erstellen"}
-                </Button>
-              </form>
+
+          <div className="mt-5 grid grid-cols-3 gap-1 rounded-2xl bg-elevated p-1 text-xs">
+            {(
+              [
+                ["in", "Anmelden"],
+                ["reg", "Registrieren"],
+                ["admin", "Admin"],
+              ] as const
+            ).map(([id, label]) => (
               <button
+                key={id}
                 type="button"
-                className="mt-4 w-full text-sm text-muted hover:text-ink"
-                onClick={() => setMode(mode === "in" ? "up" : "in")}
+                className={`min-h-10 rounded-xl ${mode === id ? "bg-gold text-bg" : "text-muted"}`}
+                onClick={() => {
+                  setMode(id);
+                  setSetup(null);
+                  setTotp("");
+                }}
               >
-                {mode === "in" ? "Noch kein Konto? Registrieren" : "Bereits dabei? Anmelden"}
+                {label}
               </button>
-            </>
-          ) : (
-            <p className="mt-4 text-sm text-muted">Anmeldung ist deaktiviert.</p>
-          )}
+            ))}
+          </div>
+
+          {mode === "in" ? (
+            <form className="mt-5 grid gap-3" onSubmit={onLogin}>
+              <Field label="E-Mail">
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Google Authenticator (6 Ziffern)">
+                <Input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value.replace(/\D+/g, "").slice(0, 6))}
+                  required
+                  minLength={6}
+                  maxLength={6}
+                />
+              </Field>
+              <Button type="submit" disabled={busy} className="mt-1 w-full">
+                Anmelden
+              </Button>
+            </form>
+          ) : null}
+
+          {mode === "reg" ? (
+            <form className="mt-5 grid gap-3" onSubmit={onInvite}>
+              <Field label="5-stelliger Schlüssel von der Leitung">
+                <Input
+                  inputMode="numeric"
+                  value={invite}
+                  onChange={(e) => setInvite(e.target.value.replace(/\D+/g, "").slice(0, 5))}
+                  required
+                  minLength={5}
+                  maxLength={5}
+                  disabled={Boolean(setup)}
+                />
+              </Field>
+              {setup ? (
+                <>
+                  <p className="text-sm text-muted">
+                    Hallo {setup.firstName}. In der Google-Authenticator-App: Konto hinzufügen →
+                    Schlüssel eingeben.
+                  </p>
+                  <p className="break-all rounded-2xl bg-elevated px-3 py-3 font-mono text-sm tracking-[0.18em] text-gold">
+                    {setup.secret}
+                  </p>
+                  <a
+                    className="text-center text-xs text-gold underline"
+                    href={setup.uri}
+                  >
+                    Oder hier tippen, wenn die App auf diesem Handy ist
+                  </a>
+                  <img
+                    alt="QR für Authenticator"
+                    className="mx-auto rounded-xl bg-white p-2"
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setup.uri)}`}
+                  />
+                  <Field label="Code aus der App (6 Ziffern)">
+                    <Input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={totp}
+                      onChange={(e) => setTotp(e.target.value.replace(/\D+/g, "").slice(0, 6))}
+                      required
+                      minLength={6}
+                      maxLength={6}
+                    />
+                  </Field>
+                </>
+              ) : null}
+              <Button type="submit" disabled={busy} className="mt-1 w-full">
+                {setup ? "Registrieren und einloggen" : "Schlüssel prüfen"}
+              </Button>
+            </form>
+          ) : null}
+
+          {mode === "admin" ? (
+            <form className="mt-5 grid gap-3" onSubmit={onAdmin}>
+              <Field label="12-stelliger Generalschlüssel">
+                <Input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={master}
+                  onChange={(e) => setMaster(e.target.value.replace(/\D+/g, "").slice(0, 12))}
+                  required
+                  minLength={12}
+                  maxLength={12}
+                />
+              </Field>
+              <p className="text-xs text-muted">Ohne Google Authenticator. Nur Geschäftsführung.</p>
+              <Button type="submit" disabled={busy} className="mt-1 w-full">
+                Admin-Zugang
+              </Button>
+            </form>
+          ) : null}
         </div>
         <Link to="/" className="mt-6 text-center text-sm text-muted">
           Zurück zur Website
