@@ -201,7 +201,24 @@ export const assignTerritory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const logFieldVisit = createServerFn({ method: "POST" })
+export const deleteTerritory = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view") && !can(me.role, "settings.manage")) throw new Error("Kein Zugriff");
+    const [row] = await db<{ id: string }>`select id from territories where id = ${data.id}`;
+    if (!row) throw new Error("Gebiet nicht gefunden");
+    await db`delete from territories where id = ${data.id}`;
+    await audit(db, {
+      userId: context.userId,
+      action: "territory.delete",
+      entityType: "territory",
+      entityId: data.id,
+    });
+    return { ok: true };
+  });
   .middleware([authMiddleware])
   .validator((d: {
     doorId?: string;

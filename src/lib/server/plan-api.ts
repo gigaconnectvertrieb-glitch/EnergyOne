@@ -174,6 +174,31 @@ export const listWorkPlans = createServerFn({ method: "GET" })
     }));
   });
 
+export const deleteWorkPlan = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!canPlan(me.role)) throw new Error("Kein Zugriff");
+    const [plan] = await db<{ territory_id: string | null }>`
+      select territory_id from work_plans where id = ${data.id}
+    `;
+    if (!plan) throw new Error("Plan nicht gefunden");
+    if (plan.territory_id) {
+      await db`delete from territories where id = ${plan.territory_id}`;
+    } else {
+      await db`delete from work_plans where id = ${data.id}`;
+    }
+    await audit(db, {
+      userId: context.userId,
+      action: "plan.delete",
+      entityType: "work_plan",
+      entityId: data.id,
+    });
+    return { ok: true };
+  });
+
 export const getWorkPlan = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { id: string }) => d)

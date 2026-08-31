@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { listUsers } from "@/lib/server/api";
-import { assignWorkDay, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
+import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
+import { deleteTerritory, listTerritories } from "@/lib/server/field-api";
 import { FieldMap, type WalkStop } from "@/components/field-map";
 import { bboxAround, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ function Page() {
   const [userIds, setUserIds] = useState<string[]>([]);
   const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [plans, setPlans] = useState<Awaited<ReturnType<typeof listWorkPlans>>>([]);
+  const [ters, setTers] = useState<Awaited<ReturnType<typeof listTerritories>>>([]);
   const [open, setOpen] = useState<Awaited<ReturnType<typeof getWorkPlan>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [corners, setCorners] = useState<{ lat: number; lng: number }[]>([]);
@@ -30,6 +32,7 @@ function Page() {
   function reload() {
     listWorkPlans().then(setPlans).catch(() => setPlans([]));
     listUsers().then(setUsers).catch(() => setUsers([]));
+    listTerritories().then(setTers).catch(() => setTers([]));
   }
   useEffect(reload, []);
 
@@ -211,20 +214,73 @@ function Page() {
       <h2 className="mt-10 font-display text-2xl">Pläne</h2>
       <div className="mt-3 grid gap-2">
         {plans.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className="rounded-2xl bg-surface p-4 text-left gold-hairline"
-            onClick={async () => setOpen(await getWorkPlan({ data: { id: p.id } }))}
-          >
-            <p className="font-medium">{p.territory_name || p.city}</p>
-            <p className="text-xs text-muted">
-              {p.city} · {p.days} Tage · {p.per_day} Straßen/Tag
-            </p>
-          </button>
+          <div key={p.id} className="flex items-stretch gap-2">
+            <button
+              type="button"
+              className="min-w-0 flex-1 rounded-2xl bg-surface p-4 text-left gold-hairline"
+              onClick={async () => setOpen(await getWorkPlan({ data: { id: p.id } }))}
+            >
+              <p className="font-medium">{p.territory_name || p.city}</p>
+              <p className="text-xs text-muted">
+                {p.city} · {p.days} Tage · {p.per_day} Straßen/Tag
+              </p>
+            </button>
+            <Button
+              variant="outline"
+              className="shrink-0 text-danger"
+              onClick={async () => {
+                if (!window.confirm(`${p.territory_name || p.city} wirklich löschen?`)) return;
+                try {
+                  await deleteWorkPlan({ data: { id: p.id } });
+                  toast.success("Gebiet gelöscht");
+                  if (open?.id === p.id) setOpen(null);
+                  reload();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+                }
+              }}
+            >
+              Löschen
+            </Button>
+          </div>
         ))}
         {plans.length === 0 ? <p className="text-sm text-muted">Noch kein Plan. Oben eine Stadt suchen.</p> : null}
       </div>
+
+      {ters.length ? (
+        <>
+          <h2 className="mt-10 font-display text-2xl">Gebiete</h2>
+          <div className="mt-3 grid gap-2">
+            {ters.map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl bg-surface p-4 gold-hairline">
+                <div>
+                  <p className="font-medium">{t.name}</p>
+                  <p className="text-xs text-muted">
+                    {t.advisor || "nicht zugewiesen"} · {t.door_count} Adressen
+                    {t.active ? "" : " · inaktiv"}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="text-danger"
+                  onClick={async () => {
+                    if (!window.confirm(`${t.name} löschen?`)) return;
+                    try {
+                      await deleteTerritory({ data: { id: t.id } });
+                      toast.success("Gebiet gelöscht");
+                      reload();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+                    }
+                  }}
+                >
+                  Löschen
+                </Button>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {open ? (
         <div className="mt-8">
