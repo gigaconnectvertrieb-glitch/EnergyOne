@@ -15,15 +15,31 @@ export const submitLead = createServerFn({ method: "POST" })
     `;
     try {
       const { queuePortalMail } = await import("./workspace.server");
+      const text = `Name: ${data.name.trim()}\nTelefon: ${data.phone.trim()}\nPLZ: ${data.zip?.trim() || "—"}\n\n${data.message?.trim() || ""}`;
       await queuePortalMail(db, {
         from: `info@${MAIL_DOMAIN}`,
-        to: `info@${MAIL_DOMAIN}`,
+        to: `info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
         subject: `Neue Beratung · ${data.name.trim()}`,
-        text: `Name: ${data.name.trim()}\nTelefon: ${data.phone.trim()}\nPLZ: ${data.zip?.trim() || "—"}\n\n${data.message?.trim() || ""}`,
+        text,
         purpose: "lead",
       });
     } catch {
       /* queued when Workspace verbunden */
+    }
+    try {
+      const { notify } = await import("./helpers");
+      const admins = await db<{ user_id: string }>`select user_id from profiles where role = 'super_admin'`;
+      for (const a of admins) {
+        await notify(db, {
+          userId: a.user_id,
+          type: "lead",
+          title: "Neue Beratungsanfrage",
+          message: `${data.name.trim()} · ${data.phone.trim()}`,
+          link: "/portal/admin/leads",
+        });
+      }
+    } catch {
+      /* notifications optional */
     }
     try {
       const { ingestMessage } = await import("./mailbox.server");
@@ -74,7 +90,7 @@ export const submitApplication = createServerFn({ method: "POST" })
       const { queuePortalMail } = await import("./workspace.server");
       await queuePortalMail(db, {
         from: `bewerbung@${MAIL_DOMAIN}`,
-        to: `bewerbung@${MAIL_DOMAIN}`,
+        to: `bewerbung@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
         subject: `Bewerbung · ${data.firstName.trim()} ${data.lastName.trim()} · ${data.position}`,
         text: `${data.firstName.trim()} ${data.lastName.trim()}\n${data.email.trim()}\n${data.phone.trim()}\n${data.position}\n\n${data.motivation.trim()}`,
         purpose: "bewerbung",

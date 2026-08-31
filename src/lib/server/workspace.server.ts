@@ -303,16 +303,21 @@ async function runEnsureShared(local: string, displayName: string) {
 }
 
 async function runSendMail(payload: Record<string, unknown>) {
-  const from = String(payload.from ?? `system@${MAIL_DOMAIN}`);
+  const requestedFrom = String(payload.from ?? `business@${MAIL_DOMAIN}`);
   const to = String(payload.to ?? "");
   const subject = String(payload.subject ?? "E1 Direktvertrieb");
   const text = String(payload.text ?? "");
   if (!to) throw new Error("Kein Empfänger.");
-  const token = await googleAccessToken(from);
+  const admin = env("GOOGLE_WORKSPACE_ADMIN_EMAIL") || `business@${MAIL_DOMAIN}`;
+  const local = requestedFrom.split("@")[0] || "info";
+  const shared = ["info", "bewerbung", "business", "system", "dmarc"].includes(local);
+  const impersonate = shared ? admin : requestedFrom;
+  const token = await googleAccessToken(impersonate);
   if (!token) throw new Error("Gmail API nicht verbunden.");
   const raw = [
-    `From: ${from}`,
+    `From: E1 Direktvertrieb <${impersonate}>`,
     `To: ${to}`,
+    `Reply-To: ${requestedFrom}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=UTF-8",
@@ -365,7 +370,7 @@ export async function processWorkspaceJobs(db: Db, limit = 20) {
         results.push({ id, status: "skipped", error: "Flag aus" });
         continue;
       }
-      if (needsMail && !flags.workspace_gmail_api) {
+      if (needsMail && !flags.workspace_gmail_api && !workspaceAdminReady()) {
         await db`
           update workspace_jobs set status = 'skipped', error = 'Gmail API Feature-Flag ist aus. Kein Mailserver auf Render.', processed_at = now()
           where id = ${id}
@@ -436,6 +441,10 @@ export async function queuePortalMail(
   input: { from: string; to?: string; subject: string; text: string; purpose: string },
 ) {
   const to = input.to ?? input.from;
+  if (workspaceAdminReady()) {
+    await runSendMail({ from: input.from, to, subject: input.subject, text: input.text });
+    return;
+  }
   await enqueueWorkspaceJob(db, {
     action: "send_mail",
     localPart: input.from.split("@")[0] ?? "system",
