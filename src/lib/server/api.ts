@@ -410,6 +410,13 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   const id = nid();
   const ref = data.newsalesRef?.trim() || null;
   const full = Boolean(data.fullFlow);
+  if (full) {
+    const iban = (data.iban || "").replace(/\s+/g, "").toUpperCase();
+    if (!iban || iban.length < 15) throw new Error("IBAN ist beim eigenen E1-Vertrag Pflicht.");
+    if (!data.sepaConfirmed || !data.privacyConfirmed) {
+      throw new Error("SEPA und Datenschutz müssen bestätigt sein.");
+    }
+  }
   await db`
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh, meter_number,

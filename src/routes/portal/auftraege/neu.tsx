@@ -30,6 +30,7 @@ function Capture() {
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
   const [forStaff, setForStaff] = useState("");
   const [full, setFull] = useState(false);
+  const [canFull, setCanFull] = useState(false);
   const [iban, setIban] = useState("");
   const [bankOwner, setBankOwner] = useState("");
   const [sepa, setSepa] = useState(false);
@@ -41,7 +42,7 @@ function Capture() {
       .then((m) => {
         setStufe(m.profile.commission_stufe || 1);
         setForStaff(m.profile.user_id);
-        setFull(Boolean(m.flags.full_contract || m.flags.phase2_own_tariffs));
+        setCanFull(Boolean(m.flags.full_contract || m.flags.phase2_own_tariffs));
       })
       .catch(() => setStufe(1));
     listBookableStaff()
@@ -59,6 +60,10 @@ function Capture() {
   }, [q, provider, type]);
 
   const selected = useMemo(() => catalog.items.find((i) => i.id === tariffId) || null, [catalog.items, tariffId]);
+  const ownTariff = Boolean(selected && selected.provider === "E1");
+  useEffect(() => {
+    setFull(canFull && ownTariff);
+  }, [canFull, ownTariff]);
 
   useEffect(() => {
     if (!tariffId || !Number(kwh)) {
@@ -132,8 +137,8 @@ function Capture() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Schnell erfassen</p>
       <h1 className="mt-1 font-display text-4xl">Name, Adresse, Tarif</h1>
       <p className="mt-2 text-sm text-muted">
-        Vertrag steht in New Sales. Hier die kurze Liste für die E1-Datenbank. Leitung kann auf die
-        Mitarbeiter-ID buchen. Stufe {stufe}.
+        Vertrag steht in New Sales. Hier nur Name, Adresse, Tarif, Telefon — keine IBAN.
+        IBAN und SEPA kommen erst beim eigenen E1-Strom. Stufe {stufe}.
       </p>
 
       {staff.length > 1 ? (
