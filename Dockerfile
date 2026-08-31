@@ -7,6 +7,7 @@ RUN npm ci
 COPY . .
 ENV RENDER=true
 ENV VITE_AUTH_ENABLED=true
+ENV PATH="/app/node_modules/.bin:${PATH}"
 RUN node scripts/with-app-env.mjs vite build
 
 FROM node:22-bookworm-slim
