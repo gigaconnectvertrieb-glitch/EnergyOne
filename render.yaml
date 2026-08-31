@@ -1,0 +1,47 @@
+# Render Blueprint: GitHub verbinden, dann "New → Blueprint".
+# Region Frankfurt = EU-Hosting.
+
+databases:
+  - name: e1-db
+    plan: basic-256mb
+    postgresMajorVersion: 16
+    region: frankfurt
+
+services:
+  - type: web
+    name: e1-direktvertrieb
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm install && npm run build
+    startCommand: npm run db:migrate && npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: VITE_AUTH_ENABLED
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: e1-db
+          property: connectionString
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: GOOGLE_WORKSPACE_CLIENT_EMAIL
+        sync: false
+      - key: GOOGLE_WORKSPACE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_WORKSPACE_ADMIN_EMAIL
+        sync: false
+      - key: GOOGLE_WORKSPACE_CUSTOMER_ID
+        sync: false
+    disk:
+      name: e1-uploads
+      mountPath: /var/data
+      sizeGB: 10

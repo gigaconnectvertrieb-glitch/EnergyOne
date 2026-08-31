@@ -1,0 +1,16 @@
+{
+  "name": "E1 Feld",
+  "short_name": "E1 Feld",
+  "description": "Gebiet, Route und Nachlauf für E1 Direktvertrieb.",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0D12",
+  "theme_color": "#0B0D12",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "64x64", "type": "image/png" },
+    { "src": "/emblem.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/emblem.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

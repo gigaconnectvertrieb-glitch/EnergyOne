@@ -1,0 +1,98 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d12;
+  --color-surface: #111318;
+  --color-elevated: #181c24;
+  --color-gold: #c9a227;
+  --color-gold-bright: #d4af37;
+  --color-gold-dim: #8b7320;
+  --color-ink: #f4f1e8;
+  --color-muted: #9a9588;
+  --color-line: #2a2d36;
+  --color-danger: #c45c4a;
+  --color-success: #3f8f6b;
+  --color-warn: #c4922a;
+  --color-info: #6b8caf;
+  --color-background: #0b0d12;
+  --color-foreground: #f4f1e8;
+  --color-primary: #c9a227;
+  --color-primary-foreground: #0b0d12;
+  --color-card: #111318;
+  --color-border: #2a2d36;
+  --color-muted-foreground: #9a9588;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--color-bg);
+    color: var(--color-ink);
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  input,
+  textarea,
+  select {
+    font-family: var(--font-sans);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-gold) 40%, transparent);
+    color: var(--color-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.gold-hairline {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-gold) 28%, transparent);
+}
+
+.gold-wash {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, color-mix(in oklab, var(--color-gold) 18%, transparent), transparent 60%),
+    var(--color-bg);
+}
+
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+}
