@@ -845,6 +845,7 @@ export const getDashboard = createServerFn({ method: "GET" }).middleware([authMi
   const ids = await visibleUserIds(db, me);
   const datePh = ids ? "$2" : "$1";
   const filter = ids ? " and user_id = any($1)" : "";
+  const live = ` and user_id in (select user_id from profiles where coalesce(is_demo,false) = false)`;
   const kpis = await db.query(`select
          count(*) filter (where created_at >= ${datePh}::date) as month_count,
          count(*) filter (where status in ('bestaetigt','beliefert','abgerechnet') and created_at >= ${datePh}::date) as month_won,
@@ -857,17 +858,18 @@ export const getDashboard = createServerFn({ method: "GET" }).middleware([authMi
          count(*) filter (where status = 'bestaetigt') as bestaetigt,
          count(*) filter (where status = 'beliefert') as beliefert,
          count(*) filter (where status = 'abgerechnet') as abgerechnet
-       from contracts where 1=1 ${filter}`, ids ? [ids, monthStart()] : [monthStart()]);
+       from contracts where 1=1 ${filter}${live}`, ids ? [ids, monthStart()] : [monthStart()]);
   const comm = await db.query(`select
          coalesce(sum(amount) filter (where status = 'offen'),0) as offen,
          coalesce(sum(amount) filter (where status = 'freigegeben'),0) as frei,
          coalesce(sum(amount) filter (where status = 'ausgezahlt'),0) as paid
-       from commissions where 1=1 ${ids ? "and user_id = any($1)" : ""}`, ids ? [ids] : []);
+       from commissions where 1=1 ${ids ? "and user_id = any($1)" : ""} ${live}`, ids ? [ids] : []);
   const ranking = await db.query(`select p.user_id, p.first_name, p.last_name, p.monthly_target,
               count(c.id) filter (where c.status in ('bestaetigt','beliefert','abgerechnet') and c.created_at >= $1::date) as wins
        from profiles p
        left join contracts c on c.user_id = p.user_id
-       where p.status = 'active' and p.role in ('vertrieb','partner','teamleiter','gebietsleiter','super_admin')
+       where p.status = 'active' and coalesce(p.is_demo,false) = false
+         and p.role in ('vertrieb','partner','teamleiter','gebietsleiter','super_admin')
        group by p.user_id, p.first_name, p.last_name, p.monthly_target
        order by wins desc, p.last_name
        limit 8`, [monthStart()]);

@@ -37,15 +37,7 @@ export const getFieldHome = createServerFn({ method: "GET" })
       order by updated_at desc
       limit 1
     `;
-    const fallback =
-      !ter && (me.role === "super_admin" || me.role === "teamleiter" || me.role === "gebietsleiter")
-        ? (
-            await db<Record<string, unknown>>`
-              select * from territories where active = true order by updated_at desc limit 1
-            `
-          )[0]
-        : null;
-    const used = ter || fallback;
+    const used = ter || null;
     const week = weekKey();
     const [open] = await db<{ n: number }>`
       select count(*)::int as n from field_visits
@@ -74,12 +66,7 @@ export const getMyTerritory = createServerFn({ method: "GET" })
     const [own] = await db<Record<string, unknown>>`
       select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
     `;
-    const [any] = own
-      ? [own]
-      : await db<Record<string, unknown>>`
-          select * from territories where active = true order by updated_at desc limit 1
-        `;
-    const mine = own || (me.role === "vertrieb" ? null : any);
+    const mine = own || null;
     if (!mine) {
       return { name: "", filename: "", center_lat: 51.16, center_lng: 10.45, geojsonText: "", doors: [] as ReturnType<typeof mapDoor>[] };
     }
@@ -278,12 +265,14 @@ export const listWeeklyFollowups = createServerFn({ method: "GET" })
           left join profiles p on p.user_id = v.user_id
           where v.list_status = 'offen' and v.reason in ('nicht_angetroffen','laufzeit_passt_nicht','kein_zutritt','spaeter')
             and v.user_id = any(${ids})
+            and coalesce(p.is_demo,false) = false
           order by v.follow_up_on nulls last, v.created_at`
       : await db<Record<string, unknown>>`
           select v.*, p.first_name, p.last_name
           from field_visits v
           left join profiles p on p.user_id = v.user_id
           where v.list_status = 'offen' and v.reason in ('nicht_angetroffen','laufzeit_passt_nicht','kein_zutritt','spaeter')
+            and coalesce(p.is_demo,false) = false
           order by v.follow_up_on nulls last, v.created_at`;
     const mapped = rows.map((r) => ({
       id: asStr(r.id),
