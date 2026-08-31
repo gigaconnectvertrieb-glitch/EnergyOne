@@ -441,6 +441,11 @@ export async function queuePortalMail(
   input: { from: string; to?: string; subject: string; text: string; purpose: string },
 ) {
   const to = input.to ?? input.from;
+  const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+  if (gmailAppPasswordReady()) {
+    await sendViaAppPassword({ to, subject: input.subject, text: input.text });
+    return;
+  }
   if (workspaceAdminReady()) {
     await runSendMail({ from: input.from, to, subject: input.subject, text: input.text });
     return;
