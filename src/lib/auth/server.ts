@@ -31,7 +31,7 @@
  */
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth } from "better-auth/plugins";
-import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { e1StartCookies } from "./start-cookies.server";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
@@ -269,7 +269,7 @@ export const auth = betterAuth({
 
     // Bridges Better Auth's Set-Cookie into TanStack Start responses. MUST be
     // last so it runs after every other plugin's hooks.
-    tanstackStartCookies(),
+    e1StartCookies(),
   ],
 });
 
