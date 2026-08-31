@@ -124,6 +124,26 @@ export const listHvContracts = createServerFn({ method: "GET" })
     return rows;
   });
 
+export const deleteHvContract = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    const [row] = await db<{ id: string; first_name: string; last_name: string }>`
+      select id, first_name, last_name from staff_contracts where id = ${data.id}
+    `;
+    if (!row) throw new Error("Vertrag nicht gefunden.");
+    await db`update profiles set hv_contract_id = null where hv_contract_id = ${data.id}`;
+    await db`delete from sign_envelopes where staff_contract_id = ${data.id}`;
+    await db`delete from staff_contract_files where staff_contract_id = ${data.id}`;
+    await db`delete from staff_contracts where id = ${data.id}`;
+    return { ok: true, name: `${row.first_name} ${row.last_name}` };
+  });
+
 export const downloadHvContract = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { id: string }) => d)

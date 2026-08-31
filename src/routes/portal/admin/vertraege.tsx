@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { createHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvProvisionMail, sendHvSignEmail } from "@/lib/server/hv-api";
+import { createHvContract, deleteHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvProvisionMail, sendHvSignEmail } from "@/lib/server/hv-api";
 import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
 import { previewMusterVertrag } from "@/lib/server/sign-api";
@@ -295,6 +295,25 @@ function HvPanel() {
                   }}
                 >
                   DocuSign
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-danger"
+                  onClick={async () => {
+                    if (!window.confirm(`${r.first_name} ${r.last_name} — Vertrag löschen?`)) return;
+                    try {
+                      await deleteHvContract({ data: { id: r.id } });
+                      toast.success("Gelöscht");
+                      if (padFor === r.id) setPadFor(null);
+                      if (mailFor === r.id) setMailFor(null);
+                      load();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+                    }
+                  }}
+                >
+                  Löschen
                 </Button>
               </div>
             </div>
