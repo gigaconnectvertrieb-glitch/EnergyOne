@@ -113,7 +113,7 @@ export const bootstrapMe = createServerFn({ method: "POST" }).middleware([authMi
       userId: context.userId,
       type: "system",
       title: isFirst ? "Willkommen, Super-Admin" : "Registrierung eingegangen",
-      message: isFirst ? "Sie steuern E1 Direktvertrieb. Demo-Daten der Organisation sind sichtbar." : "Ihr Zugang wartet auf Freigabe durch einen Super-Admin.",
+      message: isFirst ? "Sie steuern E1 Direktvertrieb." : "Ihr Zugang wartet auf Freigabe durch einen Super-Admin.",
       link: "/portal"
     });
     try {
@@ -469,7 +469,7 @@ export const listContracts = createServerFn({ method: "POST" }).middleware([auth
   const me = await requireProfile(db, context.userId);
   const ids = data.scope === "mine" ? [me.user_id] : await visibleUserIds(db, me);
   const params = [];
-  let where = "where 1=1";
+  let where = "where coalesce(pr.is_demo,false) = false";
   if (ids) {
     params.push(ids);
     where += ` and c.user_id = any($${params.length})`;
@@ -1027,10 +1027,10 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
   if (!can(me.role, "users.manage") && !can(me.role, "team.view")) throw new Error("Kein Zugriff");
   const ids = can(me.role, "users.manage") ? null : await visibleUserIds(db, me);
   const params = [];
-  let where = "";
+  let where = "where coalesce(p.is_demo,false) = false";
   if (ids) {
     params.push(ids);
-    where = "where p.user_id = any($1)";
+    where += ` and p.user_id = any($${params.length})`;
   }
   return (await db.query(`select p.*, r.name as region_name, u.email,
               (select count(*) from contracts c where c.user_id = p.user_id) as orders,
