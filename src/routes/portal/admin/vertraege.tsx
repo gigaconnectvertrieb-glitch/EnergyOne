@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { createHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvSignEmail } from "@/lib/server/hv-api";
+import { createHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvProvisionMail, sendHvSignEmail } from "@/lib/server/hv-api";
 import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
 import { previewMusterVertrag } from "@/lib/server/sign-api";
@@ -176,7 +176,35 @@ function HvPanel() {
             <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </Field>
           <Field label="E-Mail">
-            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input className="flex-1" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !form.email.includes("@")}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const res = await sendHvProvisionMail({
+                      data: {
+                        email: form.email,
+                        first: form.first,
+                        last: form.last,
+                        staffId: form.staffId,
+                        region: form.region,
+                      },
+                    });
+                    toast.success(`Provisionsordnung an ${res.to}`);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Mail fehlgeschlagen");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Provisionen per Mail
+              </Button>
+            </div>
           </Field>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -231,6 +259,20 @@ function HvPanel() {
                   }}
                 >
                   PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const res = await sendHvProvisionMail({ data: { id: r.id, email: r.email || form.email } });
+                      toast.success(`Provisionen an ${res.to}`);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Mail fehlgeschlagen");
+                    }
+                  }}
+                >
+                  Provisionen
                 </Button>
                 <Button
                   variant="outline"

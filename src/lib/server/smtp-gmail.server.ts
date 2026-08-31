@@ -38,22 +38,43 @@ export async function sendViaAppPassword(input: {
   subject: string;
   text: string;
   from?: string;
+  filename?: string;
+  pdf?: Buffer;
 }) {
   const user = gmailSmtpUser();
   const pass = env("GMAIL_APP_PASSWORD").replace(/\s+/g, "");
   if (!user || !pass) throw new Error("GMAIL_APP_PASSWORD fehlt.");
   const from = input.from || user;
   const recipients = input.to.split(",").map((x) => x.trim()).filter(Boolean);
-  const raw = [
+  const boundary = "e1mail" + Date.now().toString(36);
+  const headers = [
     `From: E1 Direktvertrieb <${from}>`,
     `To: ${recipients.join(", ")}`,
     `Subject: =?UTF-8?B?${Buffer.from(input.subject).toString("base64")}?=`,
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "",
-    input.text.replace(/\r?\n/g, "\r\n"),
-    "",
-  ].join("\r\n");
+  ];
+  let body: string;
+  if (input.pdf && input.filename) {
+    headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    body = [
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      input.text.replace(/\r?\n/g, "\r\n"),
+      `--${boundary}`,
+      "Content-Type: application/pdf",
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${input.filename.replace(/"/g, "")}"`,
+      "",
+      input.pdf.toString("base64").replace(/(.{76})/g, "$1\r\n"),
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+  } else {
+    headers.push("Content-Type: text/plain; charset=UTF-8");
+    body = input.text.replace(/\r?\n/g, "\r\n") + "\r\n";
+  }
+  const raw = `${headers.join("\r\n")}\r\n\r\n${body}`;
 
   await new Promise<void>((resolve, reject) => {
     const socket = connect({ host: "smtp.gmail.com", port: 465, servername: "smtp.gmail.com" }, async () => {

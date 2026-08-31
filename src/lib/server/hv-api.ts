@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can } from "@/lib/e1";
-import { fillHvVertrag, musterHvInput, type HvInput } from "@/lib/hv-vertrag";
+import { fillHvVertrag, fillHvProvisionSheet, musterHvInput, type HvInput } from "@/lib/hv-vertrag";
 import { buildPagedPdf } from "@/lib/sign";
 import { nid } from "@/lib/utils";
 import { docusignReady, sendDocusignEnvelope } from "./docusign.server";
+import { gmailAppPasswordReady, gmailSmtpUser, sendViaAppPassword } from "./smtp-gmail.server";
 import { putFile } from "./ops.server";
 import { requireProfile, sql } from "./helpers";
 
@@ -239,4 +240,97 @@ export const previewMusterHv = createServerFn({ method: "GET" })
       pdfBase64: pdf.toString("base64"),
       lines,
     };
+  });
+
+async function currentBands(db: Awaited<ReturnType<typeof sql>>) {
+  const bands = await db<{
+    provider: string;
+    name: string;
+    type: string;
+    kwh_from: number;
+    kwh_to: number;
+    amount_eur: string | number;
+    amount_ct_kwh: string | number;
+  }>`
+    select t.provider, t.name, t.type, b.kwh_from, b.kwh_to, b.amount_eur, b.amount_ct_kwh
+    from tariff_bands b
+    join tariffs t on t.id = b.tariff_id
+    where b.stufe = 1 and t.active = true
+    order by t.provider, t.name, b.kwh_from
+  `;
+  return bands.map((b) => ({
+    provider: b.provider,
+    name: b.name,
+    type: b.type,
+    kwh_from: Number(b.kwh_from),
+    kwh_to: Number(b.kwh_to),
+    amount_eur: Number(b.amount_eur),
+    amount_ct_kwh: Number(b.amount_ct_kwh),
+  }));
+}
+
+export const sendHvProvisionMail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { email: string; first?: string; last?: string; staffId?: string; region?: string; id?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    const email = data.email.trim().toLowerCase();
+    if (!email.includes("@")) throw new Error("E-Mail fehlt.");
+    if (!gmailAppPasswordReady()) {
+      throw new Error("GMAIL_APP_PASSWORD in Render setzen, sonst geht der Versand nicht.");
+    }
+    let input: HvInput = {
+      first: data.first || "Handelsvertreter",
+      last: data.last || "",
+      street: "",
+      house: "",
+      zip: "",
+      city: "",
+      email,
+      staffId: data.staffId,
+      region: data.region,
+      stufe: 1,
+    };
+    if (data.id) {
+      const [row] = await db<Record<string, unknown>>`select * from staff_contracts where id = ${data.id}`;
+      if (row) {
+        input = {
+          first: String(row.first_name || input.first),
+          last: String(row.last_name || ""),
+          street: String(row.street || ""),
+          house: String(row.house_number || ""),
+          zip: String(row.zip || ""),
+          city: String(row.city || ""),
+          email,
+          staffId: String(row.staff_id || ""),
+          region: String(row.region || ""),
+          stufe: Number(row.stufe) || 1,
+        };
+      }
+    }
+    input.bands = await currentBands(db);
+    const lines = fillHvProvisionSheet(input);
+    const pdf = buildPagedPdf(lines, "Provisionsordnung");
+    const filename = `E1-Provisionsordnung-${(input.last || "HV").replace(/[^a-zA-Z0-9_-]+/g, "")}.pdf`;
+    await sendViaAppPassword({
+      to: email,
+      from: gmailSmtpUser(),
+      subject: "Ihre E1-Provisionsordnung (Stufe 1)",
+      text: [
+        `Guten Tag ${input.first} ${input.last},`.trim() + ",",
+        "",
+        "anbei die aktuelle Provisionsordnung Stufe 1 als PDF.",
+        "Sie ist Anlage zum Handelsvertretervertrag und gilt ab Vertragsbeginn.",
+        "",
+        "E1 Direktvertrieb",
+        "Orhan Salo und Luca-Marco Marrancone",
+      ].join("\n"),
+      filename,
+      pdf,
+    });
+    return { ok: true, to: email, filename };
   });

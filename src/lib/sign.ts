@@ -99,14 +99,26 @@ function isHeading(line: string) {
 /** Professionelles Vertragslayout: Kopfzeile, Goldstreifen, Überschriften fett, Seitenzahl. */
 export function buildPagedPdf(lines: string[], title = "Vertragsdokument") {
   const wrapped: { text: string; heading: boolean }[] = [];
-  for (const line of lines) {
-    const heading = isHeading(line);
-    const parts = heading ? [line.trim()] : wrapPdfLine(line);
-    for (const p of parts) wrapped.push({ text: p, heading });
-  }
-  const perPage = 42;
   const pages: (typeof wrapped)[] = [];
-  for (let i = 0; i < wrapped.length; i += perPage) pages.push(wrapped.slice(i, i + perPage));
+  const perPage = 40;
+  const flush = () => {
+    if (wrapped.length) {
+      pages.push(wrapped.splice(0, wrapped.length));
+    }
+  };
+  for (const line of lines) {
+    if (line.trim() === "---PAGE---") {
+      flush();
+      continue;
+    }
+    const heading = isHeading(line);
+    const parts = heading ? [line.trim()] : wrapPdfLine(line, heading ? 70 : 86);
+    for (const p of parts) {
+      if (wrapped.length >= perPage) flush();
+      wrapped.push({ text: p, heading });
+    }
+  }
+  flush();
   if (!pages.length) pages.push([{ text: "", heading: false }]);
   const total = pages.length;
 
