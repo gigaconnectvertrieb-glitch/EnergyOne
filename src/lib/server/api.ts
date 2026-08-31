@@ -993,6 +993,7 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
     orders: num(r.orders),
     stornos: num(r.stornos),
     invite_code: r.invite_code && !r.totp_enabled ? asStr(r.invite_code) : null,
+    staff_id: r.staff_id ? asStr(r.staff_id) : null,
   }));
 });
 export const updateUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ context, data }) => {

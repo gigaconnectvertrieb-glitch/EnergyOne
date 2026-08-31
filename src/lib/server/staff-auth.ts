@@ -11,6 +11,10 @@ function fiveDigit() {
   return String(10000 + Math.floor(Math.random() * 90000));
 }
 
+function staffIdOf(v: string) {
+  return v.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "");
+}
+
 function digitsOnly(v: string, n: number) {
   return v.replace(/\D+/g, "").slice(0, n);
 }
@@ -176,47 +180,51 @@ export const finishInvite = createServerFn({ method: "POST" })
   });
 
 export const loginTotp = createServerFn({ method: "POST" })
-  .validator((d: { email: string; totp: string }) => d)
+  .validator((d: { staffId: string; totp: string }) => d)
   .handler(async ({ data }) => {
-    const email = data.email.trim().toLowerCase();
+    const staffId = staffIdOf(data.staffId);
     const totp = digitsOnly(data.totp, 6);
-    if (!email.includes("@")) throw new Error("E-Mail fehlt.");
+    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
     if (totp.length !== 6) throw new Error("Authenticator-Code hat 6 Ziffern.");
     const db = await sql();
     const [row] = await db<{
       user_id: string;
       totp_secret: string | null;
       totp_enabled: boolean;
-      role: string;
+      email: string | null;
     }>`
-      select p.user_id, p.totp_secret, p.totp_enabled, p.role
-      from "user" u
-      join profiles p on p.user_id = u.id
-      where lower(u.email) = ${email}
+      select p.user_id, p.totp_secret, p.totp_enabled, u.email
+      from profiles p
+      left join "user" u on u.id = p.user_id
+      where lower(p.staff_id) = ${staffId}
     `;
-    if (!row) throw new Error("Kein Zugang zu dieser E-Mail.");
+    if (!row) throw new Error("Mitarbeiter-ID unbekannt.");
     if (!row.totp_enabled || !row.totp_secret) {
       throw new Error("Noch nicht registriert. Bitte zuerst den 5-stelligen Schlüssel nutzen.");
     }
     if (!verifyTotp(row.totp_secret, totp)) throw new Error("Authenticator-Code ungültig.");
+    const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
     return issueSession(email, row.user_id);
   });
 
 export const createStaff = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { firstName: string; lastName: string; email: string; role?: string }) => d)
+  .validator((d: { firstName: string; lastName: string; staffId: string; email?: string; role?: string }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     if (!can(me.role, "users.manage")) throw new Error("Keine Berechtigung.");
     const first = data.firstName.trim();
     const last = data.lastName.trim();
-    const email = data.email.trim().toLowerCase();
+    const staffId = staffIdOf(data.staffId);
     const role = (ROLES as readonly string[]).includes(data.role || "")
       ? (data.role as Role)
       : "vertrieb";
     if (!first || !last) throw new Error("Name fehlt.");
-    if (!email.includes("@")) throw new Error("E-Mail fehlt.");
+    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
+    const [idTaken] = await db`select user_id from profiles where lower(staff_id) = ${staffId}`;
+    if (idTaken) throw new Error("Diese Mitarbeiter-ID gibt es schon.");
+    const email = (data.email?.trim() || `${staffId}@intern.e1direktvertrieb.de`).toLowerCase();
     const [taken] = await db`select id from "user" where lower(email) = ${email}`;
     if (taken) throw new Error("Diese E-Mail ist schon angelegt.");
     const ctx = await auth.$context;
@@ -227,8 +235,8 @@ export const createStaff = createServerFn({ method: "POST" })
     });
     const code = await uniqueInviteCode();
     await db`
-      insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, invite_code)
-      values (${created.id}, ${first}, ${last}, ${role}, 'pending', 'neu', ${code})
+      insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, invite_code, staff_id)
+      values (${created.id}, ${first}, ${last}, ${role}, 'pending', 'neu', ${code}, ${staffId})
     `;
-    return { userId: created.id, inviteCode: code, email };
+    return { userId: created.id, inviteCode: code, staffId, email };
   });

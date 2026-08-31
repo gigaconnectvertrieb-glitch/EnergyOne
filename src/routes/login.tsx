@@ -13,7 +13,7 @@ type Mode = "in" | "reg" | "admin";
 function Login() {
   const nav = useNavigate();
   const [mode, setMode] = useState<Mode>("in");
-  const [email, setEmail] = useState("");
+  const [staffId, setStaffId] = useState("");
   const [totp, setTotp] = useState("");
   const [invite, setInvite] = useState("");
   const [master, setMaster] = useState("");
@@ -28,7 +28,7 @@ function Login() {
     e.preventDefault();
     setBusy(true);
     try {
-      await loginTotp({ data: { email, totp } });
+      await loginTotp({ data: { staffId, totp } });
       await goPortal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen");
@@ -110,12 +110,11 @@ function Login() {
 
           {mode === "in" ? (
             <form className="mt-5 grid gap-3" onSubmit={onLogin}>
-              <Field label="E-Mail">
+              <Field label="Mitarbeiter-ID">
                 <Input
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  value={staffId}
+                  onChange={(e) => setStaffId(e.target.value)}
                   required
                 />
               </Field>

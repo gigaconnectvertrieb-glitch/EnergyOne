@@ -13,6 +13,7 @@ export const Route = createFileRoute("/portal/admin/benutzer")({ component: Page
 function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [regions, setRegions] = useState<Awaited<ReturnType<typeof listRegions>>>([]);
+  const [staffId, setStaffId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,12 +31,13 @@ function Page() {
     e.preventDefault();
     setBusy(true);
     try {
-      const created = await createStaff({ data: { firstName, lastName, email, role } });
+      const created = await createStaff({ data: { firstName, lastName, email, role, staffId } });
       setIssued(created.inviteCode);
-      toast.success(`Schlüssel ${created.inviteCode} — an den Mitarbeiter geben`);
+      toast.success(`ID ${created.staffId} · Schlüssel ${created.inviteCode}`);
       setFirstName("");
       setLastName("");
       setEmail("");
+      setStaffId("");
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Anlegen fehlgeschlagen");
@@ -52,14 +54,17 @@ function Page() {
       </p>
 
       <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline md:grid-cols-2" onSubmit={onCreate}>
+        <Field label="Mitarbeiter-ID (Benutzername)">
+          <Input value={staffId} onChange={(e) => setStaffId(e.target.value)} required placeholder="z. B. 1001 oder orhan" />
+        </Field>
         <Field label="Vorname">
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
         </Field>
         <Field label="Nachname">
           <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
         </Field>
-        <Field label="E-Mail">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Field label="E-Mail (optional)">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Rolle">
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
@@ -92,8 +97,8 @@ function Page() {
                   {u.first_name} {u.last_name}
                 </p>
                 <p className="text-xs text-muted">
-                  {u.email || u.user_id} · {workspaceLocalPart(u.first_name, u.last_name)}@{MAIL_DOMAIN} · {u.orders}{" "}
-                  Aufträge
+                  ID {u.staff_id || "—"} · {u.email || u.user_id} · {workspaceLocalPart(u.first_name, u.last_name)}@
+                  {MAIL_DOMAIN} · {u.orders} Aufträge
                 </p>
                 {u.invite_code ? (
                   <p className="mt-1 font-mono text-sm text-gold">Schlüssel {u.invite_code} — noch nicht registriert</p>
