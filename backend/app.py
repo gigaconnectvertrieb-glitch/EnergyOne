@@ -686,6 +686,18 @@ button:active{transform:translateY(0)}
 table{width:100%;border-collapse:collapse}
 td,th{padding:9px 8px;border-bottom:1px solid #f0eef8;text-align:left}
 tr:hover td{background:#faf9ff}
+.mailList{border:1px solid #f0eef8;border-radius:10px;overflow:hidden}
+.mailRow{position:relative;overflow:hidden;border-bottom:1px solid #f0eef8}
+.mailRow:last-child{border-bottom:0}
+.mailRowBg{position:absolute;inset:0;background:linear-gradient(90deg,#dc2626,#b91c1c);color:#fff;display:flex;align-items:center;padding:0 18px;font-weight:700;font-size:13px;opacity:.35}
+.mailRowContent{position:relative;background:#fff;padding:11px 12px;display:flex;gap:10px;align-items:center;cursor:pointer;touch-action:pan-y;user-select:none}
+.mailRowContent.unread{font-weight:700}
+.mailRowContent:hover{background:#faf9ff}
+.mailRowContent .mFrom{width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mailRowContent .mSubject{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mailRowContent .mDate{width:95px;flex:none;color:#8f8ca8;font-size:11.5px;text-align:right}
+.mailUndoBar{position:sticky;bottom:10px;margin-top:10px;background:#1c1a2e;color:#fff;padding:12px 16px;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:13.5px;animation:fadeUp .2s ease both}
+.mailUndoBar button{background:transparent;color:#fbbf24;border:1px solid rgba(255,255,255,.3);padding:6px 12px}
 .hidden{display:none}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -871,7 +883,7 @@ PAGE_EMAILS = '''<div class="page" id="page-emails">
 <section id="mailWorkArea" class="hidden"><h2 id="mailWorkTitle">Nachrichten</h2>
 <div style="display:flex;gap:10px;margin-bottom:10px"><button onclick="pollSelectedMailAccount()">🔄 Jetzt prüfen</button><button onclick="openMailComposer()">✎ Neue E-Mail</button></div>
 <div style="display:flex;gap:18px;flex-wrap:wrap">
-<div style="flex:1;min-width:260px"><table><thead><tr><th>Von</th><th>Betreff</th><th>Datum</th></tr></thead><tbody id="mailMessageList"></tbody></table></div>
+<div style="flex:1;min-width:260px"><div id="mailMessageList" class="mailList"></div></div>
 <div style="flex:1;min-width:280px" id="mailReadPane"><p class="empty">Nachricht auswählen.</p></div>
 </div>
 </section>
@@ -1085,8 +1097,73 @@ async function createMailTemplate(){if(!mailTplName.value.trim()){alert('Bitte N
 async function deleteMailTemplate(id){if(!confirm('Vorlage wirklich löschen?'))return;try{await api('/mail/templates/'+id,{method:'DELETE'});await loadMailTemplatesList()}catch(e){alert(e.message)}}
 async function deleteMailAccount(id){if(!confirm('Postfach und alle zwischengespeicherten Nachrichten wirklich entfernen?'))return;await api('/mail/accounts/'+id,{method:'DELETE'});if(selectedMailAccountId===id){selectedMailAccountId=null;mailWorkArea.classList.add('hidden')}await loadMailAccounts()}
 async function loadMailMessages(id){
+if(mailUndo)mailCommitPendingDelete();
 let rows=await api('/mail/accounts/'+id+'/messages').catch(()=>[]);
-mailMessageList.innerHTML=rows.map(m=>`<tr style="cursor:pointer;${m.is_read?'':'font-weight:700'}" onclick="openMailMessage(${m.id})"><td>${m.direction==='out'?'Ich':escHtml(m.sender_name||m.sender_email)}</td><td>${escHtml(m.subject)||'(kein Betreff)'}</td><td>${new Date(m.received_at).toLocaleString('de-DE')}</td></tr>`).join('')||'<tr><td colspan="3" class="empty">Keine Nachrichten.</td></tr>';
+mailMessageList.innerHTML=rows.map(m=>`<div class="mailRow" data-id="${m.id}"><div class="mailRowBg">🗑️ Löschen</div><div class="mailRowContent${m.is_read?'':' unread'}" data-id="${m.id}"><span class="mFrom">${m.direction==='out'?'Ich':escHtml(m.sender_name||m.sender_email)}</span><span class="mSubject">${escHtml(m.subject)||'(kein Betreff)'}</span><span class="mDate">${new Date(m.received_at).toLocaleString('de-DE')}</span></div></div>`).join('')||'<p class="empty">Keine Nachrichten.</p>';
+}
+let mailDrag=null,mailUndo=null;
+const mailSwipeThreshold=90;
+mailMessageList.addEventListener('pointerdown',e=>{
+let content=e.target.closest('.mailRowContent');
+if(!content)return;
+mailDrag={id:+content.dataset.id,row:content.closest('.mailRow'),content,startX:e.clientX,dx:0,moved:false,pointerId:e.pointerId};
+try{content.setPointerCapture(e.pointerId)}catch(err){}
+});
+mailMessageList.addEventListener('pointermove',e=>{
+if(!mailDrag||mailDrag.pointerId!==e.pointerId)return;
+mailDrag.dx=e.clientX-mailDrag.startX;
+if(Math.abs(mailDrag.dx)>6)mailDrag.moved=true;
+if(!mailDrag.moved)return;
+mailDrag.content.style.transform='translateX('+mailDrag.dx+'px)';
+mailDrag.row.querySelector('.mailRowBg').style.opacity=Math.abs(mailDrag.dx)>mailSwipeThreshold?'1':'.35';
+});
+function mailEndDrag(e){
+if(!mailDrag||(e&&mailDrag.pointerId!==e.pointerId))return;
+let d=mailDrag;mailDrag=null;
+if(!d.moved){openMailMessage(d.id);return}
+d.content.style.transition='transform .18s ease';
+if(Math.abs(d.dx)>mailSwipeThreshold){
+d.content.style.transform='translateX('+(d.dx<0?-1:1)*400+'px)';
+mailSwipeDelete(d.id,d.row);
+}else{
+d.content.style.transform='translateX(0)';
+d.row.querySelector('.mailRowBg').style.opacity='.35';
+}
+setTimeout(()=>{if(d.content)d.content.style.transition=''},200);
+}
+mailMessageList.addEventListener('pointerup',mailEndDrag);
+mailMessageList.addEventListener('pointercancel',mailEndDrag);
+function mailSwipeDelete(id,rowEl){
+if(mailUndo)mailCommitPendingDelete();
+let h=rowEl.getBoundingClientRect().height;
+rowEl.style.maxHeight=h+'px';
+void rowEl.offsetHeight;
+rowEl.style.transition='max-height .22s ease .1s';
+rowEl.style.maxHeight='0px';
+setTimeout(()=>rowEl.remove(),320);
+showMailUndoBar();
+mailUndo={id,timer:setTimeout(mailCommitPendingDelete,4000)};
+}
+function showMailUndoBar(){
+document.getElementById('mailUndoBar')?.remove();
+let bar=document.createElement('div');bar.id='mailUndoBar';bar.className='mailUndoBar';
+bar.innerHTML='<span>Nachricht gelöscht</span><button type="button">Rückgängig</button>';
+bar.querySelector('button').onclick=mailUndoDelete;
+mailWorkArea.appendChild(bar);
+}
+function mailUndoDelete(){
+if(!mailUndo)return;
+clearTimeout(mailUndo.timer);mailUndo=null;
+document.getElementById('mailUndoBar')?.remove();
+loadMailMessages(selectedMailAccountId);
+}
+function mailCommitPendingDelete(){
+if(!mailUndo)return;
+let u=mailUndo;mailUndo=null;
+document.getElementById('mailUndoBar')?.remove();
+api('/mail/messages/'+u.id,{method:'DELETE'}).catch(()=>{});
+if(mailOpenMessage&&mailOpenMessage.id===u.id){mailOpenMessage=null;mailReadPane.innerHTML='<p class="empty">Nachricht auswählen.</p>'}
+loadMailAccounts();
 }
 async function openMailMessage(id){
 let m=await api('/mail/messages/'+id);
