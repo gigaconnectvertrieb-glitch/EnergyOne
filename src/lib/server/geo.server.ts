@@ -201,3 +201,37 @@ export async function overpassHouses(lat: number, lng: number, street?: string):
   }
   return out.sort((a, b) => a.house.localeCompare(b.house, "de", { numeric: true }));
 }
+
+export async function overpassHousesBbox(bbox: { south: number; north: number; west: number; east: number }): Promise<HouseHit[]> {
+  const b = clampBbox(bbox);
+  const query = `[out:json][timeout:25];(node["addr:housenumber"](${b.south},${b.west},${b.north},${b.east});way["addr:housenumber"](${b.south},${b.west},${b.north},${b.east}););out center 300;`;
+  const res = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
+    body: `data=${encodeURIComponent(query)}`,
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    elements?: Array<{
+      lat?: number;
+      lon?: number;
+      center?: { lat: number; lon: number };
+      tags?: { "addr:housenumber"?: string; "addr:street"?: string };
+    }>;
+  };
+  const seen = new Set<string>();
+  const out: HouseHit[] = [];
+  for (const el of json.elements || []) {
+    const house = el.tags?.["addr:housenumber"]?.trim();
+    const st = el.tags?.["addr:street"]?.trim() || "";
+    const la = el.lat ?? el.center?.lat;
+    const ln = el.lon ?? el.center?.lon;
+    if (!house || !st || la == null || ln == null) continue;
+    const key = `${st.toLowerCase()}|${house}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ house, lat: la, lng: ln, street: st });
+    if (out.length >= 300) break;
+  }
+  return out;
+}

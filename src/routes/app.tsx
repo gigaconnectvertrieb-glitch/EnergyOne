@@ -25,7 +25,7 @@ export const Route = createFileRoute("/app")({
 
 const TABS = [
   { to: "/app", label: "Routing", icon: Map },
-  { to: "/app/karte", label: "Tour", icon: CalendarDays },
+  { to: "/app/suche", label: "Suche", icon: CalendarDays },
   { to: "/app/liste", label: "Nachlauf", icon: ListChecks },
   { to: "/app/mehr", label: "Mehr", icon: MoreHorizontal },
 ] as const;

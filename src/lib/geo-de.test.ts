@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { bboxAround, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets } from "./geo-de.ts";
+import { bboxAround, planHouseWalk, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets } from "./geo-de.ts";
 
 describe("geo-de", () => {
   it("finds german cities", () => {
@@ -55,5 +55,19 @@ describe("geo-de", () => {
     ]);
     assert.equal(u.length, 2);
     assert.equal(u.some((s) => s.street === "Berliner Straße"), true);
+  });
+
+  it("orders streets then house numbers from a start point", () => {
+    const walk = planHouseWalk(
+      [
+        { id: "a", lat: 49.7, lng: 8.45, street: "Hauptstraße", house: "12" },
+        { id: "b", lat: 49.7002, lng: 8.4502, street: "Hauptstraße", house: "14" },
+        { id: "c", lat: 49.71, lng: 8.46, street: "Nebenweg", house: "1" },
+      ],
+      { lat: 49.699, lng: 8.449 },
+    );
+    assert.equal(walk.streets[0].street, "Hauptstraße");
+    assert.equal(walk.streets[0].houses[0].house, "12");
+    assert.equal(walk.count, 3);
   });
 });

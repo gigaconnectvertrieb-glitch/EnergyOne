@@ -9,8 +9,8 @@ import {
   weekKey,
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
-import { pointInPolygon } from "@/lib/geo-de";
-import { nominatimAddress, overpassHouses } from "./geo.server";
+import { bboxAround, bboxFromPoints, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
+import { nominatimAddress, overpassHouses, overpassHousesBbox } from "./geo.server";
 import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
 
 function mapDoor(r: Record<string, unknown>) {
@@ -372,4 +372,59 @@ export const openFieldObject = createServerFn({ method: "POST" })
       lng: data.lng,
     };
   });
+
+export const getTerritoryWalk = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { lat?: number; lng?: number }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [ter] = await db<Record<string, unknown>>`
+      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
+    `;
+    if (!ter) {
+      return {
+        name: "",
+        center: { lat: 51.16, lng: 10.45 },
+        ring: [] as Array<{ lat: number; lng: number }>,
+        houses: [] as Array<{ id: string; street: string; house: string; lat: number; lng: number }>,
+        walk: { streets: [], meters: 0, count: 0 },
+      };
+    }
+    let ring: Array<{ lat: number; lng: number }> = [];
+    try {
+      const gj = JSON.parse(asStr(ter.geojson)) as {
+        features?: Array<{ geometry?: { type: string; coordinates: number[][][] | number[][][][] } }>;
+      };
+      const geom = gj.features?.[0]?.geometry;
+      const coords = geom?.type === "Polygon" ? geom.coordinates[0] : geom?.type === "MultiPolygon" ? geom.coordinates[0]?.[0] : null;
+      if (coords) ring = coords.map((c) => ({ lng: Number(c[0]), lat: Number(c[1]) }));
+    } catch {
+      ring = [];
+    }
+    const box = ring.length >= 3 ? bboxFromPoints(ring) : bboxAround(num(ter.center_lat), num(ter.center_lng), 1.2);
+    const raw = await overpassHousesBbox(box);
+    const houses = raw
+      .filter((h) => !ring.length || pointInPolygon(h, ring))
+      .map((h, i) => ({
+        id: `${h.street}-${h.house}-${i}`,
+        street: h.street,
+        house: h.house,
+        lat: h.lat,
+        lng: h.lng,
+      }));
+    const start = {
+      lat: data.lat || num(ter.center_lat),
+      lng: data.lng || num(ter.center_lng),
+    };
+    const walk = planHouseWalk(houses, start);
+    return {
+      name: asStr(ter.name),
+      center: { lat: num(ter.center_lat), lng: num(ter.center_lng) },
+      ring,
+      houses,
+      walk,
+    };
+  });
+
 

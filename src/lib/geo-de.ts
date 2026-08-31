@@ -266,3 +266,66 @@ export function uniqueStreets(stops: PlanStop[]): PlanStop[] {
     lng: s.lngSum / s.n,
   }));
 }
+
+export type HouseStop = PlanStop & { house: string };
+
+function nnOrder<T extends { lat: number; lng: number }>(items: T[], start: { lat: number; lng: number }): T[] {
+  const leftover = [...items];
+  const ordered: T[] = [];
+  let cursor = start;
+  while (leftover.length) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let j = 0; j < leftover.length; j++) {
+      const d = haversineMeters(cursor, leftover[j]!);
+      if (d < bestD) {
+        bestD = d;
+        best = j;
+      }
+    }
+    const next = leftover.splice(best, 1)[0]!;
+    ordered.push(next);
+    cursor = next;
+  }
+  return ordered;
+}
+
+/** Straßen nacheinander, in jeder Straße die Häuser — ab Startpunkt. */
+export function planHouseWalk(houses: HouseStop[], start: { lat: number; lng: number }) {
+  const groups = new Map<string, HouseStop[]>();
+  for (const h of houses) {
+    const key = h.street.trim().toLowerCase().replace(/\s+/g, " ") || "ohne name";
+    const arr = groups.get(key) || [];
+    arr.push(h);
+    groups.set(key, arr);
+  }
+  const streets = [...groups.values()].map((hs) => ({
+    street: hs[0]!.street,
+    lat: hs.reduce((s, x) => s + x.lat, 0) / hs.length,
+    lng: hs.reduce((s, x) => s + x.lng, 0) / hs.length,
+    houses: hs,
+  }));
+  const leftover = [...streets];
+  const out: Array<{ street: string; houses: HouseStop[]; meters: number }> = [];
+  let cursor: { lat: number; lng: number } = start;
+  let total = 0;
+  while (leftover.length) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < leftover.length; i++) {
+      const d = haversineMeters(cursor, leftover[i]!);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const st = leftover.splice(best, 1)[0]!;
+    const ordered = nnOrder(st.houses, cursor);
+    let meters = Number.isFinite(bestD) ? bestD : 0;
+    for (let i = 1; i < ordered.length; i++) meters += haversineMeters(ordered[i - 1]!, ordered[i]!);
+    total += meters;
+    out.push({ street: st.street, houses: ordered, meters: Math.round(meters) });
+    cursor = ordered.at(-1) || cursor;
+  }
+  return { streets: out, meters: Math.round(total), count: houses.length };
+}

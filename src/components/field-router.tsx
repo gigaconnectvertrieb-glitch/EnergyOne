@@ -1,24 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, X } from "lucide-react";
-import { logFieldVisit, openFieldObject, searchFieldAddress } from "@/lib/server/field-api";
+import { Navigation, Search, X } from "lucide-react";
+import { getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } from "@/lib/server/field-api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
+type Walk = Awaited<ReturnType<typeof getTerritoryWalk>>;
 
 export function FieldRouter({ center }: { center: { lat: number; lng: number } }) {
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<{ setView: (ll: [number, number], z: number) => void; remove: () => void } | null>(null);
-  const pinRef = useRef<{ remove: () => void } | null>(null);
+  const mapRef = useRef<{
+    setView: (ll: [number, number], z: number) => void;
+    fitBounds: (b: unknown, o?: unknown) => void;
+    remove: () => void;
+  } | null>(null);
+  const layerRef = useRef<{ remove: () => void }[]>([]);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [obj, setObj] = useState<Obj | null>(null);
   const [house, setHouse] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pack, setPack] = useState<Walk | null>(null);
+  const [tapStart, setTapStart] = useState(false);
+  const tapStartRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,21 +35,84 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       if (cancelled || !ref.current || mapRef.current) return;
       const L = (window as unknown as { L: LeafletNS }).L;
       const map = L.map(ref.current, { zoomControl: false, preferCanvas: true });
-      map.setView([center.lat, center.lng], 7);
+      map.setView([center.lat, center.lng], 12);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "OSM",
         maxZoom: 19,
       }).addTo(map);
       mapRef.current = map;
       map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
+        if (tapStartRef.current) {
+          tapStartRef.current = false;
+          setTapStart(false);
+          void loadWalk(e.latlng.lat, e.latlng.lng);
+          return;
+        }
         void pick({ lat: e.latlng.lat, lng: e.latlng.lng, street: "", house: "", zip: "", city: "", display: "" });
       });
+      void loadWalk();
     }
     void boot();
     return () => {
       cancelled = true;
     };
   }, [center.lat, center.lng]);
+
+  async function loadWalk(lat?: number, lng?: number) {
+    setBusy(true);
+    try {
+      const next = await getTerritoryWalk({ data: { lat, lng } });
+      setPack(next);
+      paint(next);
+      if (lat && lng) toast.success("Laufweg neu berechnet");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gebiet nicht geladen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function paint(data: Walk) {
+    const L = (window as unknown as { L: LeafletNS }).L;
+    const map = mapRef.current;
+    if (!L || !map) return;
+    layerRef.current.forEach((x) => x.remove());
+    layerRef.current = [];
+    if (data.ring.length >= 3) {
+      const poly = L.polygon(
+        data.ring.map((p) => [p.lat, p.lng] as [number, number]),
+        { color: "#c9a227", weight: 3, fillColor: "#c9a227", fillOpacity: 0.12 },
+      );
+      poly.addTo(map);
+      layerRef.current.push(poly);
+      try {
+        map.fitBounds(poly.getBounds(), { padding: [40, 40], maxZoom: 16 });
+      } catch {
+        /* */
+      }
+    }
+    const linePts = data.walk.streets.flatMap((s) => s.houses.map((h) => [h.lat, h.lng] as [number, number]));
+    if (linePts.length >= 2) {
+      const line = L.polyline(linePts, { color: "#c9a227", weight: 3, opacity: 0.9 });
+      line.addTo(map);
+      layerRef.current.push(line);
+    }
+    for (const h of data.houses) {
+      const m = L.circleMarker([h.lat, h.lng], {
+        radius: 5,
+        color: "#0b0d12",
+        weight: 1,
+        fillColor: "#c9a227",
+        fillOpacity: 1,
+      });
+      m.bindTooltip(`${h.street} ${h.house}`, { direction: "top" });
+      m.on("click", () => {
+        void pick({ lat: h.lat, lng: h.lng, street: h.street, house: h.house, zip: "", city: "", display: `${h.street} ${h.house}` });
+      });
+      m.addTo(map);
+      layerRef.current.push(m);
+    }
+  }
 
   useEffect(() => {
     if (q.trim().length < 5) {
@@ -56,27 +127,22 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
     return () => window.clearTimeout(t);
   }, [q]);
 
-  function dropPin(lat: number, lng: number) {
-    const L = (window as unknown as { L: LeafletNS }).L;
-    const map = mapRef.current;
-    if (!L || !map) return;
-    pinRef.current?.remove();
-    const m = L.circleMarker([lat, lng], {
-      radius: 8,
-      color: "#0b0d12",
-      weight: 2,
-      fillColor: "#c9a227",
-      fillOpacity: 1,
-    });
-    m.addTo(map);
-    pinRef.current = m;
-    map.setView([lat, lng], 18);
-  }
-
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
-    setBusy(true);
     setHits([]);
-    dropPin(h.lat, h.lng);
+    const L = (window as unknown as { L: LeafletNS }).L;
+    mapRef.current?.setView([h.lat, h.lng], 18);
+    if (L && mapRef.current) {
+      const m = L.circleMarker([h.lat, h.lng], {
+        radius: 8,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#c9a227",
+        fillOpacity: 1,
+      });
+      m.addTo(mapRef.current);
+      layerRef.current.push(m);
+    }
+    setBusy(true);
     try {
       const next = await openFieldObject({
         data: { lat: h.lat, lng: h.lng, street: h.street, house: h.house, zip: h.zip, city: h.city },
@@ -90,20 +156,28 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
     }
   }
 
+  function gpsStart() {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => void loadWalk(pos.coords.latitude, pos.coords.longitude),
+      () => toast.error("Standort nicht verfügbar — Start auf der Karte antippen."),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  }
+
   const selectedHouse = obj?.houses.find((x) => x.house === house);
 
   return (
     <div className="relative -mx-4 -mt-3 h-[calc(100dvh-7.5rem)] min-h-[28rem] overflow-hidden bg-[#d4e0d4]">
       <div ref={ref} className="absolute inset-0" />
 
-      <div className="absolute left-3 right-3 top-3 z-[1200]">
+      <div className="absolute left-3 right-3 top-3 z-[1200] grid gap-2">
         <div className="overflow-hidden rounded-xl bg-white text-[#1a1a1a] shadow-lg">
           <div className="flex items-center gap-2 px-3">
             <Search className="size-4 text-[#c9a227]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Ort, PLZ und Straße eingeben"
+              placeholder="Ort, PLZ und Straße"
               className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
@@ -131,6 +205,26 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             </ul>
           ) : null}
         </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={gpsStart}
+            className="flex h-10 items-center gap-1.5 rounded-full bg-[#0b0d12] px-3 text-xs text-gold"
+          >
+            <Navigation className="size-3.5" /> Start hier
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              tapStartRef.current = true;
+              setTapStart(true);
+              toast.message("Nächster Tipp auf der Karte = Start");
+            }}
+            className={cn("h-10 rounded-full bg-white px-3 text-xs text-[#111] shadow", tapStart && "ring-2 ring-[#c9a227]")}
+          >
+            Start antippen
+          </button>
+        </div>
       </div>
 
       {obj ? (
@@ -139,9 +233,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
           <h2 className="mt-1 font-display text-2xl text-[#111]">
             {obj.street || "Adresse"} {house}
           </h2>
-          <p className="text-sm text-[#555]">
-            {[obj.zip, obj.city].filter(Boolean).join(" ")}
-          </p>
+          <p className="text-sm text-[#555]">{[obj.zip, obj.city].filter(Boolean).join(" ")}</p>
           {obj.houses.length ? (
             <label className="mt-3 block text-xs text-[#666]">
               Hausnummer
@@ -152,32 +244,21 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
                   const v = e.target.value;
                   setHouse(v);
                   const h = obj.houses.find((x) => x.house === v);
-                  if (h) dropPin(h.lat, h.lng);
+                  if (h) mapRef.current?.setView([h.lat, h.lng], 18);
                 }}
               >
                 {obj.houses.map((h) => (
                   <option key={h.house} value={h.house}>
                     {h.house}
-                    {h.street && h.street !== obj.street ? ` · ${h.street}` : ""}
                   </option>
                 ))}
               </select>
             </label>
           ) : null}
           <p className={cn("mt-3 text-sm font-medium", obj.inTerritory ? "text-[#3f8f6b]" : "text-[#c45c4a]")}>
-            {obj.inTerritory
-              ? obj.territoryName
-                ? `Im Gebiet · ${obj.territoryName}`
-                : "Kein festes Teamgebiet — frei"
-              : `Außerhalb des Teamgebiets${obj.territoryName ? ` (${obj.territoryName})` : ""}`}
+            {obj.inTerritory ? "Im Teamgebiet" : "Außerhalb des Teamgebiets"}
+            {pack?.name ? ` · ${pack.name}` : ""}
           </p>
-          {obj.customers.length ? (
-            <p className="mt-1 text-xs text-[#666]">
-              Bekannte Kunden: {obj.customers.map((c) => c.name).join(", ")}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-[#666]">Kein E1-Kunde an dieser Adresse.</p>
-          )}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -195,7 +276,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
                     lng: selectedHouse?.lng ?? obj.lng,
                   },
                 });
-                toast.success("Nicht angetroffen — Nachlauf");
+                toast.success("Nicht angetroffen");
               }}
             >
               Nicht angetroffen
@@ -212,6 +293,10 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             </Button>
           </div>
         </div>
+      ) : pack && pack.walk.count ? (
+        <p className="absolute bottom-3 left-3 z-[1200] rounded-full bg-[#0b0d12]/90 px-3 py-2 text-xs text-gold">
+          {pack.walk.count} Häuser · {(pack.walk.meters / 1000).toFixed(1)} km Laufweg
+        </p>
       ) : null}
     </div>
   );
@@ -220,11 +305,23 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
 type LeafletNS = {
   map: (el: HTMLElement, o: unknown) => {
     setView: (ll: [number, number], z: number) => void;
+    fitBounds: (b: unknown, o?: unknown) => void;
     on: (ev: string, fn: (e: { latlng: { lat: number; lng: number } }) => void) => void;
     remove: () => void;
   };
   tileLayer: (u: string, o: unknown) => { addTo: (m: unknown) => void };
-  circleMarker: (ll: [number, number], o: unknown) => { addTo: (m: unknown) => void; remove: () => void };
+  polygon: (ll: [number, number][], o: unknown) => {
+    addTo: (m: unknown) => void;
+    remove: () => void;
+    getBounds: () => unknown;
+  };
+  polyline: (ll: [number, number][], o: unknown) => { addTo: (m: unknown) => void; remove: () => void };
+  circleMarker: (ll: [number, number], o: unknown) => {
+    addTo: (m: unknown) => void;
+    remove: () => void;
+    bindTooltip: (s: string, o?: unknown) => void;
+    on: (ev: string, fn: () => void) => void;
+  };
 };
 
 let leafletPromise: Promise<void> | null = null;
