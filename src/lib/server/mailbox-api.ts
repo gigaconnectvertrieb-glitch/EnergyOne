@@ -354,6 +354,35 @@ export const archiveThread = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const deleteThread = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((id: string) => id)
+  .handler(async ({ context, data: id }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const boxes = await boxesFor(db, me);
+    const [thread] = await db<{ mailbox: string }>`select mailbox from mailbox_threads where id = ${id}`;
+    if (!thread) throw new Error("Nicht gefunden.");
+    assertCanRead(me, thread.mailbox, boxes);
+    const msgs = await db<{ gmail_id: string | null }>`
+      select gmail_id from mailbox_messages where thread_id = ${id} and gmail_id is not null
+    `;
+    const mailbox = thread.mailbox;
+    await db`delete from mailbox_threads where id = ${id}`;
+    const gmailIds = msgs.map((m) => m.gmail_id).filter(Boolean) as string[];
+    const imap = gmailIds.filter((g) => g.startsWith("imap-"));
+    const api = gmailIds.filter((g) => !g.startsWith("imap-"));
+    if (api.length) {
+      const { gmailTrash } = await import("./gmail.server");
+      await Promise.allSettled(api.map((g) => gmailTrash(mailbox, g)));
+    }
+    if (imap.length) {
+      const { imapDeleteUids } = await import("./imap-gmail.server");
+      await imapDeleteUids(imap).catch(() => undefined);
+    }
+    return { ok: true };
+  });
+
 export const getMailAttachment = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((id: string) => id)

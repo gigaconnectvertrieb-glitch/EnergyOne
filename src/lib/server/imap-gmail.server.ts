@@ -130,3 +130,46 @@ export async function imapListRecent(max = 40): Promise<{
 
   return { ok: true, error: null, messages: parseImapFetch(blob), mailbox: user };
 }
+
+export async function imapDeleteUids(uids: string[]) {
+  const user = gmailSmtpUser();
+  const pass = env("GMAIL_APP_PASSWORD").replace(/\s+/g, "");
+  const clean = uids.map((u) => u.replace(/^imap-/, "")).filter((u) => /^\d+$/.test(u));
+  if (!gmailAppPasswordReady() || !clean.length) return;
+  await new Promise<void>((resolve, reject) => {
+    const socket = connect({ host: "imap.gmail.com", port: 993, servername: "imap.gmail.com" }, () => undefined);
+    let buf = "";
+    let tag = 0;
+    const next = (cmd: string) => {
+      tag += 1;
+      socket.write(`A${tag} ${cmd}\r\n`);
+    };
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("IMAP Timeout"));
+    }, 15000);
+    socket.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    socket.on("data", (chunk) => {
+      buf += chunk.toString("utf8");
+      if (buf.includes("* OK") && tag === 0) next(`LOGIN "${user}" "${pass}"`);
+      if (buf.includes(`A${tag} NO`) || buf.includes(`A${tag} BAD`)) {
+        clearTimeout(timer);
+        socket.end();
+        reject(new Error(buf.slice(-120)));
+        return;
+      }
+      if (tag === 1 && buf.includes("A1 OK")) next("SELECT INBOX");
+      if (tag === 2 && buf.includes("A2 OK")) next(`UID STORE ${clean.join(",")} +FLAGS (\\Deleted)`);
+      if (tag === 3 && buf.includes("A3 OK")) next("EXPUNGE");
+      if (tag === 4 && buf.includes("A4 OK")) {
+        clearTimeout(timer);
+        socket.write("A99 LOGOUT\r\n");
+        socket.end();
+        resolve();
+      }
+    });
+  });
+}

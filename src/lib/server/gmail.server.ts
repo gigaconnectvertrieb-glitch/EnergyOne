@@ -251,6 +251,11 @@ export async function gmailMarkRead(mailbox: string, gmailId: string, unread: bo
   });
 }
 
+export async function gmailTrash(mailbox: string, gmailId: string) {
+  if (!gmailId || gmailId.startsWith("imap-")) return;
+  await gmailApi(mailbox, `/messages/${gmailId}/trash`, { method: "POST" });
+}
+
 export async function gmailGetAttachment(mailbox: string, messageId: string, attachmentId: string) {
   const res = await gmailApi(mailbox, `/messages/${messageId}/attachments/${attachmentId}`);
   if (!res.ok) throw new Error("Anhang nicht geladen");

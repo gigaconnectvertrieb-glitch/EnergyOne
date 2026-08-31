@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   archiveThread,
+  deleteThread,
   forwardMail,
   getMailAttachment,
   getThread,
@@ -102,6 +103,19 @@ function Page() {
           }}
         >
           Archivieren
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-danger"
+          onClick={async () => {
+            if (!window.confirm("Diese Unterhaltung löschen?")) return;
+            await deleteThread({ data: id });
+            toast.success("Gelöscht");
+            window.history.back();
+          }}
+        >
+          Löschen
         </Button>
       </div>
 

@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { listMailboxes, listThreads, syncMailbox } from "@/lib/server/mailbox-api";
+import { deleteThread, listMailboxes, listThreads, syncMailbox } from "@/lib/server/mailbox-api";
 import { FolderTabs, MailboxSwitch, MatchChip } from "@/components/mailbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { deDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 import type { MailFolder } from "@/lib/mailbox";
-import { Paperclip, PenLine, RefreshCw } from "lucide-react";
+import { Paperclip, PenLine, RefreshCw, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/portal/postfach/")({ component: Page });
 
@@ -128,11 +128,11 @@ function Page() {
           </p>
         ) : (
           data.threads.map((t) => (
+            <div key={t.id} className="flex items-stretch gap-2">
             <Link
-              key={t.id}
               to="/portal/postfach/$id"
               params={{ id: t.id }}
-              className="rounded-2xl bg-surface p-4 gold-hairline"
+              className="min-w-0 flex-1 rounded-2xl bg-surface p-4 gold-hairline"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className={`pr-4 ${t.unread_count ? "font-medium text-ink" : "text-ink"}`}>{t.subject}</p>
@@ -160,6 +160,25 @@ function Page() {
                 />
               </div>
             </Link>
+            <button
+              type="button"
+              className="grid w-11 shrink-0 place-items-center rounded-2xl gold-hairline text-danger"
+              aria-label="Löschen"
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!window.confirm("Diese Mail löschen?")) return;
+                try {
+                  await deleteThread({ data: t.id });
+                  toast.success("Gelöscht");
+                  setData(await listThreads({ data: { mailbox, folder, q } }));
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Löschen fehlgeschlagen");
+                }
+              }}
+            >
+              <Trash2 className="size-4" />
+            </button>
+            </div>
           ))
         )}
       </div>
