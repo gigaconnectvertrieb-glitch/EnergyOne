@@ -21,7 +21,7 @@ function Page() {
         <Wordmark />
         <h1 className="mt-8 font-display text-4xl">Kundenportal</h1>
         <p className="mt-2 text-sm text-muted">
-          Phase 2 – Vertrag einsehen. Aktiv, sobald Super-Admin das Feature-Flag setzt.
+          Vertrag einsehen mit Nachname, PLZ und Auftragsnummer.
         </p>
         <form
           className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline"

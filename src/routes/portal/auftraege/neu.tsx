@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input, Select, CheckboxRow } from "@/components/ui/field";
+import { SignaturePad } from "@/components/signature-pad";
 import { bootstrapMe, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
 import { toast } from "sonner";
 import { eur } from "@/lib/utils";
@@ -28,12 +29,19 @@ function Capture() {
   const [busy, setBusy] = useState(false);
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
   const [forStaff, setForStaff] = useState("");
+  const [full, setFull] = useState(false);
+  const [iban, setIban] = useState("");
+  const [bankOwner, setBankOwner] = useState("");
+  const [sepa, setSepa] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
+  const [sign, setSign] = useState("");
 
   useEffect(() => {
     bootstrapMe()
       .then((m) => {
         setStufe(m.profile.commission_stufe || 1);
         setForStaff(m.profile.user_id);
+        setFull(Boolean(m.flags.full_contract || m.flags.phase2_own_tariffs));
       })
       .catch(() => setStufe(1));
     listBookableStaff()
@@ -83,6 +91,10 @@ function Capture() {
       toast.error("Verbrauch in kWh fehlt — für die Provision.");
       return;
     }
+    if (full && (!sepa || !privacy)) {
+      toast.error("SEPA und Datenschutz müssen bestätigt sein.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await createContract({
@@ -96,8 +108,14 @@ function Capture() {
           city,
           tariffId,
           consumptionKwh: Number(kwh),
-          inNewsales: true,
           forStaffId: forStaff || undefined,
+          inNewsales: !full,
+          fullFlow: full,
+          iban: full ? iban : undefined,
+          bankOwner: full ? bankOwner : undefined,
+          sepaConfirmed: full ? sepa : undefined,
+          privacyConfirmed: full ? privacy : undefined,
+          signatureData: full ? sign : undefined,
         },
       });
       toast.success(`In der Datenbank · ${eur(res.amount)}`);
@@ -223,8 +241,31 @@ function Capture() {
         )}
         {quote?.ok ? <p className="mt-3 font-display text-4xl text-gold">{eur(quote.amount)}</p> : null}
         {quote && !quote.ok ? <p className="mt-3 text-sm text-danger">{quote.reason}</p> : null}
-        <Button className="mt-4 w-full" disabled={busy || !quote?.ok} onClick={() => void save()}>
-          {busy ? "Speichert…" : "In die Datenbank"}
+      </div>
+
+      {full ? (
+        <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Voller Vertrag · SEPA · AGB</p>
+          <Field label="IBAN">
+            <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" />
+          </Field>
+          <Field label="Kontoinhaber">
+            <Input value={bankOwner} onChange={(e) => setBankOwner(e.target.value)} />
+          </Field>
+          <CheckboxRow checked={sepa} onChange={setSepa}>
+            SEPA-Lastschriftmandat erteilt
+          </CheckboxRow>
+          <CheckboxRow checked={privacy} onChange={setPrivacy}>
+            Datenschutz / AGB akzeptiert
+          </CheckboxRow>
+          <p className="text-sm text-muted">Unterschrift am Tablet</p>
+          <SignaturePad value={sign} onChange={setSign} />
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
+        <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save()}>
+          {busy ? "Speichert…" : full ? "Vertrag speichern" : "In die Datenbank"}
         </Button>
       </div>
     </div>

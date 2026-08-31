@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listRegions, listUsers, updateUser } from "@/lib/server/api";
+import { listRegions, listStaffFlags, listUsers, setStaffFlag, updateUser } from "@/lib/server/api";
 import { createStaff } from "@/lib/server/staff-auth";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/e1";
+import { STAFF_UNLOCKS } from "@/lib/features";
 import { MAIL_DOMAIN, workspaceLocalPart } from "@/lib/mail";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -103,6 +104,9 @@ function Page() {
                 {u.invite_code ? (
                   <p className="mt-1 font-mono text-sm text-gold">Schlüssel {u.invite_code} — noch nicht registriert</p>
                 ) : null}
+                {u.role !== "super_admin" ? <StaffUnlocks userId={u.user_id} /> : (
+                  <p className="mt-2 text-xs text-gold">Geschäftsführung: alle Module frei</p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Select
@@ -163,6 +167,36 @@ function Page() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function StaffUnlocks({ userId }: { userId: string }) {
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    listStaffFlags({ data: { userId } })
+      .then(setFlags)
+      .catch(() => setFlags({}));
+  }, [userId]);
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {STAFF_UNLOCKS.map((u) => {
+        const on = Boolean(flags[u.key]);
+        return (
+          <button
+            key={u.key}
+            type="button"
+            className={`rounded-full px-3 py-1 text-xs ${on ? "bg-gold text-bg" : "bg-elevated text-muted"}`}
+            onClick={async () => {
+              await setStaffFlag({ data: { userId, key: u.key, enabled: !on } });
+              setFlags((f) => ({ ...f, [u.key]: !on }));
+              toast.success(on ? `${u.label} aus` : `${u.label} an`);
+            }}
+          >
+            {u.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

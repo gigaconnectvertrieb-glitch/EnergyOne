@@ -63,6 +63,12 @@ export type ContractDraft = {
   newsalesRef?: string;
   inNewsales?: boolean;
   forStaffId?: string;
+  iban?: string;
+  bankOwner?: string;
+  sepaConfirmed?: boolean;
+  privacyConfirmed?: boolean;
+  signatureData?: string;
+  fullFlow?: boolean;
 };
 
 function monthStart() {
@@ -125,7 +131,7 @@ export const bootstrapMe = createServerFn({ method: "POST" }).middleware([authMi
     }
   }
   await db`update profiles set last_login = now() where user_id = ${context.userId}`;
-  const flags = await flagsMap(db);
+  const flags = await flagsMap(db, profile);
   const unread = await db`
       select count(*)::int as c from notifications where user_id = ${context.userId} and read = false
     `;
@@ -158,9 +164,10 @@ export const bootstrapMe = createServerFn({ method: "POST" }).middleware([authMi
 });
 export const getMe = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
   const db = await sql();
+  const profile = await loadProfile(db, context.userId);
   return {
-    profile: await loadProfile(db, context.userId),
-    flags: await flagsMap(db)
+    profile,
+    flags: await flagsMap(db, profile)
   };
 });
 export const updateMyProfile = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ context, data }) => {
@@ -213,8 +220,11 @@ export const checkTotp = createServerFn({ method: "POST" }).middleware([authMidd
 export const listTariffs = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { q?: string; provider?: string; type?: string } = {}) => d)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const db = await sql();
+    const me = await loadProfile(db, context.userId);
+    const flags = await flagsMap(db, me);
+    const allowE1 = Boolean(flags.phase2_own_tariffs);
     const q = data.q?.trim().toLowerCase() || "";
     const provider = data.provider?.trim() || "";
     const type = data.type?.trim() || "";
@@ -222,6 +232,7 @@ export const listTariffs = createServerFn({ method: "POST" })
       select id, provider, name, external_id, type
       from tariffs
       where active = true
+        and (${allowE1} or provider <> 'E1')
         and (${provider} = '' or provider = ${provider})
         and (${type} = '' or type = ${type})
         and (
@@ -234,7 +245,9 @@ export const listTariffs = createServerFn({ method: "POST" })
       limit 80
     `;
     const providers = await db<{ provider: string }>`
-      select distinct provider from tariffs where active = true order by provider
+      select distinct provider from tariffs
+      where active = true and (${allowE1} or provider <> 'E1')
+      order by provider
     `;
     return {
       providers: providers.map((p) => asStr(p.provider)),
@@ -325,7 +338,12 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   if (!data.street?.trim() || !data.houseNumber?.trim() || !data.zip?.trim() || !data.city?.trim()) {
     throw new Error("Adresse ist Pflicht — so füllen wir die Kundendatenbank.");
   }
-  if (data.inNewsales === false) throw new Error("Bitte den Vertrag zuerst in New Sales eingeben, danach hier nachpflegen.");
+  if (data.inNewsales === false) {
+    const fl = await flagsMap(db, me);
+    if (!fl.full_contract && !fl.phase2_own_tariffs) {
+      throw new Error("Bitte den Vertrag zuerst in New Sales eingeben, danach hier nachpflegen.");
+    }
+  }
   if (!data.tariffId) throw new Error("Tarif ist Pflicht.");
   const kwh = Number(data.consumptionKwh) || 0;
   if (kwh <= 0) throw new Error("Jahresverbrauch fehlt.");
@@ -383,27 +401,34 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
         ${data.houseNumber.trim()},
         ${data.zip.trim()},
         ${data.city.trim()},
-        ${JSON.stringify({ capture: "newsales_then_portal", at: new Date().toISOString() })}::jsonb
+        ${JSON.stringify({
+          capture: data.fullFlow ? "e1_full" : "newsales_then_portal",
+          at: new Date().toISOString(),
+        })}::jsonb
       )
     `;
   const id = nid();
   const ref = data.newsalesRef?.trim() || null;
+  const full = Boolean(data.fullFlow);
   await db`
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh, meter_number,
         previous_provider, start_date, commission_rate, commission_amount, commission_stufe,
-        sepa_confirmed, privacy_confirmed, signature_confirmed, notes, newsales_ref, source
+        sepa_confirmed, privacy_confirmed, signature_confirmed, notes, newsales_ref, source,
+        bank_iban, bank_owner
       ) values (
-        ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, 'uebermittelt',
+        ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, ${full ? "erfasst" : "uebermittelt"},
         ${kwh}, ${data.meterNumber?.trim() || null}, ${data.previousProvider?.trim() || null},
-        ${data.startDate || null}, ${amount}, ${amount}, ${stufe}, false, false, false,
-        ${data.notes?.trim() || null}, ${ref}, 'newsales_manual'
+        ${data.startDate || null}, ${amount}, ${amount}, ${stufe},
+        ${Boolean(data.sepaConfirmed)}, ${Boolean(data.privacyConfirmed)}, ${Boolean(data.signatureData)},
+        ${data.notes?.trim() || null}, ${ref}, ${full ? "e1_direct" : "newsales_manual"},
+        ${data.iban?.trim() || null}, ${data.bankOwner?.trim() || null}
       )
     `;
   await db`
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (
-        ${nid()}, ${id}, null, 'uebermittelt', ${context.userId},
+        ${nid()}, ${id}, null, ${full ? "erfasst" : "uebermittelt"}, ${context.userId},
         ${`In New Sales · gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · ${amount} €${ref ? ` · NS ${ref}` : ""}`}
       )
     `;
@@ -639,7 +664,7 @@ export const changeStatus = createServerFn({ method: "POST" }).middleware([authM
           insert into commissions (id, contract_id, user_id, amount, type, status)
           values (${nid()}, ${data.id}, ${asStr(row.user_id)}, ${amount}, 'abschluss', 'offen')
         `;
-      if ((await flagsMap(db)).structure_commissions) {
+      if ((await flagsMap(db, me)).structure_commissions) {
         const [advisor] = await db`
             select supervisor_id from profiles where user_id = ${asStr(row.user_id)}
           `;
@@ -1048,6 +1073,41 @@ export const listBookableStaff = createServerFn({ method: "GET" }).middleware([a
     name: `${r.first_name} ${r.last_name}`.trim(),
   }));
 });
+export const listStaffFlags = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { userId: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage")) throw new Error("Keine Berechtigung.");
+    const rows = await db<{ key: string; enabled: boolean }>`
+      select key, enabled from profile_flags where user_id = ${data.userId}
+    `;
+    const map: Record<string, boolean> = {};
+    for (const r of rows) map[r.key] = Boolean(r.enabled);
+    return map;
+  });
+export const setStaffFlag = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { userId: string; key: string; enabled: boolean }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage")) throw new Error("Keine Berechtigung.");
+    await db`
+      insert into profile_flags (user_id, key, enabled, updated_at)
+      values (${data.userId}, ${data.key}, ${data.enabled}, now())
+      on conflict (user_id, key) do update set enabled = ${data.enabled}, updated_at = now()
+    `;
+    await audit(db, {
+      userId: context.userId,
+      action: "staff.flag",
+      entityType: "profile",
+      entityId: data.userId,
+      newValues: { key: data.key, enabled: data.enabled },
+    });
+    return { ok: true };
+  });
 export const updateUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ context, data }) => {
   const db = await sql();
   const me = await requireProfile(db, context.userId);

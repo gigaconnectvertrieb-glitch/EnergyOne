@@ -1,5 +1,6 @@
 import { getSql, type Sql } from "@/lib/db";
 import { can, type Profile, type Role, ROLES } from "@/lib/e1";
+import { allFlagsOn, DEFAULT_STAFF_FLAGS } from "@/lib/features";
 import { asStr, nid, num } from "@/lib/utils";
 
 export async function sql() {
@@ -109,11 +110,18 @@ export async function notify(
   `;
 }
 
-export async function flagsMap(db: Sql) {
+export async function flagsMap(db: Sql, profile?: { user_id: string; role: Role } | null) {
   const rows = await db<{ key: string; enabled: boolean }>`select key, enabled from feature_flags`;
-  const map: Record<string, boolean> = {};
-  for (const r of rows) map[r.key] = Boolean(r.enabled);
-  return map;
+  const global: Record<string, boolean> = { ...DEFAULT_STAFF_FLAGS };
+  for (const r of rows) global[r.key] = Boolean(r.enabled);
+  if (!profile) return global;
+  if (profile.role === "super_admin") return allFlagsOn();
+  const personal = await db<{ key: string; enabled: boolean }>`
+    select key, enabled from profile_flags where user_id = ${profile.user_id}
+  `;
+  const out: Record<string, boolean> = { ...DEFAULT_STAFF_FLAGS };
+  for (const r of personal) out[r.key] = Boolean(r.enabled);
+  return out;
 }
 
 export function splitName(name: string) {
