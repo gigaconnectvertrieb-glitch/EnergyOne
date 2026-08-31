@@ -697,21 +697,18 @@ export const changeStatus = createServerFn({ method: "POST" }).middleware([authM
   if (data.to === "storniert") {
     await db`
         update commissions set status = 'storniert'
-        where contract_id = ${data.id} and type in ('abschluss','struktur','folge','bestand') and status <> 'storniert'
+        where contract_id = ${data.id} and type in ('abschluss','struktur','folge','bestand') and status in ('offen','freigegeben')
       `;
-    const [prod] = await db`
-        select coalesce(p.storno_monate, 12) as storno_monate
-        from contracts c left join products p on p.id = c.product_id
-        where c.id = ${data.id}
-      `;
-    const months = num(prod?.storno_monate) || 12;
-    const created = new Date(asStr(row.created_at));
-    const cutoff = /* @__PURE__ */ new Date();
-    cutoff.setMonth(cutoff.getMonth() - months);
-    if (created >= cutoff) await db`
+    const [win] = await db<{ value: string }>`select value from settings where key = 'storno_window_days'`;
+    const days = Math.max(1, Number(win?.value) || 14);
+    const created = new Date(asStr(row.created_at)).getTime();
+    const within = Number.isFinite(created) && Date.now() - created <= days * 86400000;
+    if (within) {
+      await db`
           insert into commissions (id, contract_id, user_id, amount, type, status, note)
-          values (${nid()}, ${data.id}, ${asStr(row.user_id)}, ${-Math.abs(num(row.commission_amount))}, 'storno', 'storniert', ${data.cancelReason || "Storno"})
+          values (${nid()}, ${data.id}, ${asStr(row.user_id)}, ${-Math.abs(num(row.commission_amount))}, 'storno', 'storniert', ${data.cancelReason || "Widerruf 14 Tage"})
         `;
+    }
   }
   await notify(db, {
     userId: asStr(row.user_id),
@@ -1823,7 +1820,7 @@ export const getOpsSettings = createServerFn({ method: "GET" })
     if (!can(me.role, "settings.manage")) throw new Error("Kein Zugriff");
     const rows = await db<{ key: string; value: string }>`
       select key, value from settings
-      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate')
+      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate','storno_window_days')
     `;
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
@@ -1832,12 +1829,13 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       newsales_handover_to: map.newsales_handover_to || "business@e1direktvertrieb.de",
       quality_warn_rate: map.quality_warn_rate || "0.25",
       quality_block_rate: map.quality_block_rate || "0.40",
+      storno_window_days: map.storno_window_days || "14",
     };
   });
 
 export const saveOpsSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string }) => d)
+  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string; storno_window_days?: string }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);

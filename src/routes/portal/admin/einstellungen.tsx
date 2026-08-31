@@ -76,6 +76,9 @@ function Page() {
           <Field label="New Sales" hint="Kein Versand. Verträge entstehen dort, Teamleiter prüft dort.">
             <Input value="Verträge in New Sales · Portal nur Kurz-Eintrag" readOnly />
           </Field>
+          <Field label="Widerruf / Storno-Rückrechnung">
+            <Input value={`${ops.storno_window_days || "14"} Tage`} readOnly />
+          </Field>
           <Field label="Storno-Warnung ab Quote">
             <Input
               value={ops.quality_warn_rate}
