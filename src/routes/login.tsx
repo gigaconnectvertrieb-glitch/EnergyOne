@@ -42,11 +42,11 @@ function Login() {
     setBusy(true);
     try {
       if (!setup) {
-        const started = await startInvite({ data: { code: invite } });
+        const started = await startInvite({ data: { staffId, code: invite } });
         setSetup(started);
-        toast.success("Schlüssel passt. Authenticator einrichten.");
+        toast.success("Passt. Jetzt Google Authenticator einrichten.");
       } else {
-        await finishInvite({ data: { code: invite, totp } });
+        await finishInvite({ data: { staffId, code: invite, totp } });
         await goPortal();
       }
     } catch (err) {
@@ -137,7 +137,16 @@ function Login() {
 
           {mode === "reg" ? (
             <form className="mt-5 grid gap-3" onSubmit={onInvite}>
-              <Field label="5-stelliger Schlüssel von der Leitung">
+              <Field label="Mitarbeiter-ID">
+                <Input
+                  autoComplete="username"
+                  value={staffId}
+                  onChange={(e) => setStaffId(e.target.value)}
+                  required
+                  disabled={Boolean(setup)}
+                />
+              </Field>
+              <Field label="5-stelliger Code aus dem Admin-Portal">
                 <Input
                   inputMode="numeric"
                   value={invite}
@@ -151,7 +160,7 @@ function Login() {
               {setup ? (
                 <>
                   <p className="text-sm text-muted">
-                    Hallo {setup.firstName}. In der Google-Authenticator-App: Konto hinzufügen →
+                    Hallo {setup.firstName}. Das ist euer Key für Google Authenticator — Konto hinzufügen →
                     Schlüssel eingeben.
                   </p>
                   <p className="break-all rounded-2xl bg-elevated px-3 py-3 font-mono text-sm tracking-[0.18em] text-gold">

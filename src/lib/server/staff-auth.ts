@@ -119,10 +119,12 @@ export const loginMaster = createServerFn({ method: "POST" })
   });
 
 export const startInvite = createServerFn({ method: "POST" })
-  .validator((d: { code: string }) => d)
+  .validator((d: { staffId: string; code: string }) => d)
   .handler(async ({ data }) => {
+    const staffId = staffIdOf(data.staffId);
     const code = digitsOnly(data.code, 5);
-    if (code.length !== 5) throw new Error("Der Mitarbeiter-Schlüssel hat 5 Ziffern.");
+    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
+    if (code.length !== 5) throw new Error("Der Registrierungs-Code hat 5 Ziffern.");
     const db = await sql();
     const [row] = await db<{
       user_id: string;
@@ -130,21 +132,26 @@ export const startInvite = createServerFn({ method: "POST" })
       last_name: string;
       totp_enabled: boolean;
       email: string | null;
+      staff_id: string | null;
     }>`
-      select p.user_id, p.first_name, p.last_name, p.totp_enabled, u.email
+      select p.user_id, p.first_name, p.last_name, p.totp_enabled, p.staff_id, u.email
       from profiles p
       left join "user" u on u.id = p.user_id
       where p.invite_code = ${code}
     `;
-    if (!row) throw new Error("Schlüssel unbekannt. Bitte bei der Leitung nachfragen.");
-    if (row.totp_enabled) throw new Error("Dieser Schlüssel ist schon benutzt. Bitte anmelden.");
+    if (!row) throw new Error("Code unbekannt. Bitte bei der Leitung nachfragen.");
+    if (staffIdOf(row.staff_id || "") !== staffId) {
+      throw new Error("Mitarbeiter-ID und Code passen nicht zusammen.");
+    }
+    if (row.totp_enabled) throw new Error("Schon registriert. Bitte anmelden.");
     const secret = generateTotpSecret();
     await db`update profiles set totp_secret = ${secret} where user_id = ${row.user_id}`;
-    const email = row.email || `${row.user_id}@e1direktvertrieb.de`;
-    const uri = `otpauth://totp/E1%20Direktvertrieb:${encodeURIComponent(email)}?secret=${secret}&issuer=E1%20Direktvertrieb&digits=6&period=30`;
+    const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
+    const uri = `otpauth://totp/E1%20Direktvertrieb:${encodeURIComponent(staffId)}?secret=${secret}&issuer=E1%20Direktvertrieb&digits=6&period=30`;
     return {
       firstName: row.first_name,
       lastName: row.last_name,
+      staffId,
       email,
       secret,
       uri,
@@ -152,8 +159,9 @@ export const startInvite = createServerFn({ method: "POST" })
   });
 
 export const finishInvite = createServerFn({ method: "POST" })
-  .validator((d: { code: string; totp: string }) => d)
+  .validator((d: { staffId: string; code: string; totp: string }) => d)
   .handler(async ({ data }) => {
+    const staffId = staffIdOf(data.staffId);
     const code = digitsOnly(data.code, 5);
     const totp = digitsOnly(data.totp, 6);
     const db = await sql();
@@ -162,20 +170,24 @@ export const finishInvite = createServerFn({ method: "POST" })
       totp_secret: string | null;
       totp_enabled: boolean;
       email: string | null;
+      staff_id: string | null;
     }>`
-      select p.user_id, p.totp_secret, p.totp_enabled, u.email
+      select p.user_id, p.totp_secret, p.totp_enabled, p.staff_id, u.email
       from profiles p
       left join "user" u on u.id = p.user_id
       where p.invite_code = ${code}
     `;
-    if (!row?.totp_secret) throw new Error("Bitte zuerst den Schlüssel prüfen.");
+    if (!row?.totp_secret) throw new Error("Bitte zuerst ID und Code prüfen.");
+    if (staffIdOf(row.staff_id || "") !== staffId) {
+      throw new Error("Mitarbeiter-ID und Code passen nicht zusammen.");
+    }
     if (!verifyTotp(row.totp_secret, totp)) throw new Error("Authenticator-Code ungültig.");
     await db`
       update profiles
       set totp_enabled = true, totp_enrolled_at = now(), status = 'active', onboarding_status = 'aktiv'
       where user_id = ${row.user_id}
     `;
-    const email = row.email || `${row.user_id}@e1direktvertrieb.de`;
+    const email = row.email || `${staffId}@intern.e1direktvertrieb.de`;
     return issueSession(email, row.user_id);
   });
 
