@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgbRouteImport } from './routes/agb'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as BeratungRouteImport } from './routes/beratung'
 import { Route as DatenschutzRouteImport } from './routes/datenschutz'
@@ -33,6 +34,7 @@ import { Route as PortalProvisionenRouteImport } from './routes/portal/provision
 import { Route as PortalTeamRouteImport } from './routes/portal/team'
 import { Route as PortalWissenRouteImport } from './routes/portal/wissen'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiDocusignConnectRouteImport } from './routes/api/docusign/connect'
 import { Route as PortalAdminAuditRouteImport } from './routes/portal/admin/audit'
 import { Route as PortalAdminBenutzerRouteImport } from './routes/portal/admin/benutzer'
 import { Route as PortalAdminEinstellungenRouteImport } from './routes/portal/admin/einstellungen'
@@ -45,6 +47,8 @@ import { Route as PortalAdminProdukteRouteImport } from './routes/portal/admin/p
 import { Route as PortalAdminQualitaetRouteImport } from './routes/portal/admin/qualitaet'
 import { Route as PortalAdminRegionenRouteImport } from './routes/portal/admin/regionen'
 import { Route as PortalAdminReportsRouteImport } from './routes/portal/admin/reports'
+import { Route as PortalAdminSignaturRouteImport } from './routes/portal/admin/signatur'
+import { Route as PortalAdminVertraegeRouteImport } from './routes/portal/admin/vertraege'
 import { Route as PortalAuftraegeIndexRouteImport } from './routes/portal/auftraege/index'
 import { Route as PortalAuftraegeIdRouteImport } from './routes/portal/auftraege/$id'
 import { Route as PortalAuftraegeNeuRouteImport } from './routes/portal/auftraege/neu'
@@ -59,6 +63,11 @@ import { Route as PortalPostfachNeuRouteImport } from './routes/portal/postfach/
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgbRoute = AgbRouteImport.update({
+  id: '/agb',
+  path: '/agb',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -177,6 +186,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDocusignConnectRoute = ApiDocusignConnectRouteImport.update({
+  id: '/api/docusign/connect',
+  path: '/api/docusign/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalAdminAuditRoute = PortalAdminAuditRouteImport.update({
   id: '/admin/audit',
   path: '/admin/audit',
@@ -238,6 +252,16 @@ const PortalAdminReportsRoute = PortalAdminReportsRouteImport.update({
   path: '/admin/reports',
   getParentRoute: () => PortalRoute,
 } as any)
+const PortalAdminSignaturRoute = PortalAdminSignaturRouteImport.update({
+  id: '/admin/signatur',
+  path: '/admin/signatur',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalAdminVertraegeRoute = PortalAdminVertraegeRouteImport.update({
+  id: '/admin/vertraege',
+  path: '/admin/vertraege',
+  getParentRoute: () => PortalRoute,
+} as any)
 const PortalAuftraegeIndexRoute = PortalAuftraegeIndexRouteImport.update({
   id: '/auftraege/',
   path: '/auftraege/',
@@ -291,6 +315,7 @@ const PortalPostfachNeuRoute = PortalPostfachNeuRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agb': typeof AgbRoute
   '/app': typeof AppRouteWithChildren
   '/beratung': typeof BeratungRoute
   '/datenschutz': typeof DatenschutzRoute
@@ -314,6 +339,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/portal/': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/docusign/connect': typeof ApiDocusignConnectRoute
   '/portal/admin/audit': typeof PortalAdminAuditRoute
   '/portal/admin/benutzer': typeof PortalAdminBenutzerRoute
   '/portal/admin/einstellungen': typeof PortalAdminEinstellungenRoute
@@ -326,6 +352,8 @@ export interface FileRoutesByFullPath {
   '/portal/admin/qualitaet': typeof PortalAdminQualitaetRoute
   '/portal/admin/regionen': typeof PortalAdminRegionenRoute
   '/portal/admin/reports': typeof PortalAdminReportsRoute
+  '/portal/admin/signatur': typeof PortalAdminSignaturRoute
+  '/portal/admin/vertraege': typeof PortalAdminVertraegeRoute
   '/portal/auftraege/$id': typeof PortalAuftraegeIdRoute
   '/portal/auftraege/neu': typeof PortalAuftraegeNeuRoute
   '/portal/feld/woche': typeof PortalFeldWocheRoute
@@ -339,6 +367,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agb': typeof AgbRoute
   '/beratung': typeof BeratungRoute
   '/datenschutz': typeof DatenschutzRoute
   '/energie': typeof EnergieRoute
@@ -360,6 +389,7 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/portal': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/docusign/connect': typeof ApiDocusignConnectRoute
   '/portal/admin/audit': typeof PortalAdminAuditRoute
   '/portal/admin/benutzer': typeof PortalAdminBenutzerRoute
   '/portal/admin/einstellungen': typeof PortalAdminEinstellungenRoute
@@ -372,6 +402,8 @@ export interface FileRoutesByTo {
   '/portal/admin/qualitaet': typeof PortalAdminQualitaetRoute
   '/portal/admin/regionen': typeof PortalAdminRegionenRoute
   '/portal/admin/reports': typeof PortalAdminReportsRoute
+  '/portal/admin/signatur': typeof PortalAdminSignaturRoute
+  '/portal/admin/vertraege': typeof PortalAdminVertraegeRoute
   '/portal/auftraege/$id': typeof PortalAuftraegeIdRoute
   '/portal/auftraege/neu': typeof PortalAuftraegeNeuRoute
   '/portal/feld/woche': typeof PortalFeldWocheRoute
@@ -386,6 +418,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agb': typeof AgbRoute
   '/app': typeof AppRouteWithChildren
   '/beratung': typeof BeratungRoute
   '/datenschutz': typeof DatenschutzRoute
@@ -409,6 +442,7 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/portal/': typeof PortalIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/docusign/connect': typeof ApiDocusignConnectRoute
   '/portal/admin/audit': typeof PortalAdminAuditRoute
   '/portal/admin/benutzer': typeof PortalAdminBenutzerRoute
   '/portal/admin/einstellungen': typeof PortalAdminEinstellungenRoute
@@ -421,6 +455,8 @@ export interface FileRoutesById {
   '/portal/admin/qualitaet': typeof PortalAdminQualitaetRoute
   '/portal/admin/regionen': typeof PortalAdminRegionenRoute
   '/portal/admin/reports': typeof PortalAdminReportsRoute
+  '/portal/admin/signatur': typeof PortalAdminSignaturRoute
+  '/portal/admin/vertraege': typeof PortalAdminVertraegeRoute
   '/portal/auftraege/$id': typeof PortalAuftraegeIdRoute
   '/portal/auftraege/neu': typeof PortalAuftraegeNeuRoute
   '/portal/feld/woche': typeof PortalFeldWocheRoute
@@ -436,6 +472,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agb'
     | '/app'
     | '/beratung'
     | '/datenschutz'
@@ -459,6 +496,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/portal/'
     | '/api/auth/$'
+    | '/api/docusign/connect'
     | '/portal/admin/audit'
     | '/portal/admin/benutzer'
     | '/portal/admin/einstellungen'
@@ -471,6 +509,8 @@ export interface FileRouteTypes {
     | '/portal/admin/qualitaet'
     | '/portal/admin/regionen'
     | '/portal/admin/reports'
+    | '/portal/admin/signatur'
+    | '/portal/admin/vertraege'
     | '/portal/auftraege/$id'
     | '/portal/auftraege/neu'
     | '/portal/feld/woche'
@@ -484,6 +524,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agb'
     | '/beratung'
     | '/datenschutz'
     | '/energie'
@@ -505,6 +546,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/portal'
     | '/api/auth/$'
+    | '/api/docusign/connect'
     | '/portal/admin/audit'
     | '/portal/admin/benutzer'
     | '/portal/admin/einstellungen'
@@ -517,6 +559,8 @@ export interface FileRouteTypes {
     | '/portal/admin/qualitaet'
     | '/portal/admin/regionen'
     | '/portal/admin/reports'
+    | '/portal/admin/signatur'
+    | '/portal/admin/vertraege'
     | '/portal/auftraege/$id'
     | '/portal/auftraege/neu'
     | '/portal/feld/woche'
@@ -530,6 +574,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agb'
     | '/app'
     | '/beratung'
     | '/datenschutz'
@@ -553,6 +598,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/portal/'
     | '/api/auth/$'
+    | '/api/docusign/connect'
     | '/portal/admin/audit'
     | '/portal/admin/benutzer'
     | '/portal/admin/einstellungen'
@@ -565,6 +611,8 @@ export interface FileRouteTypes {
     | '/portal/admin/qualitaet'
     | '/portal/admin/regionen'
     | '/portal/admin/reports'
+    | '/portal/admin/signatur'
+    | '/portal/admin/vertraege'
     | '/portal/auftraege/$id'
     | '/portal/auftraege/neu'
     | '/portal/feld/woche'
@@ -579,6 +627,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgbRoute: typeof AgbRoute
   AppRoute: typeof AppRouteWithChildren
   BeratungRoute: typeof BeratungRoute
   DatenschutzRoute: typeof DatenschutzRoute
@@ -591,6 +640,7 @@ export interface RootRouteChildren {
   UeberUnsRoute: typeof UeberUnsRoute
   VorschauRoute: typeof VorschauRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiDocusignConnectRoute: typeof ApiDocusignConnectRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -600,6 +650,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agb': {
+      id: '/agb'
+      path: '/agb'
+      fullPath: '/agb'
+      preLoaderRoute: typeof AgbRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -763,6 +820,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/docusign/connect': {
+      id: '/api/docusign/connect'
+      path: '/api/docusign/connect'
+      fullPath: '/api/docusign/connect'
+      preLoaderRoute: typeof ApiDocusignConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/admin/audit': {
       id: '/portal/admin/audit'
       path: '/admin/audit'
@@ -845,6 +909,20 @@ declare module '@tanstack/react-router' {
       path: '/admin/reports'
       fullPath: '/portal/admin/reports'
       preLoaderRoute: typeof PortalAdminReportsRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/admin/signatur': {
+      id: '/portal/admin/signatur'
+      path: '/admin/signatur'
+      fullPath: '/portal/admin/signatur'
+      preLoaderRoute: typeof PortalAdminSignaturRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/admin/vertraege': {
+      id: '/portal/admin/vertraege'
+      path: '/admin/vertraege'
+      fullPath: '/portal/admin/vertraege'
+      preLoaderRoute: typeof PortalAdminVertraegeRouteImport
       parentRoute: typeof PortalRoute
     }
     '/portal/auftraege/': {
@@ -956,6 +1034,8 @@ interface PortalRouteChildren {
   PortalAdminQualitaetRoute: typeof PortalAdminQualitaetRoute
   PortalAdminRegionenRoute: typeof PortalAdminRegionenRoute
   PortalAdminReportsRoute: typeof PortalAdminReportsRoute
+  PortalAdminSignaturRoute: typeof PortalAdminSignaturRoute
+  PortalAdminVertraegeRoute: typeof PortalAdminVertraegeRoute
   PortalAuftraegeIdRoute: typeof PortalAuftraegeIdRoute
   PortalAuftraegeNeuRoute: typeof PortalAuftraegeNeuRoute
   PortalFeldWocheRoute: typeof PortalFeldWocheRoute
@@ -988,6 +1068,8 @@ const PortalRouteChildren: PortalRouteChildren = {
   PortalAdminQualitaetRoute: PortalAdminQualitaetRoute,
   PortalAdminRegionenRoute: PortalAdminRegionenRoute,
   PortalAdminReportsRoute: PortalAdminReportsRoute,
+  PortalAdminSignaturRoute: PortalAdminSignaturRoute,
+  PortalAdminVertraegeRoute: PortalAdminVertraegeRoute,
   PortalAuftraegeIdRoute: PortalAuftraegeIdRoute,
   PortalAuftraegeNeuRoute: PortalAuftraegeNeuRoute,
   PortalFeldWocheRoute: PortalFeldWocheRoute,
@@ -1005,6 +1087,7 @@ const PortalRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgbRoute: AgbRoute,
   AppRoute: AppRouteWithChildren,
   BeratungRoute: BeratungRoute,
   DatenschutzRoute: DatenschutzRoute,
@@ -1017,6 +1100,7 @@ const rootRouteChildren: RootRouteChildren = {
   UeberUnsRoute: UeberUnsRoute,
   VorschauRoute: VorschauRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiDocusignConnectRoute: ApiDocusignConnectRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

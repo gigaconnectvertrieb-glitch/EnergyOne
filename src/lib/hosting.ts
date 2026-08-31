@@ -12,6 +12,13 @@ export const RENDER_SECRET_ENV = [
 
 export const RENDER_OPTIONAL_ENV = ["GOOGLE_WORKSPACE_CUSTOMER_ID"] as const;
 
+export const DOCUSIGN_SECRET_ENV = [
+  "DOCUSIGN_INTEGRATION_KEY",
+  "DOCUSIGN_USER_ID",
+  "DOCUSIGN_ACCOUNT_ID",
+  "DOCUSIGN_PRIVATE_KEY",
+] as const;
+
 export const FORBIDDEN_ON_RENDER = [
   "mailbox_passwords",
   "smtp_server",

@@ -41,6 +41,18 @@ services:
         sync: false
       - key: GOOGLE_WORKSPACE_CUSTOMER_ID
         sync: false
+      - key: DOCUSIGN_INTEGRATION_KEY
+        sync: false
+      - key: DOCUSIGN_USER_ID
+        sync: false
+      - key: DOCUSIGN_ACCOUNT_ID
+        sync: false
+      - key: DOCUSIGN_PRIVATE_KEY
+        sync: false
+      - key: DOCUSIGN_OAUTH_BASE
+        value: https://account-d.docusign.com
+      - key: DOCUSIGN_CONNECT_SECRET
+        sync: false
     disk:
       name: e1-uploads
       mountPath: /var/data

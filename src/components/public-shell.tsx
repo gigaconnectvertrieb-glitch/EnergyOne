@@ -11,6 +11,7 @@ const NAV = [
   { to: "/ueber-uns", label: "Über uns" },
   { to: "/energie", label: "Energie" },
   { to: "/karriere", label: "Karriere" },
+  { to: "/agb", label: "AGB" },
   { to: "/vorschau", label: "Vorschau" },
 ];
 
@@ -95,6 +96,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
             <div className="flex flex-col gap-2 text-muted">
               <Link to="/impressum">Impressum</Link>
               <Link to="/datenschutz">Datenschutz</Link>
+              <Link to="/agb">AGB</Link>
               <Link to="/login">Mitarbeiter-Portal</Link>
               <Link to="/kunde">Kundenportal</Link>
             </div>

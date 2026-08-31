@@ -193,7 +193,8 @@ export const FEATURE_DEFAULTS = [
   { key: "recruiting_pipeline", enabled: true, label: "Recruiting & Onboarding", description: "Bewerberpipeline und digitale Freischaltung.", phase: "1" },
   { key: "quality_alerts", enabled: true, label: "Qualitätssteuerung", description: "Stornoquote, Warnungen und Sperren.", phase: "1" },
   { key: "knowledge_area", enabled: true, label: "Wissen & Schulung", description: "Wissensbereich und Schulungsnachweise.", phase: "1" },
-  { key: "digital_signature", enabled: true, label: "Digitale Unterschrift", description: "Unterschrift per Finger oder Stift.", phase: "1" },
+  { key: "digital_signature", enabled: true, label: "Digitale Unterschrift", description: "Vor Ort auf dem Tablet oder per E-Mail über DocuSign. Unterschriebenes PDF kommt automatisch in den Auftrag.", phase: "1" },
+  { key: "docusign_email", enabled: true, label: "Unterschrift per E-Mail", description: "DocuSign-Versand an den Kunden. Webhook spielt den Vertrag ein.", phase: "1" },
   { key: "notifications", enabled: true, label: "Benachrichtigungen", description: "In-App-Hinweise zu Status und Provision.", phase: "1" },
   { key: "field_routing", enabled: true, label: "Gebiet & Route", description: "Satellitenkarte, Gebiet-Download, nicht angetroffen, Wochenliste. PWA für iPhone und Android.", phase: "1" },
 ] as const;

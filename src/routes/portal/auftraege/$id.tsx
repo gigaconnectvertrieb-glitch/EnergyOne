@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { changeStatus, getContract, updateContractNotes } from "@/lib/server/api";
+import { listSignEnvelopes, saveTabletSignature, sendSignEmail, downloadContractPdf } from "@/lib/server/sign-api";
+import { SIGN_STATUS_LABELS, type SignStatus } from "@/lib/sign";
+import { SignaturePad } from "@/components/signature-pad";
 import { CANCEL_REASONS, STATUS_LABELS, TRANSITIONS, type ContractStatus } from "@/lib/e1";
 import { deDate, deDateTime, eur } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,6 +20,9 @@ function Page() {
   const [comment, setComment] = useState("");
   const [notes, setNotes] = useState("");
   const [meter, setMeter] = useState("");
+  const [signMail, setSignMail] = useState("");
+  const [pad, setPad] = useState("");
+  const [sign, setSign] = useState<Awaited<ReturnType<typeof listSignEnvelopes>> | null>(null);
 
   function load() {
     getContract({ data: id })
@@ -24,8 +30,12 @@ function Page() {
         setData(d);
         setNotes(d.contract.notes);
         setMeter(d.contract.meter_number);
+        setSignMail(d.contract.customer.email || "");
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Fehler"));
+    listSignEnvelopes({ data: { contractId: id } })
+      .then(setSign)
+      .catch(() => setSign(null));
   }
   useEffect(load, [id]);
   if (!data) return <div className="h-40 animate-pulse rounded-3xl bg-surface" />;
@@ -104,6 +114,87 @@ function Page() {
           E1-Datenbank voll ist. Teamleiter gleichen in New Sales ab.
         </p>
         {c.newsales_ref ? <p className="mt-3 text-sm">Vorgang {c.newsales_ref}</p> : null}
+      </div>
+
+      <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+        <h2 className="text-sm font-medium">Unterschrift</h2>
+        <p className="mt-1 text-sm text-muted">
+          {c.signature_confirmed
+            ? "Vertrag ist unterschrieben und liegt im Auftrag."
+            : "Vor Ort auf dem Tablet, oder per E-Mail rausschicken. Sobald der Kunde signiert, kommt das PDF automatisch hier rein."}
+        </p>
+        {sign?.envelopes.length ? (
+          <ul className="mt-3 grid gap-1 text-sm">
+            {sign.envelopes.map((e) => (
+              <li key={e.id}>
+                {e.channel === "tablet" ? "Tablet" : "E-Mail"} ·{" "}
+                {SIGN_STATUS_LABELS[e.status as SignStatus] || e.status}
+                {e.recipient_email ? ` · ${e.recipient_email}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {sign?.files.length ? (
+          <p className="mt-2 text-xs text-muted">
+            Dateien: {sign.files.map((f) => f.filename).join(", ")}
+          </p>
+        ) : null}
+        <Field label="Kunden-E-Mail">
+          <Input value={signMail} onChange={(e) => setSignMail(e.target.value)} placeholder="kunde@…" />
+        </Field>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                const file = await downloadContractPdf({ data: { contractId: id } });
+                const a = document.createElement("a");
+                a.href = `data:application/pdf;base64,${file.base64}`;
+                a.download = file.filename;
+                a.click();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "PDF fehlgeschlagen");
+              }
+            }}
+          >
+            Vertrag als PDF
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              try {
+                const r = await sendSignEmail({ data: { contractId: id, email: signMail } });
+                toast.success(r.queued ? "Vorgemerkt — DocuSign-Keys in Render setzen" : "An den Kunden gesendet");
+                load();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Versand fehlgeschlagen");
+              }
+            }}
+          >
+            Per E-Mail zur Unterschrift
+          </Button>
+        </div>
+        <p className="mt-5 text-xs uppercase tracking-[0.2em] text-gold">Vor Ort · Tablet</p>
+        <div className="mt-2">
+          <SignaturePad value={pad} onChange={setPad} />
+        </div>
+        <Button
+          className="mt-3"
+          size="sm"
+          variant="outline"
+          onClick={async () => {
+            try {
+              await saveTabletSignature({ data: { contractId: id, image: pad } });
+              toast.success("Unterschrift gespeichert");
+              load();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Pad leer?");
+            }
+          }}
+        >
+          Tablet-Unterschrift speichern
+        </Button>
       </div>
 
       {next.length ? (
