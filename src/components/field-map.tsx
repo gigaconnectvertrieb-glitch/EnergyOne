@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { CARTO_ATTR, CARTO_VOYAGER } from "@/lib/map-tiles";
 
 export type WalkStop = {
   id: string;
@@ -54,8 +55,8 @@ export function FieldMap({ center, corners = [], stops = [], draw, onTap, onStop
       }) as unknown as LeafletMap;
       map.setView([center.lat, center.lng], 16);
       mapRef.current = map;
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: "OSM",
+      L.tileLayer(CARTO_VOYAGER, {
+        attribution: CARTO_ATTR,
         maxZoom: 20,
       }).addTo(map as never);
       map.on("click", (e) => {

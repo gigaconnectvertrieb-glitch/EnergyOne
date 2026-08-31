@@ -5,6 +5,7 @@ import { getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { CARTO_ATTR, CARTO_VOYAGER } from "@/lib/map-tiles";
 
 type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
@@ -36,8 +37,8 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       const L = (window as unknown as { L: LeafletNS }).L;
       const map = L.map(ref.current, { zoomControl: false, preferCanvas: true });
       map.setView([center.lat, center.lng], 12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "OSM",
+      L.tileLayer(CARTO_VOYAGER, {
+        attribution: CARTO_ATTR,
         maxZoom: 19,
       }).addTo(map);
       mapRef.current = map;
