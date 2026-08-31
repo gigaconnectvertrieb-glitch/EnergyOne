@@ -9,6 +9,8 @@ import {
   weekKey,
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
+import { pointInPolygon } from "@/lib/geo-de";
+import { nominatimAddress, overpassHouses } from "./geo.server";
 import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
 
 function mapDoor(r: Record<string, unknown>) {
@@ -304,3 +306,70 @@ export const setFollowupStatus = createServerFn({ method: "POST" })
     await db`update field_visits set list_status = ${data.status} where id = ${data.id}`;
     return { ok: true };
   });
+
+export const searchFieldAddress = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { q: string }) => d)
+  .handler(async ({ data }) => {
+    const q = data.q.trim();
+    if (q.length < 5) return [];
+    return nominatimAddress(q);
+  });
+
+export const openFieldObject = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { lat: number; lng: number; street?: string; house?: string; zip?: string; city?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [ter] = await db<Record<string, unknown>>`
+      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
+    `;
+    let inTerritory = true;
+    let territoryName = "";
+    if (ter?.geojson) {
+      territoryName = asStr(ter.name);
+      try {
+        const gj = JSON.parse(asStr(ter.geojson)) as {
+          features?: Array<{ geometry?: { type: string; coordinates: number[][][] } }>;
+        };
+        const ring = gj.features?.[0]?.geometry?.coordinates?.[0];
+        if (ring?.length) {
+          const pts = ring.map((c) => ({ lng: c[0]!, lat: c[1]! }));
+          inTerritory = pointInPolygon({ lat: data.lat, lng: data.lng }, pts);
+        }
+      } catch {
+        inTerritory = true;
+      }
+    }
+    const houses = await overpassHouses(data.lat, data.lng, data.street);
+    const zip = data.zip?.trim() || "";
+    const street = data.street?.trim() || "";
+    const customers = street
+      ? (
+          await db<Record<string, unknown>>`
+            select id, first_name, last_name, phone from customers
+            where (${zip} = '' or zip = ${zip})
+              and lower(street) like ${"%" + street.toLowerCase() + "%"}
+            limit 5
+          `
+        ).map((c) => ({
+          id: asStr(c.id),
+          name: `${asStr(c.first_name)} ${asStr(c.last_name)}`.trim(),
+          phone: c.phone ? asStr(c.phone) : "",
+        }))
+      : [];
+    return {
+      inTerritory,
+      territoryName,
+      houses,
+      customers,
+      street: data.street || houses[0]?.street || "",
+      house: data.house || "",
+      zip: data.zip || "",
+      city: data.city || "",
+      lat: data.lat,
+      lng: data.lng,
+    };
+  });
+

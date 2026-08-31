@@ -24,8 +24,8 @@ export const Route = createFileRoute("/app")({
 });
 
 const TABS = [
-  { to: "/app", label: "Tour", icon: CalendarDays },
-  { to: "/app/karte", label: "Karte", icon: Map },
+  { to: "/app", label: "Routing", icon: Map },
+  { to: "/app/karte", label: "Tour", icon: CalendarDays },
   { to: "/app/liste", label: "Nachlauf", icon: ListChecks },
   { to: "/app/mehr", label: "Mehr", icon: MoreHorizontal },
 ] as const;
@@ -41,7 +41,7 @@ function AppShell() {
         <BrandMark className="h-7 w-auto" />
         <p className="font-display text-base tracking-wide text-gold">Feld</p>
       </header>
-      <main className="px-4 pb-28 pt-3">
+      <main className="px-4 pb-24 pt-3">
         <Outlet />
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">

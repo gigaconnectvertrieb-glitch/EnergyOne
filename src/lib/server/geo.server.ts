@@ -113,3 +113,91 @@ export async function overpassStreets(bbox: { south: number; north: number; west
     lng: s.lng / s.n,
   }));
 }
+
+export type AddressHit = {
+  display: string;
+  lat: number;
+  lng: number;
+  street: string;
+  house: string;
+  zip: string;
+  city: string;
+};
+
+export type HouseHit = {
+  house: string;
+  lat: number;
+  lng: number;
+  street: string;
+};
+
+export async function nominatimAddress(query: string): Promise<AddressHit[]> {
+  const q = query.trim();
+  if (q.length < 5) return [];
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "de");
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("q", q);
+  const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/json" } });
+  if (!res.ok) throw new Error("Adresssuche gerade nicht erreichbar.");
+  const rows = (await res.json()) as Array<{
+    lat: string;
+    lon: string;
+    display_name: string;
+    address?: {
+      road?: string;
+      pedestrian?: string;
+      house_number?: string;
+      postcode?: string;
+      city?: string;
+      town?: string;
+      village?: string;
+      municipality?: string;
+    };
+  }>;
+  return rows.map((r) => ({
+    display: r.display_name,
+    lat: asNum(r.lat),
+    lng: asNum(r.lon),
+    street: r.address?.road || r.address?.pedestrian || "",
+    house: r.address?.house_number || "",
+    zip: r.address?.postcode || "",
+    city: r.address?.city || r.address?.town || r.address?.village || r.address?.municipality || "",
+  }));
+}
+
+export async function overpassHouses(lat: number, lng: number, street?: string): Promise<HouseHit[]> {
+  const query = `[out:json][timeout:20];(node["addr:housenumber"](around:140,${lat},${lng});way["addr:housenumber"](around:140,${lat},${lng}););out center 120;`;
+  const res = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
+    body: `data=${encodeURIComponent(query)}`,
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    elements?: Array<{
+      lat?: number;
+      lon?: number;
+      center?: { lat: number; lon: number };
+      tags?: { "addr:housenumber"?: string; "addr:street"?: string };
+    }>;
+  };
+  const want = (street || "").trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: HouseHit[] = [];
+  for (const el of json.elements || []) {
+    const house = el.tags?.["addr:housenumber"]?.trim();
+    const st = el.tags?.["addr:street"]?.trim() || street || "";
+    const la = el.lat ?? el.center?.lat;
+    const ln = el.lon ?? el.center?.lon;
+    if (!house || la == null || ln == null) continue;
+    if (want && st && !st.toLowerCase().includes(want) && !want.includes(st.toLowerCase())) continue;
+    const key = `${st}|${house}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ house, lat: la, lng: ln, street: st });
+  }
+  return out.sort((a, b) => a.house.localeCompare(b.house, "de", { numeric: true }));
+}

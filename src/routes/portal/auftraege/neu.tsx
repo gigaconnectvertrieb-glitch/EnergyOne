@@ -7,17 +7,26 @@ import { bootstrapMe, createContract, listBookableStaff, listTariffs, quoteCommi
 import { toast } from "sonner";
 import { eur } from "@/lib/utils";
 
-export const Route = createFileRoute("/portal/auftraege/neu")({ component: Capture });
+export const Route = createFileRoute("/portal/auftraege/neu")({
+  validateSearch: (raw: Record<string, unknown>) => ({
+    street: typeof raw.street === "string" ? raw.street : "",
+    house: typeof raw.house === "string" ? raw.house : "",
+    zip: typeof raw.zip === "string" ? raw.zip : "",
+    city: typeof raw.city === "string" ? raw.city : "",
+  }),
+  component: Capture,
+});
 
 function Capture() {
   const nav = useNavigate();
+  const pre = Route.useSearch();
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [phone, setPhone] = useState("");
-  const [street, setStreet] = useState("");
-  const [house, setHouse] = useState("");
-  const [zip, setZip] = useState("");
-  const [city, setCity] = useState("");
+  const [street, setStreet] = useState(pre.street);
+  const [house, setHouse] = useState(pre.house);
+  const [zip, setZip] = useState(pre.zip);
+  const [city, setCity] = useState(pre.city);
   const [provider, setProvider] = useState("");
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
