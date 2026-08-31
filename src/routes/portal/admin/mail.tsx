@@ -152,6 +152,28 @@ function Page() {
         ))}
       </div>
 
+      <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">DNS bei Squarespace</p>
+        <p className="mt-2 text-sm text-muted">
+          Nameserver sind Squarespace. MX zeigt schon auf Google. DKIM-Schlüssel steht schon im DNS.
+          Noch tun: SPF auf -all stellen und DMARC anlegen. Danach hier „DNS prüfen“.
+        </p>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
+          <li>Squarespace → Domains → e1direktvertrieb.de → DNS</li>
+          <li>
+            TXT <span className="font-mono text-gold">@</span> auf{" "}
+            <span className="font-mono text-gold">v=spf1 include:_spf.google.com -all</span> ändern (~all raus)
+          </li>
+          <li>
+            Neuer TXT-Host <span className="font-mono text-gold">_dmarc</span>, Wert:
+            <span className="mt-1 block break-all font-mono text-xs text-gold">
+              v=DMARC1; p=none; sp=none; rua=mailto:dmarc@e1direktvertrieb.de; ruf=mailto:orhan.salo@e1direktvertrieb.de,mailto:luca.marrancone@e1direktvertrieb.de; fo=1; adkim=s; aspf=s; pct=100; ri=86400;
+            </span>
+          </li>
+          <li>Google Admin → Apps → Gmail → Authentifizierung der E-Mails → DKIM „Authentifizierung starten“, falls noch aus</li>
+        </ol>
+      </div>
+
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <ConnCard
           title="Render"

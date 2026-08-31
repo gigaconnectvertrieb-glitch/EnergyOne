@@ -352,9 +352,9 @@ export function interpretSpfRecord(records: string[], _provider: MailProvider = 
 
 export function interpretDkimGoogle(records: string[], cname?: string[] | null): AuthState {
   if (cname?.some((v) => v.toLowerCase().includes("google"))) return "ok";
-  const rec = records.find((r) => r.toLowerCase().includes("v=dkim1"));
-  if (!rec) return "fehlt";
-  const key = /p=([A-Za-z0-9+/=]+)/.exec(rec);
+  const joined = records.join("");
+  if (!/v=dkim1/i.test(joined) && !records.some((r) => r.toLowerCase().includes("v=dkim1"))) return "fehlt";
+  const key = /p=([A-Za-z0-9+/=]+)/.exec(joined.replace(/\s+/g, ""));
   if (key?.[1] && key[1].length > 20) return "ok";
   return "fehlerhaft";
 }

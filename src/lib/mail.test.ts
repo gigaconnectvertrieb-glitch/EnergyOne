@@ -56,6 +56,10 @@ describe("google workspace spf / dkim / dmarc / mx", () => {
     assert.equal(interpretDkimGoogle([]), "fehlt");
     assert.equal(interpretDkimGoogle(["v=DKIM1; k=rsa; p="]), "fehlerhaft");
     assert.equal(interpretDkimGoogle(["v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA"]), "ok");
+    assert.equal(
+      interpretDkimGoogle(['"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA"', '"restofthekey"']),
+      "ok",
+    );
     assert.equal(interpretDkimGoogle([], ["google.com"]), "ok");
   });
 
