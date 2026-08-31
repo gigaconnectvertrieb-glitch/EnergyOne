@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { auth } from "@/lib/auth/server";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -54,6 +55,27 @@ function safeEqual(a: string, b: string) {
   return timingSafeEqual(left, right);
 }
 
+function incomingHeaders() {
+  const origin =
+    process.env.BETTER_AUTH_URL || process.env.RENDER_EXTERNAL_URL || "https://e1direktvertrieb.de";
+  let headers = new Headers();
+  try {
+    const req = getRequest();
+    if (req?.headers) headers = new Headers(req.headers);
+  } catch {
+    /* nitro bundle */
+  }
+  if (!headers.get("origin")) headers.set("origin", origin);
+  if (!headers.get("host")) {
+    try {
+      headers.set("host", new URL(origin).host);
+    } catch {
+      headers.set("host", "e1direktvertrieb.de");
+    }
+  }
+  return headers;
+}
+
 async function issueSession(email: string, userId: string) {
   const ctx = await auth.$context;
   const password = `${randomBytes(24).toString("base64url")}Aa1!`;
@@ -70,15 +92,9 @@ async function issueSession(email: string, userId: string) {
       values (${nid()}, ${userId}, 'credential', ${userId}, ${hash}, now(), now())
     `;
   }
-  const { getRequest } = await import("@tanstack/react-start/server");
-  const req = getRequest();
-  const headers = new Headers(req.headers);
-  const origin =
-    process.env.BETTER_AUTH_URL || process.env.RENDER_EXTERNAL_URL || "https://e1direktvertrieb.de";
-  if (!headers.get("origin")) headers.set("origin", origin);
   const result = await auth.api.signInEmail({
     body: { email, password },
-    headers,
+    headers: incomingHeaders(),
   });
   if (!result || (result as { error?: unknown }).error) {
     throw new Error("Anmeldung fehlgeschlagen.");

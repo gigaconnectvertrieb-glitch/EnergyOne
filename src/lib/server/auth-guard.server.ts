@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { getRequest } from "@tanstack/react-start/server";
 import { nid } from "@/lib/utils";
 import { sql } from "./helpers";
 
@@ -13,10 +14,9 @@ export function sha256(v: string) {
 
 export async function clientIp() {
   try {
-    const { getRequest } = await import("@tanstack/react-start/server");
     const req = getRequest();
-    const xf = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    return xf || req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "unknown";
+    const xf = req?.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    return xf || req?.headers.get("cf-connecting-ip") || req?.headers.get("x-real-ip") || "unknown";
   } catch {
     return "unknown";
   }
