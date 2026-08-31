@@ -70,16 +70,16 @@ function Login() {
   }
 
   return (
-    <main className="relative min-h-dvh gold-wash">
+    <main className="relative min-h-dvh overflow-y-auto gold-wash">
       <img
         src="/office-night.jpg"
         alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-30"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-30"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/80 to-bg/40" />
-      <div className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-12">
-        <BrandLockup className="mx-auto h-44 w-auto" />
-        <div className="mt-8 rounded-3xl bg-surface/90 p-6 gold-hairline backdrop-blur">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/80 to-bg/40" />
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-start px-4 py-8 pb-28">
+        <BrandLockup className="mx-auto h-28 w-auto" />
+        <div className="mt-6 rounded-3xl bg-surface p-6 gold-hairline">
           <h1 className="font-display text-3xl">Mitarbeiter-Portal</h1>
           <p className="mt-2 text-sm text-muted">
             Mitarbeiter: Google Authenticator. Leitung: Generalschlüssel.
@@ -200,22 +200,29 @@ function Login() {
             <form className="mt-5 grid gap-3" onSubmit={onAdmin}>
               <Field label="Benutzername">
                 <Input
+                  type="text"
                   autoComplete="username"
+                  name="username"
                   value={staffId}
                   onChange={(e) => setStaffId(e.target.value)}
                   required
                   placeholder="orhan oder luca"
+                  className="text-ink"
                 />
               </Field>
               <Field label="12-stelliger Generalschlüssel">
                 <Input
+                  type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
                   autoComplete="off"
+                  name="master-key"
                   value={master}
                   onChange={(e) => setMaster(e.target.value.replace(/\D+/g, "").slice(0, 12))}
                   required
                   minLength={12}
                   maxLength={12}
+                  className="text-ink tracking-[0.2em]"
                 />
               </Field>
               <p className="text-xs text-muted">Ohne Google Authenticator. Getrennte Logins.</p>

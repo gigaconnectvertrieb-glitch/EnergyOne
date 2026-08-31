@@ -17,7 +17,7 @@ export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElem
 }
 
 const fieldClass =
-  "w-full h-11 rounded-xl bg-elevated px-3 text-sm text-ink placeholder:text-muted shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_1px_var(--color-gold)]";
+  "relative z-10 w-full h-12 rounded-xl bg-elevated px-3 text-base text-ink caret-white placeholder:text-muted shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_1px_var(--color-gold)]";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldClass, className)} {...props} />;
