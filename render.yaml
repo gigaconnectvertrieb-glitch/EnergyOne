@@ -10,11 +10,10 @@ databases:
 services:
   - type: web
     name: e1-direktvertrieb
-    runtime: node
+    runtime: docker
     plan: starter
     region: frankfurt
-    buildCommand: npm install && npm run build
-    startCommand: npm run db:migrate && npm start
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
