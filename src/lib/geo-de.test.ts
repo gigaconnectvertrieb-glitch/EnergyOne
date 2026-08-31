@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { bboxAround, planWorkdays, searchDeCities } from "./geo-de.ts";
+import { bboxAround, planWorkdays, pointInPolygon, searchDeCities } from "./geo-de.ts";
 
 describe("geo-de", () => {
   it("finds german cities", () => {
@@ -27,5 +27,23 @@ describe("geo-de", () => {
     const b = bboxAround(52.52, 13.405, 2);
     assert.ok(b.south < 52.52 && b.north > 52.52);
     assert.ok(b.west < 13.405 && b.east > 13.405);
+  });
+
+  it("accepts triangle and rectangle zones", () => {
+    const tri = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 2 },
+      { lat: 2, lng: 0 },
+    ];
+    assert.equal(pointInPolygon({ lat: 0.4, lng: 0.4 }, tri), true);
+    assert.equal(pointInPolygon({ lat: 2, lng: 2 }, tri), false);
+    const rect = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 2 },
+      { lat: 2, lng: 2 },
+      { lat: 2, lng: 0 },
+    ];
+    assert.equal(pointInPolygon({ lat: 1, lng: 1 }, rect), true);
+    assert.equal(pointInPolygon({ lat: 3, lng: 1 }, rect), false);
   });
 });

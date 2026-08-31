@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { listUsers } from "@/lib/server/api";
-import { assignWorkDay, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces } from "@/lib/server/plan-api";
+import { assignWorkDay, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
+import { FieldMap, type WalkStop } from "@/components/field-map";
 import { bboxAround, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
 import { toast } from "sonner";
 
@@ -22,6 +23,9 @@ function Page() {
   const [plans, setPlans] = useState<Awaited<ReturnType<typeof listWorkPlans>>>([]);
   const [open, setOpen] = useState<Awaited<ReturnType<typeof getWorkPlan>> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [corners, setCorners] = useState<{ lat: number; lng: number }[]>([]);
+  const [walk, setWalk] = useState<WalkStop[]>([]);
+  const [walkMeters, setWalkMeters] = useState(0);
 
   function reload() {
     listWorkPlans().then(setPlans).catch(() => setPlans([]));
@@ -49,7 +53,8 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebietsplanung</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen, Straßen einspielen, Tagesrouten erzeugen. Am Anfang Orhan und Luca Marco — später jeder Mitarbeiter deutschlandweit.
+        Stadt suchen, dann 3× tippen (Dreieck) oder 4× (Rechteck). Die Straßen in der Zone kommen als Laufweg,
+        nächste Straße zuerst.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
@@ -72,6 +77,8 @@ function Page() {
                     setPlace(h);
                     setQ(h.display || h.name);
                     setHits([]);
+                    setCorners([]);
+                    setWalk([]);
                   }}
                 >
                   <span>
@@ -88,8 +95,57 @@ function Page() {
         {place ? (
           <div className="mt-4 grid gap-3">
             <p className="text-sm">
-              Markiert: <span className="text-gold">{place.name}</span> · {place.state}
+              Karte: <span className="text-gold">{place.name}</span> · 3 Tipps = Dreieck, 4 Tipps = Rechteck
             </p>
+            <FieldMap
+              center={{ lat: place.lat, lng: place.lng }}
+              corners={corners}
+              stops={walk}
+              draw
+              onTap={async (p) => {
+                const next = [...corners, p].slice(0, 4);
+                setCorners(next);
+                if (next.length >= 3) {
+                  setBusy(true);
+                  try {
+                    const res = await streetsInZone({ data: { corners: next } });
+                    setWalk(res.streets);
+                    setWalkMeters(res.meters);
+                    toast.success(`${res.count} Straßen, Laufweg ${(res.meters / 1000).toFixed(1)} km`);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Straßen nicht geladen");
+                  } finally {
+                    setBusy(false);
+                  }
+                }
+              }}
+            />
+            {walk.length ? (
+              <ol className="max-h-64 overflow-auto rounded-2xl bg-elevated p-3 text-sm">
+                {walk.map((s, i) => (
+                  <li key={s.id} className="flex gap-2 py-1">
+                    <span className="w-6 text-gold">{i + 1}</span>
+                    {s.street}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCorners([]);
+                  setWalk([]);
+                  setWalkMeters(0);
+                }}
+              >
+                Zone löschen
+              </Button>
+              <span className="self-center text-xs text-muted">
+                {walk.length ? `${walk.length} Straßen · ${(walkMeters / 1000).toFixed(1)} km` : busy ? "Straßen…" : ""}
+              </span>
+            </div>
             <Field label="Radius in km" hint="Großstadt: Stadtteil suchen oder Radius klein halten.">
               <Input type="number" min={1} max={5} step={0.2} value={km} onChange={(e) => setKm(Number(e.target.value))} />
             </Field>

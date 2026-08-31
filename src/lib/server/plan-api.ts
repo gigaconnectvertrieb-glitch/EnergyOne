@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can, type Role } from "@/lib/e1";
-import { bboxAround, DEFAULT_STREETS_PER_DAY, planWorkdays, searchDeCities, type PlanStop } from "@/lib/geo-de";
+import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY, planWorkdays, pointInPolygon, searchDeCities, type PlanStop } from "@/lib/geo-de";
 import { asStr, nid, num } from "@/lib/utils";
 import { nominatimPlaces, overpassStreets } from "./geo.server";
 import { audit, requireProfile, sql } from "./helpers";
@@ -217,6 +217,25 @@ export const getWorkPlan = createServerFn({ method: "POST" })
       per_day: num(plan.per_day),
       days: out,
     };
+  });
+
+export const streetsInZone = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { corners: Array<{ lat: number; lng: number }> }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!canPlan(me.role) && me.role !== "vertrieb") throw new Error("Kein Zugriff");
+    const corners = data.corners.slice(0, 4);
+    if (corners.length < 3) throw new Error("Mindestens dreimal tippen (Dreieck) oder viermal (Rechteck).");
+    const box = bboxFromPoints(corners);
+    const raw = await overpassStreets(box);
+    const inside = raw
+      .filter((s) => pointInPolygon(s, corners))
+      .map((s) => ({ id: s.osm_id, lat: s.lat, lng: s.lng, street: s.name }));
+    const days = planWorkdays(inside, Math.max(inside.length, 1), corners[0]);
+    const ordered = days[0]?.stops || [];
+    return { streets: ordered, meters: days[0]?.meters || 0, count: ordered.length };
   });
 
 export const assignWorkDay = createServerFn({ method: "POST" })

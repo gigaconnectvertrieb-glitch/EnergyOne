@@ -96,7 +96,7 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld-App</p>
       <h1 className="mt-1 font-display text-4xl">{pack?.name || "Gebiet"}</h1>
       <p className="mt-2 text-sm text-muted">
-        Satellit + Route. Nicht angetroffen sofort eintragen. Aufs Handy legen: Teilen → Zum Home-Bildschirm.
+        Goldene Linie = Laufweg, nächste Straße zuerst. Straße antippen, nicht angetroffen eintragen.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
@@ -126,10 +126,16 @@ function Page() {
         {pack ? (
           <FieldMap
             center={center}
-            geojson={geojson}
-            doors={pack.doors}
-            routeTo={routeTo}
-            onDoor={(d) => {
+            stops={pack.doors.map((d, i) => ({
+              id: d.id,
+              street: `${d.street} ${d.house}`.trim(),
+              lat: d.lat,
+              lng: d.lng,
+              seq: i + 1,
+            }))}
+            onStop={(s) => {
+              const d = pack.doors.find((x) => x.id === s.id);
+              if (!d) return;
               setDoor({ ...d, note: d.note || "", territory_id: "" });
               setRouteTo({ lat: d.lat, lng: d.lng });
             }}

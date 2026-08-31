@@ -50,15 +50,21 @@ function Page() {
   return (
     <div>
       <h1 className="font-display text-3xl">Karte</h1>
-      <p className="mt-1 text-sm text-muted">Satellit, Route, Tür antippen.</p>
+      <p className="mt-1 text-sm text-muted">3 oder 4 Ecken in der Planung. Hier der Laufweg der zugewiesenen Zone.</p>
       <div className="mt-4">
         {pack ? (
           <FieldMap
             center={center}
-            geojson={geojson}
-            doors={doors}
-            routeTo={routeTo}
-            onDoor={(d) => {
+            stops={doors.map((d, i) => ({
+              id: d.id,
+              street: `${d.street} ${d.house}`.trim(),
+              lat: d.lat,
+              lng: d.lng,
+              seq: i + 1,
+            }))}
+            onStop={(s) => {
+              const d = doors.find((x) => x.id === s.id);
+              if (!d) return;
               setDoor({ ...d, note: d.note || "", house: d.house || "", zip: d.zip || "", city: d.city || "" });
               setRouteTo({ lat: d.lat, lng: d.lng });
             }}

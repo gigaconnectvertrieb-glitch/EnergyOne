@@ -218,3 +218,33 @@ export function bboxAround(lat: number, lng: number, km = 2.2) {
 
 export const STREET_CAP = 400;
 export const DEFAULT_STREETS_PER_DAY = 30;
+
+export function bboxFromPoints(pts: { lat: number; lng: number }[]) {
+  const lats = pts.map((p) => p.lat);
+  const lngs = pts.map((p) => p.lng);
+  return {
+    south: Math.min(...lats),
+    north: Math.max(...lats),
+    west: Math.min(...lngs),
+    east: Math.max(...lngs),
+  };
+}
+
+/** Ray-casting. 3 Ecken = Dreieck, 4 Ecken = Rechteck/Viereck. */
+export function pointInPolygon(p: { lat: number; lng: number }, ring: { lat: number; lng: number }[]) {
+  if (ring.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const yi = ring[i]!.lat;
+    const xi = ring[i]!.lng;
+    const yj = ring[j]!.lat;
+    const xj = ring[j]!.lng;
+    const hit = yi > p.lat !== yj > p.lat && p.lng < ((xj - xi) * (p.lat - yi)) / (yj - yi + 1e-12) + xi;
+    if (hit) inside = !inside;
+  }
+  return inside;
+}
+
+export function filterStopsInZone(stops: PlanStop[], corners: { lat: number; lng: number }[]) {
+  return stops.filter((s) => pointInPolygon(s, corners));
+}
