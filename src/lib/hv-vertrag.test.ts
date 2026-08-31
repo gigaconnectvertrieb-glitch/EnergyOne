@@ -38,13 +38,15 @@ describe("handelsvertretervertrag", () => {
     assert.match(lines, /Max Muster/);
     assert.match(lines, /Provisionsordnung/);
     assert.match(lines, /Vertragsstrafen/);
-    assert.match(lines, /90,00 EUR/);
-    assert.match(lines, /E1 Strom Fair/);
+    assert.match(lines, /per E-Mail/i);
+    assert.doesNotMatch(lines, /90,00 EUR/);
+    assert.doesNotMatch(lines, /E1 Strom Fair/);
   });
 
-  it("formats stufe-1 bands for the appendix", () => {
+  it("keeps amounts only on the emailed sheet", () => {
     assert.match(formatHvBandLine(bands[0]!), /90,00 EUR/);
     const anlage = fillHvAnlage1(bands, 1).join("\n");
     assert.match(anlage, /Anzahl Positionen Stufe 1: 1/);
+    assert.match(anlage, /E1 Strom Fair/);
   });
 });
