@@ -16,7 +16,50 @@ export type HvInput = {
   start?: string;
   region?: string;
   stufe?: number;
+  bands?: HvBand[];
 };
+
+export type HvBand = {
+  provider: string;
+  name: string;
+  type: string;
+  kwh_from: number;
+  kwh_to: number;
+  amount_eur: number;
+  amount_ct_kwh: number;
+};
+
+export function formatHvBandLine(b: HvBand) {
+  const from = Number(b.kwh_from).toLocaleString("de-DE");
+  const to = Number(b.kwh_to) >= 999999 ? "offen" : Number(b.kwh_to).toLocaleString("de-DE");
+  const euro = Number(b.amount_eur).toFixed(2).replace(".", ",");
+  const extra = Number(b.amount_ct_kwh)
+    ? ` + ${String(b.amount_ct_kwh).replace(".", ",")} ct/kWh`
+    : "";
+  return `${b.provider} · ${b.name} · ${b.type} · ${from}-${to} kWh · ${euro} EUR${extra}`;
+}
+
+export function fillHvAnlage1(bands: HvBand[] | undefined, stufe: number): string[] {
+  const rows = (bands || []).filter((b) => Number.isFinite(Number(b.amount_eur)));
+  const body = rows.length
+    ? rows.map(formatHvBandLine)
+    : ["[Provisionsliste Stufe 1 wird beim Erzeugen aus dem Portal übernommen]"];
+  return [
+    "ANLAGE 1 — PROVISIONSORDNUNG STUFE 1 (Stand Vertragsbeginn)",
+    "",
+    "Gültig ab Vertragsbeginn. Beträge netto, zzgl. gesetzlicher USt., soweit anfallend.",
+    `Dieser Vertrag startet in Stufe ${stufe}. Nur die nachstehenden Stufe-1-Sätze gelten.`,
+    "Stufe 2 und 3 gelten erst nach unterzeichneter Zusatzvereinbarung oder Freischaltung durch die GF.",
+    "Keine Strukturprovision in Stufe 1.",
+    "Fällig nach Bestätigung und Ablauf der 14-tägigen Kunden-Widerrufsfrist.",
+    "Storno innerhalb 14 Tagen: voller Wegfall. Danach keine Rückrechnung außer bei Pflichtverletzung.",
+    "",
+    `Anzahl Positionen Stufe 1: ${rows.length}`,
+    "Format: Anbieter · Tarif · Sparte · Verbrauch · Abschlussprovision",
+    "",
+    ...body,
+  ];
+}
 
 export function dash(v?: string | null, fallback = "[Platzhalter]") {
   const s = (v ?? "").trim();
@@ -299,27 +342,9 @@ export function fillHvVertrag(d: HvInput): string[] {
     "",
     "— Ende Hauptvertrag —",
     "",
-    "ANLAGE 1 — PROVISIONSORDNUNG",
+    ...fillHvAnlage1(d.bands, stufe),
     "",
-    "Gültig ab Vertragsbeginn. Beträge sind Netto, zzgl. gesetzlicher USt., soweit anfallend.",
-    "Konkrete Euro-Sätze der New-Sales- bzw. E1-Tarife stehen in der jeweils aktuellen",
-    "Provisionsliste im Portal. Solange dort nichts Abweichendes steht, gilt:",
-    "",
-    `Aktuelle Stufe dieses Vertrags: ${stufe}`,
-    "",
-    "Stufe 1 (Startstufe jedes neuen Handelsvertreters)",
-    "Abschlussprovision nach Tarifband und Jahresverbrauch gemäß Portal / New-Sales-Liste.",
-    "Keine Strukturprovision.",
-    "",
-    "Stufe 2 (nur nach Zusatzvereinbarung oder Portal-Freischaltung durch die GF)",
-    "Höhere Bänder gemäß Portal. Strukturprovision nur wenn ausdrücklich freigeschaltet.",
-    "",
-    "Stufe 3 (nur nach Zusatzvereinbarung oder Portal-Freischaltung durch die GF)",
-    "Höchste vorgesehene Bänder gemäß Portal.",
-    "",
-    "Fälligkeit: nach Bestätigung und Ablauf der 14-tägigen Kunden-Widerrufsfrist.",
-    "Storno innerhalb 14 Tagen: voller Wegfall / Rückrechnung. Danach keine Rückrechnung",
-    "außer bei Pflichtverletzung (siehe § 8 Hauptvertrag).",
+    "Stufe 2 und Stufe 3: nicht Gegenstand dieses Anfangsvertrags. Nur Anlage 4.",
     "",
     "ANLAGE 2 — AGB HANDELSVERTRETER (E1 DIREKTVERTRIEB)",
     "",

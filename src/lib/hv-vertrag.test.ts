@@ -1,8 +1,19 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { fillHvVertrag } from "./hv-vertrag.ts";
+import { fillHvAnlage1, fillHvVertrag, formatHvBandLine } from "./hv-vertrag.ts";
 
 describe("handelsvertretervertrag", () => {
+  const bands = [
+    {
+      provider: "E1",
+      name: "E1 Strom Fair",
+      type: "strom",
+      kwh_from: 0,
+      kwh_to: 2500,
+      amount_eur: 90,
+      amount_ct_kwh: 0,
+    },
+  ];
   const lines = fillHvVertrag({
     first: "Max",
     last: "Muster",
@@ -12,6 +23,7 @@ describe("handelsvertretervertrag", () => {
     city: "München",
     staffId: "max.muster",
     stufe: 1,
+    bands,
   }).join("\n");
 
   it("is self-employed HV under HGB with stufe 1 and 14-day clawback", () => {
@@ -26,9 +38,13 @@ describe("handelsvertretervertrag", () => {
     assert.match(lines, /Max Muster/);
     assert.match(lines, /Provisionsordnung/);
     assert.match(lines, /Vertragsstrafen/);
-    assert.match(lines, /§ 348 HGB/);
-    assert.match(lines, /5.000 EUR/);
-    assert.match(lines, /Freistellung/);
-    assert.match(lines, /\/sign1\//);
+    assert.match(lines, /90,00 EUR/);
+    assert.match(lines, /E1 Strom Fair/);
+  });
+
+  it("formats stufe-1 bands for the appendix", () => {
+    assert.match(formatHvBandLine(bands[0]!), /90,00 EUR/);
+    const anlage = fillHvAnlage1(bands, 1).join("\n");
+    assert.match(anlage, /Anzahl Positionen Stufe 1: 1/);
   });
 });

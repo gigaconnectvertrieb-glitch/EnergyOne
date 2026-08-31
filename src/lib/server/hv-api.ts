@@ -26,11 +26,35 @@ export const createHvContract = createServerFn({ method: "POST" })
     if (!data.street?.trim() || !data.zip?.trim() || !data.city?.trim()) {
       throw new Error("Adresse fehlt.");
     }
+    const bands = await db<{
+      provider: string;
+      name: string;
+      type: string;
+      kwh_from: number;
+      kwh_to: number;
+      amount_eur: string | number;
+      amount_ct_kwh: string | number;
+    }>`
+      select t.provider, t.name, t.type, b.kwh_from, b.kwh_to, b.amount_eur, b.amount_ct_kwh
+      from tariff_bands b
+      join tariffs t on t.id = b.tariff_id
+      where b.stufe = 1 and t.active = true
+      order by t.provider, t.name, b.kwh_from
+    `;
     const input: HvInput = {
       ...data,
       first: data.first.trim(),
       last: data.last.trim(),
       stufe: 1,
+      bands: bands.map((b) => ({
+        provider: b.provider,
+        name: b.name,
+        type: b.type,
+        kwh_from: Number(b.kwh_from),
+        kwh_to: Number(b.kwh_to),
+        amount_eur: Number(b.amount_eur),
+        amount_ct_kwh: Number(b.amount_ct_kwh),
+      })),
     };
     const lines = fillHvVertrag(input);
     const id = nid();
