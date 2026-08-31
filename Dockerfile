@@ -15,6 +15,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV RENDER=true
 ENV VITE_AUTH_ENABLED=true
+ENV HOST=0.0.0.0
+ENV NITRO_HOST=0.0.0.0
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
