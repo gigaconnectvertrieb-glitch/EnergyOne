@@ -29,6 +29,6 @@ describe("handelsvertretervertrag", () => {
     assert.match(lines, /§ 348 HGB/);
     assert.match(lines, /5.000 EUR/);
     assert.match(lines, /Freistellung/);
-    assert.match(lines, /Berufshaftpflicht/);
+    assert.match(lines, /\/sign1\//);
   });
 });

@@ -89,19 +89,23 @@ export async function sendDocusignEnvelope(input: {
   name: string;
   pdf: Buffer;
   contractId: string;
+  subject?: string;
+  blurb?: string;
+  filename?: string;
 }) {
   const auth = await docusignToken();
   if (!auth) throw new Error("DocuSign ist nicht verbunden.");
   const account = env("DOCUSIGN_ACCOUNT_ID");
   const body = {
-    emailSubject: "Ihr E1-Vertrag zur Unterschrift",
+    emailSubject: input.subject || "Ihr E1-Vertrag zur Unterschrift",
     emailBlurb:
+      input.blurb ||
       "Bitte den Vertrag digital unterschreiben. Nach der Unterschrift liegt er automatisch bei E1 Direktvertrieb.",
     status: "sent",
     documents: [
       {
         documentBase64: input.pdf.toString("base64"),
-        name: `E1-Vertrag-${input.contractId}.pdf`,
+        name: input.filename || `E1-Vertrag-${input.contractId}.pdf`,
         fileExtension: "pdf",
         documentId: "1",
       },
@@ -164,28 +168,55 @@ export async function applyEnvelopeEvent(envelopeId: string, event: string) {
   `;
   if (!shouldImportSignedPdf(status)) return { ok: true as const, status };
   const pdf = await downloadSignedPdf(envelopeId);
-  if (pdf) {
-    const stored = await putFile(pdf.toString("base64"), `vertrag-signiert-${asStr(row.contract_id)}.pdf`);
+  const staffId = row.staff_contract_id ? asStr(row.staff_contract_id) : "";
+  const contractId = row.contract_id ? asStr(row.contract_id) : "";
+  if (pdf && staffId) {
+    const stored = await putFile(pdf.toString("base64"), `hv-signiert-${staffId}.pdf`);
+    const fileId = nid();
+    await db`
+      insert into staff_contract_files (id, staff_contract_id, kind, filename, mime, path)
+      values (${fileId}, ${staffId}, ${"signed_pdf"}, ${stored.path.split("/").pop() || "hv.pdf"}, ${"application/pdf"}, ${stored.path})
+    `;
+    await db`update sign_envelopes set signed_file_id = ${fileId} where id = ${asStr(row.id)}`;
+    await db`
+      update staff_contracts set signed_at = now(), signed_channel = 'email' where id = ${staffId}
+    `;
+    const [sc] = await db<{ user_id: string | null }>`select user_id from staff_contracts where id = ${staffId}`;
+    if (sc?.user_id) {
+      await notify(db, {
+        userId: sc.user_id,
+        type: "signature",
+        title: "Handelsvertretervertrag unterschrieben",
+        message: "Der Vertrag ist per DocuSign unterschrieben und in der Datenbank gespeichert.",
+        link: "/portal/admin/vertraege",
+      });
+    }
+    return { ok: true as const, status: "completed" as SignStatus };
+  }
+  if (pdf && contractId) {
+    const stored = await putFile(pdf.toString("base64"), `vertrag-signiert-${contractId}.pdf`);
     const fileId = nid();
     await db`
       insert into contract_files (id, contract_id, kind, filename, mime, path)
-      values (${fileId}, ${asStr(row.contract_id)}, ${"signed_pdf"}, ${stored.path.split("/").pop() || "vertrag.pdf"}, ${"application/pdf"}, ${stored.path})
+      values (${fileId}, ${contractId}, ${"signed_pdf"}, ${stored.path.split("/").pop() || "vertrag.pdf"}, ${"application/pdf"}, ${stored.path})
     `;
     await db`update sign_envelopes set signed_file_id = ${fileId} where id = ${asStr(row.id)}`;
   }
-  await db`
+  if (contractId) {
+    await db`
     update contracts set signature_confirmed = true, updated_at = now()
-    where id = ${asStr(row.contract_id)}
+    where id = ${contractId}
   `;
-  const [c] = await db<{ user_id: string }>`select user_id from contracts where id = ${asStr(row.contract_id)}`;
-  if (c?.user_id) {
-    await notify(db, {
-      userId: c.user_id,
-      type: "signature",
-      title: "Vertrag unterschrieben",
-      message: "Der Kunde hat per DocuSign unterschrieben. Das PDF liegt im Auftrag.",
-      link: `/portal/auftraege/${asStr(row.contract_id)}`,
-    });
+    const [c] = await db<{ user_id: string }>`select user_id from contracts where id = ${contractId}`;
+    if (c?.user_id) {
+      await notify(db, {
+        userId: c.user_id,
+        type: "signature",
+        title: "Vertrag unterschrieben",
+        message: "Der Kunde hat per DocuSign unterschrieben. Das PDF liegt im Auftrag.",
+        link: `/portal/auftraege/${contractId}`,
+      });
+    }
   }
   return { ok: true as const, status: "completed" as SignStatus };
 }

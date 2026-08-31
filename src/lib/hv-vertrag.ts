@@ -291,7 +291,7 @@ export function fillHvVertrag(d: HvInput): string[] {
     "Ort, Datum: ____________________________",
     "",
     `Handelsvertreter: ${name}`,
-    "Unterschrift: ____________________________",
+    "Unterschrift: ____________________________   /sign1/",
     "",
     "E1 Direktvertrieb, Inhaber Orhan Salo und Luca-Marco Marrancone",
     "Unterschrift Orhan Salo: ____________________________",

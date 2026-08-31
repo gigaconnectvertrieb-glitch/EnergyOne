@@ -4,6 +4,8 @@ import { can } from "@/lib/e1";
 import { fillHvVertrag, type HvInput } from "@/lib/hv-vertrag";
 import { buildPagedPdf } from "@/lib/sign";
 import { nid } from "@/lib/utils";
+import { docusignReady, sendDocusignEnvelope } from "./docusign.server";
+import { putFile } from "./ops.server";
 import { requireProfile, sql } from "./helpers";
 
 function downloadName(last: string, id: string) {
@@ -85,8 +87,11 @@ export const listHvContracts = createServerFn({ method: "GET" })
       city: string | null;
       stufe: number;
       created_at: string;
+      signed_at: string | null;
+      signed_channel: string | null;
+      email: string | null;
     }>`
-      select id, staff_id, first_name, last_name, city, stufe, created_at
+      select id, staff_id, first_name, last_name, city, stufe, created_at, signed_at, signed_channel, email
       from staff_contracts
       order by created_at desc
       limit 80
@@ -109,4 +114,93 @@ export const downloadHvContract = createServerFn({ method: "POST" })
     if (!row) throw new Error("Vertrag nicht gefunden.");
     const pdf = buildPagedPdf(row.body.split("\n"));
     return { filename: downloadName(row.last_name, row.id), pdfBase64: pdf.toString("base64") };
+  });
+
+export const sendHvSignEmail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; email?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    const [row] = await db<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      email: string | null;
+      body: string;
+    }>`
+      select id, first_name, last_name, email, body from staff_contracts where id = ${data.id}
+    `;
+    if (!row) throw new Error("Vertrag nicht gefunden.");
+    const email = (data.email || row.email || "").trim().toLowerCase();
+    if (!email.includes("@")) throw new Error("E-Mail des Handelsvertreters fehlt.");
+    const name = `${row.first_name} ${row.last_name}`.trim();
+    const pdf = buildPagedPdf(row.body.split("\n"));
+    const envId = nid();
+    const ready = docusignReady();
+    let status = ready ? "sent" : "queued";
+    let dsId: string | null = null;
+    let error: string | null = null;
+    if (ready) {
+      try {
+        dsId = await sendDocusignEnvelope({
+          email,
+          name,
+          pdf,
+          contractId: row.id,
+          subject: "Ihr E1-Handelsvertretervertrag zur Unterschrift",
+          blurb: "Bitte den Handelsvertretervertrag digital unterschreiben. Danach liegt er automatisch bei E1.",
+          filename: downloadName(row.last_name, row.id),
+        });
+      } catch (e) {
+        status = "failed";
+        error = e instanceof Error ? e.message : "DocuSign-Fehler";
+      }
+    }
+    await db`
+      insert into sign_envelopes (
+        id, contract_id, staff_contract_id, channel, provider, status,
+        recipient_email, recipient_name, docusign_envelope_id, error, sent_by, sent_at
+      ) values (
+        ${envId}, null, ${row.id}, 'email', 'docusign', ${status},
+        ${email}, ${name}, ${dsId}, ${error}, ${context.userId}, now()
+      )
+    `;
+    await db`update staff_contracts set signer_email = ${email} where id = ${row.id}`;
+    if (status === "failed") throw new Error(error || "Versand fehlgeschlagen.");
+    return { ok: true, status, queued: !ready };
+  });
+
+export const saveHvTabletSign = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; signatureData: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    if (!data.signatureData?.startsWith("data:image")) throw new Error("Unterschrift fehlt.");
+    const [row] = await db<{ id: string }>`select id from staff_contracts where id = ${data.id}`;
+    if (!row) throw new Error("Vertrag nicht gefunden.");
+    const stored = await putFile(data.signatureData, `hv-tablet-${row.id}.png`);
+    const fileId = nid();
+    await db`
+      insert into staff_contract_files (id, staff_contract_id, kind, filename, mime, path)
+      values (${fileId}, ${row.id}, ${"tablet_sign"}, ${stored.path.split("/").pop() || "sign.png"}, ${"image/png"}, ${stored.path})
+    `;
+    await db`
+      update staff_contracts set signed_at = now(), signed_channel = 'tablet' where id = ${row.id}
+    `;
+    await db`
+      insert into sign_envelopes (
+        id, contract_id, staff_contract_id, channel, provider, status, sent_by, sent_at, completed_at, signed_file_id
+      ) values (
+        ${nid()}, null, ${row.id}, 'tablet', 'tablet', 'completed', ${context.userId}, now(), now(), ${fileId}
+      )
+    `;
+    return { ok: true };
   });

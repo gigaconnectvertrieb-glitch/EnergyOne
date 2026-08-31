@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { createHvContract, downloadHvContract, listHvContracts } from "@/lib/server/hv-api";
+import { createHvContract, downloadHvContract, listHvContracts, saveHvTabletSign, sendHvSignEmail } from "@/lib/server/hv-api";
+import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
 import { previewMusterVertrag } from "@/lib/server/sign-api";
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,8 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Recht</p>
       <h1 className="mt-1 font-display text-4xl">Verträge</h1>
       <p className="mt-2 text-sm text-muted">
-        Handelsvertreter: Name und Adresse eingeben, PDF kommt automatisch (Stufe 1, Provision,
-        Vertragsstrafen, AGB). Kunden-Muster separat. Vor dem ersten Einsatz Anwalt gegenlesen lassen.
+        Handelsvertreter: Name und Adresse eingeben, PDF erzeugen, dann Tablet oder DocuSign.
+        Stufe 1, Provision, Vertragsstrafen, AGB. Vor dem ersten Einsatz Anwalt gegenlesen lassen.
       </p>
       <div className="mt-4 flex gap-2">
         <Button variant={tab === "hv" ? "default" : "outline"} onClick={() => setTab("hv")}>
@@ -42,7 +43,10 @@ function Page() {
 function HvPanel() {
   const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [list, setList] = useState<Awaited<ReturnType<typeof listHvContracts>>>([]);
-  const [busy, setBusy] = useState(false);
+  const [padFor, setPadFor] = useState<string | null>(null);
+  const [sign, setSign] = useState("");
+  const [mailFor, setMailFor] = useState<string | null>(null);
+  const [mail, setMail] = useState("");
   const [form, setForm] = useState({
     userId: "",
     staffId: "",
@@ -173,29 +177,109 @@ function HvPanel() {
 
       <div className="mt-6 grid gap-2">
         {list.map((r) => (
-          <div key={r.id} className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3 gold-hairline">
-            <div>
-              <p className="font-medium">
-                {r.first_name} {r.last_name}
-              </p>
-              <p className="text-xs text-muted">
-                {r.staff_id || "ohne ID"} · Stufe {r.stufe} · {r.city || "—"}
-              </p>
+          <div key={r.id} className="rounded-2xl bg-surface px-4 py-3 gold-hairline">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-medium">
+                  {r.first_name} {r.last_name}
+                </p>
+                <p className="text-xs text-muted">
+                  {r.staff_id || "ohne ID"} · Stufe {r.stufe} · {r.city || "—"} ·{" "}
+                  {r.signed_at ? `unterschrieben (${r.signed_channel === "tablet" ? "Tablet" : "DocuSign"})` : "noch offen"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const file = await downloadHvContract({ data: { id: r.id } });
+                      savePdf(file.filename, file.pdfBase64);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Download fehlgeschlagen");
+                    }
+                  }}
+                >
+                  PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPadFor(padFor === r.id ? null : r.id);
+                    setMailFor(null);
+                    setSign("");
+                  }}
+                >
+                  Tablet
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setMailFor(mailFor === r.id ? null : r.id);
+                    setPadFor(null);
+                    setMail(r.email || "");
+                  }}
+                >
+                  DocuSign
+                </Button>
+              </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                try {
-                  const file = await downloadHvContract({ data: { id: r.id } });
-                  savePdf(file.filename, file.pdfBase64);
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Download fehlgeschlagen");
-                }
-              }}
-            >
-              PDF
-            </Button>
+            {padFor === r.id ? (
+              <div className="mt-3 grid gap-2">
+                <SignaturePad value={sign} onChange={setSign} />
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await saveHvTabletSign({ data: { id: r.id, signatureData: sign } });
+                      toast.success("Tablet-Unterschrift gespeichert");
+                      setPadFor(null);
+                      load();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Unterschrift fehlgeschlagen");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Unterschrift speichern
+                </Button>
+              </div>
+            ) : null}
+            {mailFor === r.id ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Input
+                  type="email"
+                  placeholder="E-Mail des Handelsvertreters"
+                  value={mail}
+                  onChange={(e) => setMail(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const res = await sendHvSignEmail({ data: { id: r.id, email: mail } });
+                      toast.success(res.queued ? "In der Warteschlange (DocuSign-Keys setzen)" : "DocuSign raus");
+                      setMailFor(null);
+                      load();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Versand fehlgeschlagen");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Senden
+                </Button>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
