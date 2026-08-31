@@ -1,5 +1,43 @@
 -- E1 Direktvertrieb – Kernschema (Phase 1 + vorbereitete Skalierung / Phase 2)
 
+-- Altes Python-EnergyOne (gleiche Tabellennamen, anderes Schema) weichen lassen.
+-- Better-Auth-Tabellen "user" / session / account bleiben.
+do $$
+declare
+  rec record;
+begin
+  for rec in
+    select *
+    from (values
+      ('contracts', 'sepa_confirmed'),
+      ('customers', 'house_number'),
+      ('commissions', 'calculated_at'),
+      ('products', 'work_price'),
+      ('notifications', 'read'),
+      ('documents', 'file_path'),
+      ('settings', 'key'),
+      ('leads', 'assigned_to'),
+      ('regions', 'bundesland'),
+      ('profiles', 'user_id'),
+      ('audit_log', 'entity_type'),
+      ('feature_flags', 'phase')
+    ) as t(name, col)
+  loop
+    if to_regclass(format('public.%I', rec.name)) is not null
+       and not exists (
+         select 1 from information_schema.columns
+         where table_schema = 'public' and table_name = rec.name and column_name = rec.col
+       )
+    then
+      execute format('drop table if exists public.%I cascade', rec.name);
+    end if;
+  end loop;
+  drop table if exists public.invoices cascade;
+  drop table if exists public.users cascade;
+  drop table if exists public.teams cascade;
+  drop table if exists public.tasks cascade;
+end $$;
+
 create table if not exists regions (
   id text primary key,
   name text not null,
