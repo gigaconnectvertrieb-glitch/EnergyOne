@@ -32,12 +32,20 @@ export const createHvContract = createServerFn({ method: "POST" })
     };
     const lines = fillHvVertrag(input);
     const id = nid();
+    let ownerId = data.userId?.trim() || null;
+    const staffKey = data.staffId?.trim().toLowerCase() || null;
+    if (!ownerId && staffKey) {
+      const [hit] = await db<{ user_id: string }>`
+        select user_id from profiles where lower(staff_id) = ${staffKey}
+      `;
+      if (hit) ownerId = hit.user_id;
+    }
     await db`
       insert into staff_contracts (
         id, user_id, staff_id, first_name, last_name, street, house_number, zip, city,
         email, phone, birth_date, tax_id, trade_no, region, start_date, stufe, body, created_by
       ) values (
-        ${id}, ${data.userId || null}, ${data.staffId?.trim() || null},
+        ${id}, ${ownerId}, ${data.staffId?.trim() || null},
         ${input.first}, ${input.last}, ${data.street.trim()}, ${data.house?.trim() || null},
         ${data.zip.trim()}, ${data.city.trim()}, ${data.email?.trim() || null},
         ${data.phone?.trim() || null}, ${data.birth?.trim() || null}, ${data.taxId?.trim() || null},
@@ -45,8 +53,12 @@ export const createHvContract = createServerFn({ method: "POST" })
         1, ${lines.join("\n")}, ${context.userId}
       )
     `;
-    if (data.userId) {
-      await db`update profiles set commission_stufe = 1 where user_id = ${data.userId}`;
+    if (ownerId) {
+      await db`
+        update profiles
+        set commission_stufe = 1, hv_contract_id = ${id}
+        where user_id = ${ownerId}
+      `;
     }
     const pdf = buildPagedPdf(lines);
     return {
