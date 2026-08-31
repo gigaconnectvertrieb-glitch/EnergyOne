@@ -8,6 +8,7 @@ import appCss from "../styles.css?url";
 const APP_NAME = "E1 Direktvertrieb";
 
 export const Route = createRootRoute({
+  ssr: false,
   errorComponent: AppErrorComponent,
   head: () => ({
     meta: [
