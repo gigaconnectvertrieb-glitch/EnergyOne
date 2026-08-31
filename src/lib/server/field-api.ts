@@ -9,7 +9,7 @@ import {
   weekKey,
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
-import { bboxAround, bboxFromPoints, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
+import { applyWalkOrder, bboxAround, bboxFromPoints, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
 import { nominatimAddress, overpassHouses, overpassHousesBbox } from "./geo.server";
 import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
 
@@ -417,14 +417,38 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       lat: data.lat || num(ter.center_lat),
       lng: data.lng || num(ter.center_lng),
     };
-    const walk = planHouseWalk(houses, start);
+    let walk = planHouseWalk(houses, start);
+    const saved = ter.walk_order;
+    if (saved && typeof saved === "object") {
+      const rawOrder = saved as { streets?: Array<{ street: string; houses?: string[] }> };
+      if (Array.isArray(rawOrder.streets) && rawOrder.streets.length) {
+        walk = applyWalkOrder(walk, rawOrder.streets);
+      }
+    }
     return {
       name: asStr(ter.name),
+      id: asStr(ter.id),
       center: { lat: num(ter.center_lat), lng: num(ter.center_lng) },
       ring,
       houses,
       walk,
+      custom: Boolean(saved),
     };
+  });
+
+export const saveWalkOrder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { streets: Array<{ street: string; houses?: string[] }>; reset?: boolean }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [ter] = await db<{ id: string }>`
+      select id from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
+    `;
+    if (!ter) throw new Error("Kein Gebiet zugewiesen.");
+    const payload = data.reset ? null : JSON.stringify({ streets: data.streets });
+    await db`update territories set walk_order = ${payload}::jsonb, updated_at = now() where id = ${ter.id}`;
+    return { ok: true };
   });
 
 

@@ -329,3 +329,35 @@ export function planHouseWalk(houses: HouseStop[], start: { lat: number; lng: nu
   }
   return { streets: out, meters: Math.round(total), count: houses.length };
 }
+
+export type WalkPlan = ReturnType<typeof planHouseWalk>;
+
+export function applyWalkOrder(
+  walk: WalkPlan,
+  order: Array<{ street: string; houses?: string[] }>,
+): WalkPlan {
+  const map = new Map(walk.streets.map((s) => [s.street.trim().toLowerCase(), { ...s, houses: [...s.houses] }]));
+  const streets: WalkPlan["streets"] = [];
+  for (const item of order) {
+    const key = item.street.trim().toLowerCase();
+    const s = map.get(key);
+    if (!s) continue;
+    map.delete(key);
+    if (item.houses?.length) {
+      const byNr = new Map(s.houses.map((h) => [h.house, h]));
+      const ordered = item.houses.map((nr) => byNr.get(nr)).filter(Boolean) as typeof s.houses;
+      for (const h of s.houses) if (!item.houses.includes(h.house)) ordered.push(h);
+      s.houses = ordered;
+    }
+    streets.push(s);
+  }
+  for (const s of map.values()) streets.push(s);
+  let total = 0;
+  const withM = streets.map((s) => {
+    let meters = 0;
+    for (let i = 1; i < s.houses.length; i++) meters += haversineMeters(s.houses[i - 1]!, s.houses[i]!);
+    total += meters;
+    return { ...s, meters: Math.round(meters) };
+  });
+  return { streets: withM, meters: Math.round(total), count: withM.reduce((n, s) => n + s.houses.length, 0) };
+}
