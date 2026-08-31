@@ -90,18 +90,26 @@ export async function overpassStreets(bbox: { south: number; north: number; west
   const json = (await res.json()) as {
     elements?: Array<{ id: number; tags?: { name?: string }; center?: { lat: number; lon: number } }>;
   };
-  const seen = new Set<string>();
-  const out: OsmStreet[] = [];
+  const byName = new Map<string, { osm_id: string; name: string; lat: number; lng: number; n: number }>();
   for (const el of json.elements || []) {
     const name = el.tags?.name?.trim();
     const lat = el.center?.lat;
     const lng = el.center?.lon;
     if (!name || lat == null || lng == null) continue;
-    const key = `${name}|${lat.toFixed(4)}|${lng.toFixed(4)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ osm_id: String(el.id), name, lat, lng });
-    if (out.length >= STREET_CAP) break;
+    const key = name.toLowerCase().replace(/\s+/g, " ");
+    const prev = byName.get(key);
+    if (!prev) byName.set(key, { osm_id: String(el.id), name, lat, lng, n: 1 });
+    else {
+      prev.lat += lat;
+      prev.lng += lng;
+      prev.n += 1;
+    }
+    if (byName.size >= STREET_CAP) break;
   }
-  return out;
+  return [...byName.values()].map((s) => ({
+    osm_id: s.osm_id,
+    name: s.name,
+    lat: s.lat / s.n,
+    lng: s.lng / s.n,
+  }));
 }

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can, type Role } from "@/lib/e1";
-import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY, planWorkdays, pointInPolygon, searchDeCities, type PlanStop } from "@/lib/geo-de";
+import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets, type PlanStop } from "@/lib/geo-de";
 import { asStr, nid, num } from "@/lib/utils";
 import { nominatimPlaces, overpassStreets } from "./geo.server";
 import { audit, requireProfile, sql } from "./helpers";
@@ -96,14 +96,14 @@ export const importCityPlan = createServerFn({ method: "POST" })
         ${geojson}, ${data.lat}, ${data.lng}, ${context.userId}
       )
     `;
-    const stops: PlanStop[] = [];
-    for (const s of streets) {
-      const id = nid();
+    const stops: PlanStop[] = uniqueStreets(
+      streets.map((s) => ({ id: nid(), lat: s.lat, lng: s.lng, street: s.name })),
+    );
+    for (const s of stops) {
       await db`
         insert into field_doors (id, territory_id, street, house, zip, city, lat, lng, note, status)
-        values (${id}, ${terId}, ${s.name}, ${""}, ${""}, ${data.city}, ${s.lat}, ${s.lng}, ${"OSM " + s.osm_id}, ${"offen"})
+        values (${s.id}, ${terId}, ${s.street}, ${""}, ${""}, ${data.city}, ${s.lat}, ${s.lng}, ${"OSM"}, ${"offen"})
       `;
-      stops.push({ id, lat: s.lat, lng: s.lng, street: s.name });
     }
     const perDay = data.perDay || DEFAULT_STREETS_PER_DAY;
     const days = planWorkdays(stops, perDay, { lat: data.lat, lng: data.lng });
@@ -230,9 +230,11 @@ export const streetsInZone = createServerFn({ method: "POST" })
     if (corners.length < 3) throw new Error("Mindestens dreimal tippen (Dreieck) oder viermal (Rechteck).");
     const box = bboxFromPoints(corners);
     const raw = await overpassStreets(box);
-    const inside = raw
-      .filter((s) => pointInPolygon(s, corners))
-      .map((s) => ({ id: s.osm_id, lat: s.lat, lng: s.lng, street: s.name }));
+    const inside = uniqueStreets(
+      raw
+        .filter((s) => pointInPolygon(s, corners))
+        .map((s) => ({ id: s.osm_id, lat: s.lat, lng: s.lng, street: s.name })),
+    );
     const days = planWorkdays(inside, Math.max(inside.length, 1), corners[0]);
     const ordered = days[0]?.stops || [];
     return { streets: ordered, meters: days[0]?.meters || 0, count: ordered.length };
@@ -280,9 +282,17 @@ export const getAppToday = createServerFn({ method: "GET" })
         stops: [] as { id: string; seq: number; street: string; lat: number; lng: number }[],
       };
     }
-    const stops = await db<Record<string, unknown>>`
+    const rawStops = await db<Record<string, unknown>>`
       select * from work_stops where day_id = ${asStr(day.id)} order by seq
     `;
+    const uniq = uniqueStreets(
+      rawStops.map((s) => ({
+        id: asStr(s.id),
+        street: asStr(s.street),
+        lat: num(s.lat),
+        lng: num(s.lng),
+      })),
+    );
     return {
       name: me.first_name,
       city: asStr(day.city),
@@ -291,12 +301,12 @@ export const getAppToday = createServerFn({ method: "GET" })
       day_id: asStr(day.id),
       meters: num(day.meters),
       openFollowups: num(open?.n),
-      stops: stops.map((s) => ({
-        id: asStr(s.id),
-        seq: num(s.seq),
-        street: asStr(s.street),
-        lat: num(s.lat),
-        lng: num(s.lng),
+      stops: uniq.map((s, i) => ({
+        id: s.id,
+        seq: i + 1,
+        street: s.street,
+        lat: s.lat,
+        lng: s.lng,
       })),
     };
   });

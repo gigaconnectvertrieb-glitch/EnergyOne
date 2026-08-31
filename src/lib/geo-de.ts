@@ -245,6 +245,24 @@ export function pointInPolygon(p: { lat: number; lng: number }, ring: { lat: num
   return inside;
 }
 
-export function filterStopsInZone(stops: PlanStop[], corners: { lat: number; lng: number }[]) {
-  return stops.filter((s) => pointInPolygon(s, corners));
+export function uniqueStreets(stops: PlanStop[]): PlanStop[] {
+  const map = new Map<string, PlanStop & { n: number; latSum: number; lngSum: number }>();
+  for (const s of stops) {
+    const key = s.street.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!key) continue;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...s, n: 1, latSum: s.lat, lngSum: s.lng });
+    } else {
+      prev.n += 1;
+      prev.latSum += s.lat;
+      prev.lngSum += s.lng;
+    }
+  }
+  return [...map.values()].map((s) => ({
+    id: s.id,
+    street: s.street.trim(),
+    lat: s.latSum / s.n,
+    lng: s.lngSum / s.n,
+  }));
 }

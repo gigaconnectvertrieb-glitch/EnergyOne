@@ -24,9 +24,9 @@ export const Route = createFileRoute("/app")({
 });
 
 const TABS = [
-  { to: "/app", label: "Heute", icon: CalendarDays },
+  { to: "/app", label: "Tour", icon: CalendarDays },
   { to: "/app/karte", label: "Karte", icon: Map },
-  { to: "/app/liste", label: "Liste", icon: ListChecks },
+  { to: "/app/liste", label: "Nachlauf", icon: ListChecks },
   { to: "/app/mehr", label: "Mehr", icon: MoreHorizontal },
 ] as const;
 
@@ -37,17 +37,14 @@ function AppShell() {
   if (!user) return <RedirectToSignIn />;
   return (
     <div className="min-h-dvh bg-bg text-ink">
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-bg/90 px-4 pt-[env(safe-area-inset-top)] backdrop-blur">
-        <BrandMark className="h-9 w-auto" />
-        <div className="leading-tight">
-          <p className="font-display text-lg text-gold">E1 Feld</p>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-muted">Direktvertrieb</p>
-        </div>
+      <header className="sticky top-0 z-20 flex h-12 items-center gap-2.5 border-b border-white/5 bg-bg/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+        <BrandMark className="h-7 w-auto" />
+        <p className="font-display text-base tracking-wide text-gold">Feld</p>
       </header>
-      <main className="px-4 pb-24 pt-4">
+      <main className="px-4 pb-28 pt-3">
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
         {TABS.map((t) => {
           const on = t.to === "/app" ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
           return (
@@ -55,11 +52,12 @@ function AppShell() {
               key={t.to}
               to={t.to}
               className={cn(
-                "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] text-muted",
+                "relative flex min-h-[3.75rem] flex-col items-center justify-center gap-1 text-[10px] uppercase tracking-[0.14em] text-muted",
                 on && "text-gold",
               )}
             >
-              <t.icon className="size-5" />
+              {on ? <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-gold" /> : null}
+              <t.icon className="size-5" strokeWidth={on ? 2.2 : 1.6} />
               {t.label}
             </Link>
           );

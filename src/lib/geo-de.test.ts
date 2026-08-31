@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { bboxAround, planWorkdays, pointInPolygon, searchDeCities } from "./geo-de.ts";
+import { bboxAround, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets } from "./geo-de.ts";
 
 describe("geo-de", () => {
   it("finds german cities", () => {
@@ -45,5 +45,15 @@ describe("geo-de", () => {
     ];
     assert.equal(pointInPolygon({ lat: 1, lng: 1 }, rect), true);
     assert.equal(pointInPolygon({ lat: 3, lng: 1 }, rect), false);
+  });
+
+  it("merges OSM segments of the same street", () => {
+    const u = uniqueStreets([
+      { id: "1", lat: 49.69, lng: 8.45, street: "Berliner Straße" },
+      { id: "2", lat: 49.691, lng: 8.451, street: "Berliner Straße" },
+      { id: "3", lat: 49.692, lng: 8.452, street: "Bei den Münchäckern" },
+    ]);
+    assert.equal(u.length, 2);
+    assert.equal(u.some((s) => s.street === "Berliner Straße"), true);
   });
 });
