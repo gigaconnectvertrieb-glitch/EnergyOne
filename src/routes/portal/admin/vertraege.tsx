@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { createHvContract, downloadHvContract, listHvContracts, saveHvTabletSign, sendHvSignEmail } from "@/lib/server/hv-api";
+import { createHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvSignEmail } from "@/lib/server/hv-api";
 import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
 import { previewMusterVertrag } from "@/lib/server/sign-api";
@@ -24,9 +24,37 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Recht</p>
       <h1 className="mt-1 font-display text-4xl">Verträge</h1>
       <p className="mt-2 text-sm text-muted">
-        Handelsvertreter: Name und Adresse eingeben, PDF erzeugen, dann Tablet oder DocuSign.
-        Stufe 1, Provision, Vertragsstrafen, AGB. Vor dem ersten Einsatz Anwalt gegenlesen lassen.
+        Vollständige Vertragsurkunden nach HGB / EnWG / DSGVO. Erst Muster laden, dann mit Namen
+        ausfüllen. Vor dem ersten Live-Einsatz kurz den Anwalt gegenlesen lassen.
       </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              const file = await previewMusterHv();
+              savePdf(file.filename, file.pdfBase64);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Muster fehlgeschlagen");
+            }
+          }}
+        >
+          Muster Handelsvertreter (PDF)
+        </Button>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              const data = await previewMusterVertrag();
+              savePdf("E1-Muster-Stromliefervertrag.pdf", data.pdfBase64);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Muster fehlgeschlagen");
+            }
+          }}
+        >
+          Muster Stromkunde (PDF)
+        </Button>
+      </div>
       <div className="mt-4 flex gap-2">
         <Button variant={tab === "hv" ? "default" : "outline"} onClick={() => setTab("hv")}>
           Handelsvertreter

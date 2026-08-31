@@ -69,7 +69,7 @@ export function toPdfText(s: string) {
     .replace(/–/g, "-");
 }
 
-export function wrapPdfLine(line: string, width = 92): string[] {
+export function wrapPdfLine(line: string, width = 88): string[] {
   if (!line) return [""];
   const words = line.split(/\s+/);
   const out: string[] = [];
@@ -85,39 +85,74 @@ export function wrapPdfLine(line: string, width = 92): string[] {
   return out;
 }
 
-export function buildPagedPdf(lines: string[]) {
-  const wrapped: string[] = [];
-  for (const line of lines) wrapped.push(...wrapPdfLine(line));
-  const perPage = 46;
-  const pages: string[][] = [];
-  for (let i = 0; i < wrapped.length; i += perPage) pages.push(wrapped.slice(i, i + perPage));
-  if (!pages.length) pages.push([""]);
+function isHeading(line: string) {
+  const t = line.trim();
+  if (!t) return false;
+  if (/^§\s*\d+/.test(t)) return true;
+  if (/^ANLAGE\s+\d/i.test(t)) return true;
+  if (/^(HANDELSVERTRETERVERTRAG|STROMLIEFERVERTRAG|GASLIEFERVERTRAG|MUSTEREMPFÄNGER|E1 DIREKTVERTRIEB)/.test(t)) {
+    return true;
+  }
+  return t === t.toUpperCase() && t.length > 12 && t.length < 72 && /[A-ZÄÖÜ]/.test(t);
+}
 
-  const fontObj = "3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj";
+/** Professionelles Vertragslayout: Kopfzeile, Goldstreifen, Überschriften fett, Seitenzahl. */
+export function buildPagedPdf(lines: string[], title = "Vertragsdokument") {
+  const wrapped: { text: string; heading: boolean }[] = [];
+  for (const line of lines) {
+    const heading = isHeading(line);
+    const parts = heading ? [line.trim()] : wrapPdfLine(line);
+    for (const p of parts) wrapped.push({ text: p, heading });
+  }
+  const perPage = 42;
+  const pages: (typeof wrapped)[] = [];
+  for (let i = 0; i < wrapped.length; i += perPage) pages.push(wrapped.slice(i, i + perPage));
+  if (!pages.length) pages.push([{ text: "", heading: false }]);
+  const total = pages.length;
+
+  const fontReg = "3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj";
+  const fontBold = "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj";
   const pageObjs: string[] = [];
   const contentObjs: string[] = [];
   const kids: string[] = [];
-  let obj = 4;
-  for (const page of pages) {
-    const ops = page
-      .map((line, i) => `BT /F1 10 Tf 48 ${800 - i * 16} Td (${toPdfText(line)}) Tj ET`)
-      .join("\n");
-    const stream = ops + "\n";
+  let obj = 5;
+  pages.forEach((page, pi) => {
+    const header = [
+      "0.788 0.635 0.153 rg",
+      "0 822 595 20 re f",
+      "1 1 1 rg",
+      "BT /F2 9 Tf 48 828 Td (E1 DIREKTVERTRIEB  -  " + toPdfText(title.slice(0, 48)) + ") Tj ET",
+      "0 g",
+      "0.788 0.635 0.153 RG 0.6 w 48 812 499 0 m 547 812 l S",
+    ];
+    const footer = [
+      "0.55 0.55 0.55 rg",
+      `BT /F1 8 Tf 48 28 Td (${toPdfText("Vertraulich  |  Nur zur internen und vertraglichen Verwendung")}) Tj ET`,
+      `BT /F1 8 Tf 480 28 Td (Seite ${pi + 1} / ${total}) Tj ET`,
+      "0 g",
+    ];
+    const body = page.map((row, i) => {
+      const y = 792 - i * 17;
+      const font = row.heading ? "/F2 11" : "/F1 10";
+      return `BT ${font} Tf 48 ${y} Td (${toPdfText(row.text)}) Tj ET`;
+    });
+    const stream = [...header, ...body, ...footer].join("\n") + "\n";
     const contentId = obj;
     const pageId = obj + 1;
     contentObjs.push(
       `${contentId} 0 obj << /Length ${Buffer.byteLength(stream, "latin1")} >> stream\n${stream}endstream endobj`,
     );
     pageObjs.push(
-      `${pageId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${contentId} 0 R /Resources << /Font << /F1 3 0 R >> >> >> endobj`,
+      `${pageId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${contentId} 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >> endobj`,
     );
     kids.push(`${pageId} 0 R`);
     obj += 2;
-  }
+  });
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
     `2 0 obj << /Type /Pages /Kids [${kids.join(" ")}] /Count ${pages.length} >> endobj`,
-    fontObj,
+    fontReg,
+    fontBold,
     ...contentObjs.flatMap((c, i) => [c, pageObjs[i]!]),
   ];
   let offset = "%PDF-1.4\n".length;
@@ -137,5 +172,5 @@ export function buildPagedPdf(lines: string[]) {
 }
 
 export function buildContractPdf(lines: string[]) {
-  return buildPagedPdf([...lines, "", "Bitte hier unterschreiben:  /sign1/"]);
+  return buildPagedPdf([...lines, "", "Unterschrift (Anker):  /sign1/"], "Energievertrag");
 }

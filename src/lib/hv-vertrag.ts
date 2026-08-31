@@ -61,6 +61,26 @@ export function fillHvAnlage1(bands: HvBand[] | undefined, stufe: number): strin
   ];
 }
 
+export function musterHvInput(): HvInput {
+  return {
+    first: "[Vorname]",
+    last: "[Nachname]",
+    street: "[Straße]",
+    house: "[Nr.]",
+    zip: "[PLZ]",
+    city: "[Ort]",
+    email: "[E-Mail]",
+    phone: "[Telefon]",
+    staffId: "[Mitarbeiter-ID]",
+    birth: "[TT.MM.JJJJ]",
+    taxId: "[Steuer-ID / USt-IdNr.]",
+    tradeNo: "[Gewerbeanmeldung]",
+    start: "[Datum Beginn]",
+    region: "[zugewiesenes Gebiet]",
+    stufe: 1,
+  };
+}
+
 export function dash(v?: string | null, fallback = "[Platzhalter]") {
   const s = (v ?? "").trim();
   return s || fallback;
@@ -79,12 +99,16 @@ export function fillHvVertrag(d: HvInput): string[] {
     "Energie, die zu Ihnen passt.",
     "",
     "HANDELSVERTRETERVERTRAG",
-    "mit Provisionsordnung, AGB und Datenschutzhinweis",
-    "nach deutschem Recht (§§ 84 ff. HGB, BGB)",
+    "selbststaendiger Handelsvertreter nach §§ 84 ff. HGB",
+    "mit Provisionsordnung, AGB, Datenschutz und Zusatzvereinbarung Stufe",
     "",
-    "Rechtlicher Hinweis: Dies ist eine vollständige Arbeitsvorlage für selbstständige",
-    "Handelsvertreter. Sie ersetzt keine anwaltliche Beratung. Vor der ersten Verwendung",
-    "kurz von einem Anwalt (Arbeits-/Handelsrecht) gegenlesen lassen. Kein Arbeitsvertrag.",
+    "Dokument: verbindliche Vertragsurkunde  |  Ausfertigung Portal",
+    `Stufe bei Beginn: ${stufe} (höhere Stufe nur durch Zusatzvereinbarung)`,
+    `Tätigkeitsgebiet: ${region}`,
+    "",
+    "Dieser Vertrag ist kein Arbeitsvertrag. Der Handelsvertreter ist selbstständig,",
+    "im eigenen Namen und auf eigene Rechnung tätig. Vor dem ersten Einsatz ist eine",
+    "kurze anwaltliche Prüfung empfohlen. Es gilt deutsches Recht.",
     "",
     "§ 1 Vertragsparteien",
     "",

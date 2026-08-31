@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can } from "@/lib/e1";
-import { fillHvVertrag, type HvInput } from "@/lib/hv-vertrag";
+import { fillHvVertrag, musterHvInput, type HvInput } from "@/lib/hv-vertrag";
 import { buildPagedPdf } from "@/lib/sign";
 import { nid } from "@/lib/utils";
 import { docusignReady, sendDocusignEnvelope } from "./docusign.server";
@@ -86,7 +86,7 @@ export const createHvContract = createServerFn({ method: "POST" })
         where user_id = ${ownerId}
       `;
     }
-    const pdf = buildPagedPdf(lines);
+    const pdf = buildPagedPdf(lines, "Handelsvertretervertrag");
     return {
       id,
       filename: downloadName(input.last, id),
@@ -136,7 +136,7 @@ export const downloadHvContract = createServerFn({ method: "POST" })
       select id, last_name, body from staff_contracts where id = ${data.id}
     `;
     if (!row) throw new Error("Vertrag nicht gefunden.");
-    const pdf = buildPagedPdf(row.body.split("\n"));
+    const pdf = buildPagedPdf(row.body.split("\n"), "Handelsvertretervertrag");
     return { filename: downloadName(row.last_name, row.id), pdfBase64: pdf.toString("base64") };
   });
 
@@ -162,7 +162,7 @@ export const sendHvSignEmail = createServerFn({ method: "POST" })
     const email = (data.email || row.email || "").trim().toLowerCase();
     if (!email.includes("@")) throw new Error("E-Mail des Handelsvertreters fehlt.");
     const name = `${row.first_name} ${row.last_name}`.trim();
-    const pdf = buildPagedPdf(row.body.split("\n"));
+    const pdf = buildPagedPdf(row.body.split("\n"), "Handelsvertretervertrag");
     const envId = nid();
     const ready = docusignReady();
     let status = ready ? "sent" : "queued";
@@ -227,4 +227,16 @@ export const saveHvTabletSign = createServerFn({ method: "POST" })
       )
     `;
     return { ok: true };
+  });
+
+export const previewMusterHv = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async () => {
+    const lines = fillHvVertrag(musterHvInput());
+    const pdf = buildPagedPdf(lines, "Muster Handelsvertretervertrag");
+    return {
+      filename: "E1-Muster-Handelsvertretervertrag.pdf",
+      pdfBase64: pdf.toString("base64"),
+      lines,
+    };
   });
