@@ -87,7 +87,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       poly.addTo(map);
       layerRef.current.push(poly);
       try {
-        map.fitBounds(poly.getBounds(), { padding: [40, 40], maxZoom: 16 });
+        map.fitBounds(poly.getBounds(), { padding: [28, 28], maxZoom: 18 });
       } catch {
         /* */
       }
@@ -99,13 +99,13 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       layerRef.current.push(line);
     }
     for (const h of data.houses) {
-      const m = L.circleMarker([h.lat, h.lng], {
-        radius: 5,
-        color: "#0b0d12",
-        weight: 1,
-        fillColor: "#c9a227",
-        fillOpacity: 1,
+      const icon = L.divIcon({
+        className: "e1-hn",
+        html: `<span>${escapeHtml(h.house)}</span>`,
+        iconSize: [26, 16],
+        iconAnchor: [13, 8],
       });
+      const m = L.marker([h.lat, h.lng], { icon, keyboard: false });
       m.bindTooltip(`${h.street} ${h.house}`, { direction: "top" });
       m.on("click", () => {
         void pick({ lat: h.lat, lng: h.lng, street: h.street, house: h.house, zip: "", city: "", display: `${h.street} ${h.house}` });
@@ -317,6 +317,13 @@ type LeafletNS = {
     getBounds: () => unknown;
   };
   polyline: (ll: [number, number][], o: unknown) => { addTo: (m: unknown) => void; remove: () => void };
+  divIcon: (o: unknown) => unknown;
+  marker: (ll: [number, number], o: unknown) => {
+    addTo: (m: unknown) => void;
+    remove: () => void;
+    bindTooltip: (s: string, o?: unknown) => void;
+    on: (ev: string, fn: () => void) => void;
+  };
   circleMarker: (ll: [number, number], o: unknown) => {
     addTo: (m: unknown) => void;
     remove: () => void;
@@ -324,6 +331,10 @@ type LeafletNS = {
     on: (ev: string, fn: () => void) => void;
   };
 };
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" }[c] || c));
+}
 
 let leafletPromise: Promise<void> | null = null;
 function loadLeaflet() {

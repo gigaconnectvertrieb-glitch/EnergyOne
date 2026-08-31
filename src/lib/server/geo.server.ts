@@ -129,7 +129,36 @@ export type HouseHit = {
   lat: number;
   lng: number;
   street: string;
+  zip?: string;
 };
+
+function hitsFromOverpass(
+  elements: Array<{
+    lat?: number;
+    lon?: number;
+    center?: { lat: number; lon: number };
+    tags?: { "addr:housenumber"?: string; "addr:street"?: string; "addr:place"?: string; "addr:postcode"?: string };
+  }>,
+  streetFallback = "",
+): HouseHit[] {
+  const seen = new Set<string>();
+  const out: HouseHit[] = [];
+  for (const el of elements) {
+    const house = el.tags?.["addr:housenumber"]?.trim();
+    const st = el.tags?.["addr:street"]?.trim() || el.tags?.["addr:place"]?.trim() || streetFallback;
+    const la = el.lat ?? el.center?.lat;
+    const ln = el.lon ?? el.center?.lon;
+    if (!house || !st || la == null || ln == null) continue;
+    const key = `${st.toLowerCase()}|${house}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ house, lat: la, lng: ln, street: st, zip: el.tags?.["addr:postcode"] || "" });
+  }
+  return out.sort((a, b) => {
+    const s = a.street.localeCompare(b.street, "de");
+    return s || a.house.localeCompare(b.house, "de", { numeric: true });
+  });
+}
 
 export async function nominatimAddress(query: string): Promise<AddressHit[]> {
   const q = query.trim();
@@ -169,69 +198,35 @@ export async function nominatimAddress(query: string): Promise<AddressHit[]> {
 }
 
 export async function overpassHouses(lat: number, lng: number, street?: string): Promise<HouseHit[]> {
-  const query = `[out:json][timeout:20];(node["addr:housenumber"](around:140,${lat},${lng});way["addr:housenumber"](around:140,${lat},${lng}););out center 120;`;
+  const query = `[out:json][timeout:25];nwr["addr:housenumber"](around:220,${lat},${lng});out center;`;
   const res = await fetch("https://overpass-api.de/api/interpreter", {
     method: "POST",
     headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
     body: `data=${encodeURIComponent(query)}`,
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as {
-    elements?: Array<{
-      lat?: number;
-      lon?: number;
-      center?: { lat: number; lon: number };
-      tags?: { "addr:housenumber"?: string; "addr:street"?: string };
-    }>;
-  };
+  const json = (await res.json()) as { elements?: Parameters<typeof hitsFromOverpass>[0] };
+  const all = hitsFromOverpass(json.elements || [], street);
   const want = (street || "").trim().toLowerCase();
-  const seen = new Set<string>();
-  const out: HouseHit[] = [];
-  for (const el of json.elements || []) {
-    const house = el.tags?.["addr:housenumber"]?.trim();
-    const st = el.tags?.["addr:street"]?.trim() || street || "";
-    const la = el.lat ?? el.center?.lat;
-    const ln = el.lon ?? el.center?.lon;
-    if (!house || la == null || ln == null) continue;
-    if (want && st && !st.toLowerCase().includes(want) && !want.includes(st.toLowerCase())) continue;
-    const key = `${st}|${house}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ house, lat: la, lng: ln, street: st });
-  }
-  return out.sort((a, b) => a.house.localeCompare(b.house, "de", { numeric: true }));
+  if (!want) return all.slice(0, 200);
+  const match = all.filter((h) => h.street.toLowerCase().includes(want) || want.includes(h.street.toLowerCase()));
+  return (match.length ? match : all).slice(0, 200);
 }
 
 export async function overpassHousesBbox(bbox: { south: number; north: number; west: number; east: number }): Promise<HouseHit[]> {
-  const b = clampBbox(bbox);
-  const query = `[out:json][timeout:25];(node["addr:housenumber"](${b.south},${b.west},${b.north},${b.east});way["addr:housenumber"](${b.south},${b.west},${b.north},${b.east}););out center 300;`;
+  const b = clampBbox({
+    south: bbox.south,
+    north: bbox.north,
+    west: bbox.west,
+    east: bbox.east,
+  });
+  const query = `[out:json][timeout:40];nwr["addr:housenumber"](${b.south},${b.west},${b.north},${b.east});out center;`;
   const res = await fetch("https://overpass-api.de/api/interpreter", {
     method: "POST",
     headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
     body: `data=${encodeURIComponent(query)}`,
   });
   if (!res.ok) return [];
-  const json = (await res.json()) as {
-    elements?: Array<{
-      lat?: number;
-      lon?: number;
-      center?: { lat: number; lon: number };
-      tags?: { "addr:housenumber"?: string; "addr:street"?: string };
-    }>;
-  };
-  const seen = new Set<string>();
-  const out: HouseHit[] = [];
-  for (const el of json.elements || []) {
-    const house = el.tags?.["addr:housenumber"]?.trim();
-    const st = el.tags?.["addr:street"]?.trim() || "";
-    const la = el.lat ?? el.center?.lat;
-    const ln = el.lon ?? el.center?.lon;
-    if (!house || !st || la == null || ln == null) continue;
-    const key = `${st.toLowerCase()}|${house}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ house, lat: la, lng: ln, street: st });
-    if (out.length >= 300) break;
-  }
-  return out;
+  const json = (await res.json()) as { elements?: Parameters<typeof hitsFromOverpass>[0] };
+  return hitsFromOverpass(json.elements || []).slice(0, 1500);
 }

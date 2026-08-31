@@ -126,7 +126,13 @@ function Page() {
                     {s.houses.length} Nr. · {Math.round(s.meters)} m
                   </p>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-ink">{s.houses.map((h) => h.house).join(" · ")}</p>
+                <p className="mt-2 flex flex-wrap gap-1">
+                  {s.houses.map((h) => (
+                    <span key={`${h.lat}-${h.house}`} className="rounded bg-gold/15 px-1.5 py-0.5 text-xs tabular-nums text-gold">
+                      {h.house}
+                    </span>
+                  ))}
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => reverse(i)}>
                     Umdrehen
