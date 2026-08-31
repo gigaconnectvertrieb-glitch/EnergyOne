@@ -26,7 +26,6 @@ import { bootstrapMe } from "@/lib/server/api";
 import type { Profile } from "@/lib/e1";
 import { can, type Role } from "@/lib/e1";
 import { Wordmark } from "./logo";
-import { TotpGate } from "./totp-gate";
 import { cn } from "@/lib/utils";
 
 type MeState = {
@@ -259,15 +258,7 @@ export function PortalShell() {
     </div>
   );
 
-  return (
-    <TotpGate
-      userId={me.profile.user_id}
-      enabled={me.profile.totp_enabled}
-      required={Boolean(me.require_2fa)}
-    >
-      {shell}
-    </TotpGate>
-  );
+  return shell;
 }
 
 function NavItem({
