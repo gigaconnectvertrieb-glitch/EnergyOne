@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listContracts } from "@/lib/server/api";
+import { listContracts, exportOpsCsv } from "@/lib/server/api";
 import { STATUSES, STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { deDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { Input, Select } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/auftraege/")({ component: Page });
 
@@ -28,9 +30,29 @@ function Page() {
           <h1 className="font-display text-4xl">Aufträge</h1>
           <p className="text-sm text-muted">Kurzliste aus dem Portal. Verträge selbst stehen in New Sales.</p>
         </div>
-        <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-          Eintrag
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={async () => {
+              try {
+                const file = await exportOpsCsv({ data: "auftraege" });
+                const blob = new Blob([`\uFEFF${file.csv}`], { type: "text/csv;charset=utf-8" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = file.filename;
+                a.click();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Excel fehlgeschlagen");
+              }
+            }}
+          >
+            Excel (eine Tabelle)
+          </Button>
+          <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
+            Eintrag
+          </Link>
+        </div>
       </div>
       <div className="mt-5 grid gap-2 sm:grid-cols-3">
         <Input placeholder="Suche Name, PLZ, Zähler…" value={q} onChange={(e) => setQ(e.target.value)} />

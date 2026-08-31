@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
-import { bootstrapMe, createContract, listTariffs, quoteCommission } from "@/lib/server/api";
+import { bootstrapMe, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
 import { toast } from "sonner";
 import { eur } from "@/lib/utils";
 
@@ -26,11 +26,19 @@ function Capture() {
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
   const [stufe, setStufe] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
+  const [forStaff, setForStaff] = useState("");
 
   useEffect(() => {
     bootstrapMe()
-      .then((m) => setStufe(m.profile.commission_stufe || 1))
+      .then((m) => {
+        setStufe(m.profile.commission_stufe || 1);
+        setForStaff(m.profile.user_id);
+      })
       .catch(() => setStufe(1));
+    listBookableStaff()
+      .then(setStaff)
+      .catch(() => setStaff([]));
   }, []);
 
   useEffect(() => {
@@ -89,6 +97,7 @@ function Capture() {
           tariffId,
           consumptionKwh: Number(kwh),
           inNewsales: true,
+          forStaffId: forStaff || undefined,
         },
       });
       toast.success(`In der Datenbank · ${eur(res.amount)}`);
@@ -105,9 +114,23 @@ function Capture() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Schnell erfassen</p>
       <h1 className="mt-1 font-display text-4xl">Name, Adresse, Tarif</h1>
       <p className="mt-2 text-sm text-muted">
-        Vertrag steht in New Sales. Hier nur die kurze Liste für die E1-Datenbank. Teamleiter
-        gleicht in New Sales ab. Stufe {stufe}.
+        Vertrag steht in New Sales. Hier die kurze Liste für die E1-Datenbank. Leitung kann auf die
+        Mitarbeiter-ID buchen. Stufe {stufe}.
       </p>
+
+      {staff.length > 1 ? (
+        <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+          <Field label="Buchen auf Mitarbeiter-ID">
+            <Select value={forStaff} onChange={(e) => setForStaff(e.target.value)}>
+              {staff.map((s) => (
+                <option key={s.user_id} value={s.user_id}>
+                  {s.staff_id ? `${s.staff_id} · ${s.name}` : s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <div className="grid gap-3 sm:grid-cols-2">

@@ -62,6 +62,7 @@ export type ContractDraft = {
   notes?: string;
   newsalesRef?: string;
   inNewsales?: boolean;
+  forStaffId?: string;
 };
 
 function monthStart() {
@@ -328,8 +329,25 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   if (!data.tariffId) throw new Error("Tarif ist Pflicht.");
   const kwh = Number(data.consumptionKwh) || 0;
   if (kwh <= 0) throw new Error("Jahresverbrauch fehlt.");
+  let ownerId = context.userId;
+  let stufeOwner = me;
+  if (data.forStaffId?.trim()) {
+    if (!can(me.role, "team.view") && !can(me.role, "users.manage")) {
+      throw new Error("Nur Leitung darf auf eine andere Mitarbeiter-ID buchen.");
+    }
+    const key = data.forStaffId.trim().toLowerCase();
+    const [owner] = await db<Record<string, unknown>>`
+      select user_id, staff_id, first_name, last_name, commission_stufe, status, role
+      from profiles
+      where lower(coalesce(staff_id, '')) = ${key} or user_id = ${data.forStaffId.trim()}
+    `;
+    if (!owner) throw new Error("Mitarbeiter-ID unbekannt.");
+    await assertCanSeeUser(db, me, asStr(owner.user_id));
+    ownerId = asStr(owner.user_id);
+    stufeOwner = mapProfile(owner);
+  }
   const { clampStufe, commissionFromBand, matchBand } = await import("@/lib/tariffs");
-  const stufe = clampStufe(me.commission_stufe);
+  const stufe = clampStufe(stufeOwner.commission_stufe);
   const [tariff] = await db<Record<string, unknown>>`
       select * from tariffs where id = ${data.tariffId} and active = true
     `;
@@ -376,7 +394,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
         previous_provider, start_date, commission_rate, commission_amount, commission_stufe,
         sepa_confirmed, privacy_confirmed, signature_confirmed, notes, newsales_ref, source
       ) values (
-        ${id}, ${customerId}, ${context.userId}, ${type}, ${data.tariffId}, 'uebermittelt',
+        ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, 'uebermittelt',
         ${kwh}, ${data.meterNumber?.trim() || null}, ${data.previousProvider?.trim() || null},
         ${data.startDate || null}, ${amount}, ${amount}, ${stufe}, false, false, false,
         ${data.notes?.trim() || null}, ${ref}, 'newsales_manual'
@@ -386,7 +404,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (
         ${nid()}, ${id}, null, 'uebermittelt', ${context.userId},
-        ${`In New Sales angelegt, Portal-Datenbank gefüllt · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · ${amount} €${ref ? ` · NS ${ref}` : ""}`}
+        ${`In New Sales · gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · ${amount} €${ref ? ` · NS ${ref}` : ""}`}
       )
     `;
   await audit(db, {
@@ -399,9 +417,19 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       tariff: asStr(tariff.name),
       stufe,
       amount,
-      customerId
+      customerId,
+      ownerId,
     }
   });
+  if (ownerId !== context.userId) {
+    await notify(db, {
+      userId: ownerId,
+      type: "auftrag",
+      title: "Abschluss auf Ihre ID",
+      message: `${me.first_name} ${me.last_name} hat ${data.firstName} ${data.lastName} auf Ihre Mitarbeiter-ID gebucht · ${asStr(tariff.name)} (${amount.toFixed(2)} €).`,
+      link: `/portal/auftraege/${id}`,
+    });
+  }
   if (me.supervisor_id) await notify(db, {
     userId: me.supervisor_id,
     type: "auftrag",
@@ -994,6 +1022,30 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
     stornos: num(r.stornos),
     invite_code: r.invite_code && !r.totp_enabled ? asStr(r.invite_code) : null,
     staff_id: r.staff_id ? asStr(r.staff_id) : null,
+  }));
+});
+export const listBookableStaff = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+  const db = await sql();
+  const me = await requireProfile(db, context.userId);
+  if (!can(me.role, "team.view") && !can(me.role, "users.manage") && me.role !== "vertrieb") {
+    return [{ user_id: me.user_id, staff_id: null as string | null, name: `${me.first_name} ${me.last_name}` }];
+  }
+  const ids = can(me.role, "users.manage") ? null : await visibleUserIds(db, me);
+  const rows = ids
+    ? await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string }>`
+        select user_id, staff_id, first_name, last_name from profiles
+        where status = 'active' and is_demo = false and user_id = any(${ids})
+        order by last_name, first_name
+      `
+    : await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string }>`
+        select user_id, staff_id, first_name, last_name from profiles
+        where status = 'active' and is_demo = false
+        order by last_name, first_name
+      `;
+  return rows.map((r) => ({
+    user_id: r.user_id,
+    staff_id: r.staff_id,
+    name: `${r.first_name} ${r.last_name}`.trim(),
   }));
 });
 export const updateUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ context, data }) => {
@@ -1806,35 +1858,60 @@ export const exportOpsCsv = createServerFn({ method: "POST" })
     }
     const rows = ids
       ? await db<Record<string, unknown>>`
-          select c.id, c.created_at, c.status, c.type, c.consumption_kwh, cu.last_name, cu.zip, cu.city, p.name as product, pr.last_name as advisor
+          select c.id, c.created_at, c.status, c.type, c.consumption_kwh, c.commission_amount,
+                 cu.first_name, cu.last_name, cu.phone, cu.zip, cu.city,
+                 coalesce(t.name, p.name) as product, coalesce(t.provider, p.provider) as provider,
+                 pr.staff_id, pr.first_name as advisor_first, pr.last_name as advisor_last
           from contracts c
           join customers cu on cu.id = c.customer_id
           left join products p on p.id = c.product_id
+          left join tariffs t on t.id = c.tariff_id
           left join profiles pr on pr.user_id = c.user_id
           where c.user_id = any(${ids})
           order by c.created_at desc`
       : await db<Record<string, unknown>>`
-          select c.id, c.created_at, c.status, c.type, c.consumption_kwh, cu.last_name, cu.zip, cu.city, p.name as product, pr.last_name as advisor
+          select c.id, c.created_at, c.status, c.type, c.consumption_kwh, c.commission_amount,
+                 cu.first_name, cu.last_name, cu.phone, cu.zip, cu.city,
+                 coalesce(t.name, p.name) as product, coalesce(t.provider, p.provider) as provider,
+                 pr.staff_id, pr.first_name as advisor_first, pr.last_name as advisor_last
           from contracts c
           join customers cu on cu.id = c.customer_id
           left join products p on p.id = c.product_id
+          left join tariffs t on t.id = c.tariff_id
           left join profiles pr on pr.user_id = c.user_id
           order by c.created_at desc`;
     return {
-      filename: "e1-auftraege.csv",
+      filename: "E1-Abschluesse.csv",
       csv: csvTable(
-        ["Auftrag", "Datum", "Status", "Sparte", "kWh", "Kunde", "PLZ", "Ort", "Produkt", "Berater"],
+        [
+          "Datum",
+          "Mitarbeiter-ID",
+          "Berater",
+          "Kunde",
+          "Telefon",
+          "PLZ",
+          "Ort",
+          "Sparte",
+          "Tarif",
+          "Anbieter",
+          "kWh",
+          "Provision EUR",
+          "Status",
+        ],
         rows.map((r) => [
-          asStr(r.id),
-          asStr(r.created_at),
-          asStr(r.status),
-          asStr(r.type),
-          num(r.consumption_kwh),
-          asStr(r.last_name),
+          asStr(r.created_at).slice(0, 16).replace("T", " "),
+          asStr(r.staff_id),
+          `${asStr(r.advisor_first)} ${asStr(r.advisor_last)}`.trim(),
+          `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+          asStr(r.phone),
           asStr(r.zip),
           asStr(r.city),
+          asStr(r.type),
           asStr(r.product),
-          asStr(r.advisor),
+          asStr(r.provider),
+          num(r.consumption_kwh),
+          num(r.commission_amount).toFixed(2).replace(".", ","),
+          asStr(r.status),
         ]),
       ),
     };
