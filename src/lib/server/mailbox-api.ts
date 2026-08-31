@@ -8,6 +8,7 @@ import {
   type MailFolder,
 } from "@/lib/mailbox";
 import { asStr, num } from "@/lib/utils";
+import { parseMimeMessage, sanitizeMailHtml } from "@/lib/mail-mime";
 import { requireProfile, sql } from "./helpers";
 import {
   assertCanRead,
@@ -145,26 +146,32 @@ export const getThread = createServerFn({ method: "POST" })
         customer,
       },
       can_send: boxes.find((b) => b.local === asStr(thread.mailbox))?.can_send ?? false,
-      messages: messages.map((m) => ({
-        id: asStr(m.id),
-        direction: asStr(m.direction),
-        from_address: asStr(m.from_address),
-        from_name: asStr(m.from_name),
-        to_addresses: asStr(m.to_addresses),
-        cc_addresses: asStr(m.cc_addresses),
-        subject: asStr(m.subject),
-        body_text: asStr(m.body_text),
-        sent_at: asStr(m.sent_at),
-        unread: Boolean(m.unread),
-        draft: Boolean(m.draft),
-        status: asStr(m.status),
-        attachments: (byMsg.get(asStr(m.id)) ?? []).map((a) => ({
-          id: asStr(a.id),
-          filename: asStr(a.filename),
-          mime_type: asStr(a.mime_type),
-          size_bytes: num(a.size_bytes),
-        })),
-      })),
+      messages: messages.map((m) => {
+        const raw = asStr(m.body_text);
+        const htmlStored = raw.startsWith("<!--e1html-->") ? raw.slice("<!--e1html-->".length) : "";
+        const parsed = htmlStored ? { text: "", html: htmlStored, subject: "" } : parseMimeMessage(raw);
+        return {
+          id: asStr(m.id),
+          direction: asStr(m.direction),
+          from_address: asStr(m.from_address),
+          from_name: asStr(m.from_name),
+          to_addresses: asStr(m.to_addresses),
+          cc_addresses: asStr(m.cc_addresses),
+          subject: asStr(m.subject),
+          body_text: parsed.text || raw,
+          body_html: parsed.html ? sanitizeMailHtml(parsed.html) : "",
+          sent_at: asStr(m.sent_at),
+          unread: Boolean(m.unread),
+          draft: Boolean(m.draft),
+          status: asStr(m.status),
+          attachments: (byMsg.get(asStr(m.id)) ?? []).map((a) => ({
+            id: asStr(a.id),
+            filename: asStr(a.filename),
+            mime_type: asStr(a.mime_type),
+            size_bytes: num(a.size_bytes),
+          })),
+        };
+      }),
     };
   });
 

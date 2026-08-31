@@ -118,9 +118,17 @@ function Page() {
               </div>
               <p className="text-xs text-muted tabular-nums">{deDateTime(m.sent_at)}</p>
             </div>
-            <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink">
-              {m.body_text}
-            </pre>
+            {m.body_html ? (
+              <iframe
+                title="Nachricht"
+                sandbox=""
+                referrerPolicy="no-referrer"
+                className="mt-4 min-h-[22rem] w-full rounded-xl bg-white"
+                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:16px;font:14px/1.5 system-ui,sans-serif;color:#222}img{max-width:100%;height:auto}a{color:#c9a227}</style></head><body>${m.body_html}</body></html>`}
+              />
+            ) : (
+              <div className="mt-4 whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink">{m.body_text}</div>
+            )}
             {m.attachments.length ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 {m.attachments.map((a) => (

@@ -1,6 +1,7 @@
 import { connect } from "node:tls";
 import type { ParsedGmailMessage } from "./gmail.server";
 import { gmailAppPasswordReady, gmailSmtpUser } from "./smtp-gmail.server";
+import { decodeMimeWord, parseMimeMessage } from "@/lib/mail-mime";
 
 function env(key: string) {
   return (process.env[key] ?? "").trim();
@@ -20,7 +21,7 @@ function parseHeaderBlock(raw: string) {
     from_address: (m ? m[2]! : fromRaw).trim().toLowerCase(),
     to: get("to"),
     cc: get("cc"),
-    subject: get("subject"),
+    subject: decodeMimeWord(get("subject")),
     date: get("date"),
   };
 }
@@ -38,18 +39,19 @@ function parseImapFetch(blob: string): ParsedGmailMessage[] {
     const flags = /FLAGS \(([^)]*)\)/.exec(flagsChunk)?.[1] || "";
     const internal = /INTERNALDATE "([^"]+)"/.exec(flagsChunk)?.[1];
     const h = parseHeaderBlock(raw);
-    const body = raw.slice(raw.search(/\r?\n\r?\n/) + 2).trim();
+    const parsed = parseMimeMessage(raw);
+    const body = parsed.text || parsed.html.replace(/<[^>]+>/g, " ").trim();
     const sent = internal ? new Date(internal) : h.date ? new Date(h.date) : new Date();
     out.push({
       gmail_id: `imap-${uid}`,
       thread_id: `imap-${uid}`,
       history_id: null,
       from_address: h.from_address,
-      from_name: h.from_name,
+      from_name: decodeMimeWord(h.from_name),
       to_addresses: h.to,
       cc_addresses: h.cc,
-      subject: h.subject,
-      body_text: body.slice(0, 20000),
+      subject: decodeMimeWord(h.subject) || parsed.subject,
+      body_text: (parsed.html ? `<!--e1html-->${parsed.html}` : body).slice(0, 80000),
       snippet: body.slice(0, 140),
       unread: !/\\Seen/i.test(flags),
       sent_at: Number.isNaN(sent.getTime()) ? new Date().toISOString() : sent.toISOString(),
