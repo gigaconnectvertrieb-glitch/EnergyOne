@@ -1,5 +1,4 @@
-# Render Docker-Service (bestehendes EnergyOne-Service).
-# Runtime bleibt Docker — kein neues Native-Node-Service nötig.
+# Render Docker-Service (bestehendes EnergyOne-Service auf main).
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
@@ -15,8 +14,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV RENDER=true
 ENV VITE_AUTH_ENABLED=true
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/migrations ./migrations
