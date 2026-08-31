@@ -1,0 +1,22 @@
+create table if not exists staff_contracts (
+  id text primary key,
+  user_id text,
+  staff_id text,
+  first_name text not null,
+  last_name text not null,
+  street text,
+  house_number text,
+  zip text,
+  city text,
+  email text,
+  phone text,
+  birth_date text,
+  tax_id text,
+  trade_no text,
+  region text,
+  start_date text,
+  stufe integer not null default 1,
+  body text not null,
+  created_by text,
+  created_at timestamptz not null default now()
+);
