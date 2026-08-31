@@ -12,7 +12,7 @@ export const Route = createFileRoute("/portal/admin/vertraege")({ component: Pag
 
 function savePdf(filename: string, b64: string) {
   const a = document.createElement("a");
-  a.href = `data:application/pdf;base64,${b64}`;
+  a.href = "data:application/pdf;base64," + b64;
   a.download = filename;
   a.click();
 }
@@ -47,6 +47,7 @@ function HvPanel() {
   const [sign, setSign] = useState("");
   const [mailFor, setMailFor] = useState<string | null>(null);
   const [mail, setMail] = useState("");
+  const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     userId: "",
     staffId: "",
