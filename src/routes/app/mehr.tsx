@@ -49,9 +49,6 @@ function Page() {
         <Link to="/portal" className="rounded-xl px-4 py-3 text-center text-sm gold-hairline">
           Zum Portal
         </Link>
-        <Link to="/portal/planung" className="rounded-xl px-4 py-3 text-center text-sm gold-hairline">
-          Gebietsplanung
-        </Link>
         <Button variant="outline" onClick={() => void signOut()}>
           Abmelden
         </Button>

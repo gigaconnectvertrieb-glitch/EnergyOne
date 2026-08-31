@@ -2,11 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
-import { listUsers } from "@/lib/server/api";
+import { listUsers, bootstrapMe } from "@/lib/server/api";
 import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
 import { deleteTerritory, listTerritories } from "@/lib/server/field-api";
 import { FieldMap, type WalkStop } from "@/components/field-map";
 import { bboxAround, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
+import { can } from "@/lib/e1";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/planung")({ component: Page });
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/portal/planung")({ component: Page });
 type Place = Awaited<ReturnType<typeof searchPlaces>>[number];
 
 function Page() {
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Place[]>([]);
   const [place, setPlace] = useState<Place | null>(null);
@@ -35,6 +37,26 @@ function Page() {
     listTerritories().then(setTers).catch(() => setTers([]));
   }
   useEffect(reload, []);
+  useEffect(() => {
+    bootstrapMe()
+      .then((m) => setAllowed(can(m.profile.role, "team.view")))
+      .catch(() => setAllowed(false));
+  }, []);
+
+  if (allowed === null) return <div className="h-40 animate-pulse rounded-3xl bg-surface" />;
+  if (!allowed) {
+    return (
+      <div className="mx-auto max-w-lg rounded-3xl bg-surface p-8 gold-hairline">
+        <h1 className="font-display text-4xl">Nur Leitung</h1>
+        <p className="mt-3 text-sm text-muted">
+          Gebiete spielt die Teamleitung auf und weist sie zu. Mitarbeiter sehen ihr Gebiet in der Feld-App.
+        </p>
+        <Link to="/app" className="mt-4 inline-block text-sm text-gold">
+          Zur Feld-App
+        </Link>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (q.trim().length < 2) {

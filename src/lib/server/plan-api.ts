@@ -250,7 +250,7 @@ export const streetsInZone = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    if (!canPlan(me.role) && me.role !== "vertrieb") throw new Error("Kein Zugriff");
+    if (!canPlan(me.role)) throw new Error("Kein Zugriff");
     const corners = data.corners.slice(0, 4);
     if (corners.length < 3) throw new Error("Mindestens dreimal tippen (Dreieck) oder viermal (Rechteck).");
     const box = bboxFromPoints(corners);
