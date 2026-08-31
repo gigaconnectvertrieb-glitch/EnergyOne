@@ -8,7 +8,7 @@ COPY . .
 ENV RENDER=true
 ENV VITE_AUTH_ENABLED=true
 ENV PATH="/app/node_modules/.bin:${PATH}"
-RUN node scripts/with-app-env.mjs vite build
+RUN node scripts/with-app-env.mjs vite build && node scripts/fix-ssr-exports.mjs
 
 FROM node:22-bookworm-slim
 WORKDIR /app
