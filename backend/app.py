@@ -1653,7 +1653,7 @@ return `<div class="teamCard">${avatar}<h3>${x.name}</h3><div class="role">${x.r
 <section class="section" id="kontakt">
 <div class="contactBand">
 <div><h2 style="text-align:left;margin:0 0 6px">Fragen? Wir sind erreichbar.</h2><p style="color:#6b6885;margin:0">Rufen Sie uns direkt an, persönlich und ohne Callcenter.</p></div>
-<div style="display:flex;flex-direction:column;gap:10px"><a class="tel" href="tel:+4917684109958">📞 0176 84109958 (Orhan Salo)</a><a class="tel" href="tel:+491782209604">📞 0178 2209604 (Luca-Marco Marrancone)</a></div>
+<div style="display:flex;flex-direction:column;gap:10px"><a class="tel" href="tel:+491782209604">📞 0178 2209604 (Orhan Salo)</a><a class="tel" href="tel:+4917684109958">📞 0176 84109958 (Luca-Marco Marrancone)</a></div>
 </div>
 </section>
 <div class="ctaBand"><h2>Sie sind Teil unseres Teams?</h2><p>Mitarbeiter melden sich hier im Vertriebsportal an.</p><a class="btnPrimary" href="/login" style="padding:14px 28px;border-radius:999px;text-decoration:none;font-weight:700">Zum Login</a></div>
@@ -1727,7 +1727,7 @@ IMPRESSUM_HTML = '''<!doctype html><html lang="de"><head><meta charset="utf-8"><
 <h2>Angaben gemäß § 5 TMG</h2>
 <p>E1 Direktvertrieb<br>Einzelunternehmen von Orhan Salo und Luca-Marco Marrancone<br>[Anschrift folgt]</p>
 <h2>Kontakt</h2>
-<p>Telefon: 0176 84109958 · 0178 2209604<br>E-Mail: saloorhan96@gmail.com · luca.marrancone@gmail.com</p>
+<p>Telefon: 0178 2209604 · 0176 84109958<br>E-Mail: saloorhan96@gmail.com · luca.marrancone@gmail.com</p>
 <h2>Registereintrag</h2>
 <p>[Handelsregister, Registergericht, Registernummer — falls vorhanden]</p>
 <h2>Umsatzsteuer-ID</h2>
