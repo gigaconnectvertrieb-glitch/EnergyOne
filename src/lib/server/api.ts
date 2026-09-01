@@ -1407,6 +1407,26 @@ export const updateLead = createServerFn({ method: "POST" }).middleware([authMid
     `;
   return { ok: true };
 });
+export const deleteLead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "contracts.view_all") && me.role !== "teamleiter" && me.role !== "super_admin") {
+      throw new Error("Kein Zugriff");
+    }
+    const [row] = await db<{ id: string }>`select id from leads where id = ${data.id}`;
+    if (!row) throw new Error("Anfrage nicht gefunden");
+    await db`delete from leads where id = ${data.id}`;
+    await audit(db, {
+      userId: context.userId,
+      action: "lead.delete",
+      entityType: "lead",
+      entityId: data.id,
+    });
+    return { ok: true };
+  });
 export const listApplications = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
   const db = await sql();
   const me = await requireProfile(db, context.userId);
