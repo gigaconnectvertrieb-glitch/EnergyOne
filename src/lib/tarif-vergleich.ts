@@ -41,7 +41,7 @@ export function rankOffers(
     type: string;
     bands: TariffBand[];
   }>,
-  input: { zip: string; kwh: number; type: string; stufe: number },
+  input: { zip: string; kwh: number; type: string; stufe: number; currentArbeitCt?: number; currentGrundYear?: number },
 ): VergleichOffer[] {
   const list: VergleichOffer[] = [];
   for (const row of rows) {

@@ -60,7 +60,8 @@ function Capture() {
   const [email, setEmail] = useState("");
   const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
   const [meter, setMeter] = useState("");
-  const [providerOld, setProviderOld] = useState("");
+  const [oldArbeit, setOldArbeit] = useState("");
+  const [oldGrund, setOldGrund] = useState("");
   const [deliveryKind, setDeliveryKind] = useState<"wechsel" | "neueinzug">("wechsel");
   const [startDate, setStartDate] = useState("");
   const [signedAt, setSignedAt] = useState(new Date().toISOString().slice(0, 10));
@@ -292,6 +293,24 @@ function Capture() {
           <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} placeholder="Steht auf der Rechnung" />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Arbeitspreis bisher ct/kWh">
+            <Input
+              value={oldArbeit}
+              onChange={(e) => setOldArbeit(e.target.value.replace(/[^\d,.]/g, ""))}
+              inputMode="decimal"
+              placeholder="z. B. 32,14"
+            />
+          </Field>
+          <Field label="Grundpreis bisher EUR / Jahr">
+            <Input
+              value={oldGrund}
+              onChange={(e) => setOldGrund(e.target.value.replace(/[^\d,.]/g, ""))}
+              inputMode="decimal"
+              placeholder="z. B. 156,00"
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Sparte">
             <Select value={type} onChange={(e) => setType(e.target.value === "gas" ? "gas" : "strom")}>
               <option value="strom">Strom</option>
@@ -314,6 +333,16 @@ function Capture() {
               toast.error("Verbrauch in kWh angeben.");
               return;
             }
+            const arbeit = Number(oldArbeit.replace(",", "."));
+            const grund = Number(oldGrund.replace(",", "."));
+            if (!arbeit) {
+              toast.error("Arbeitspreis von der letzten Rechnung.");
+              return;
+            }
+            if (!Number.isFinite(grund) || oldGrund.trim() === "") {
+              toast.error("Grundpreis von der letzten Rechnung (EUR im Jahr).");
+              return;
+            }
             setComparing(true);
             try {
               const res = await compareTariffs({
@@ -323,6 +352,8 @@ function Capture() {
                   type: type === "gas" ? "gas" : "strom",
                   stufe: staff.length ? staff.find((s) => s.user_id === forStaff)?.commission_stufe || stufe : stufe,
                   previousProvider: providerOld,
+                  currentArbeitCt: arbeit,
+                  currentGrundYear: grund,
                 },
               });
               setCompare(res);
@@ -356,7 +387,8 @@ function Capture() {
               Berater Stufe {compare.winner.stufe} · Liste netto, zzgl. 19% USt
             </p>
             <p className="mt-3 text-sm">
-              Kundenseite ca. {eur(compare.winner.yearEur)} / Jahr · {String(compare.winner.arbeitCt).replace(".", ",")} ct/kWh
+              Heute {eur(compare.currentYear)} / Jahr. Vergleich {eur(compare.winner.yearEur)} / Jahr.
+              {compare.saveYear > 0 ? ` Ersparnis ca. ${eur(compare.saveYear)} / Jahr.` : compare.saveYear < 0 ? ` Vergleich liegt ${eur(Math.abs(compare.saveYear))} höher.` : ""}
             </p>
             {!compare.live ? (
               <p className="mt-2 text-xs text-muted">

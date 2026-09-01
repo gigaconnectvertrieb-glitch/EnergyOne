@@ -339,7 +339,15 @@ export const quoteCommission = createServerFn({ method: "POST" })
 
 export const compareTariffs = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { zip: string; kwh: number; type: string; stufe?: number; previousProvider?: string }) => d)
+  .validator((d: {
+    zip: string;
+    kwh: number;
+    type: string;
+    stufe?: number;
+    previousProvider?: string;
+    currentArbeitCt: number;
+    currentGrundYear: number;
+  }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
@@ -350,6 +358,12 @@ export const compareTariffs = createServerFn({ method: "POST" })
     const type = data.type === "gas" ? "gas" : "strom";
     if (zip.length !== 5) throw new Error("PLZ mit 5 Stellen.");
     if (kwh <= 0) throw new Error("Jahresverbrauch in kWh angeben.");
+    const currentArbeitCt = Number(data.currentArbeitCt);
+    const currentGrundYear = Number(data.currentGrundYear);
+    if (!currentArbeitCt || currentArbeitCt <= 0) throw new Error("Aktueller Arbeitspreis in ct/kWh fehlt.");
+    if (!Number.isFinite(currentGrundYear) || currentGrundYear < 0) throw new Error("Aktueller Grundpreis fehlt.");
+    const { yearCost } = await import("@/lib/tarif-vergleich");
+    const currentYear = yearCost(kwh, currentArbeitCt, currentGrundYear);
     const stufe = clampStufe(data.stufe ?? me.commission_stufe);
     const api = (process.env.TARIFRECHNER_API_URL || "").trim();
     const tariffs = await db<Record<string, unknown>>`
@@ -392,6 +406,10 @@ export const compareTariffs = createServerFn({ method: "POST" })
       kwh,
       type,
       previousProvider: data.previousProvider || "",
+      currentArbeitCt,
+      currentGrundYear,
+      currentYear,
+      saveYear: ranked[0] ? Math.round((currentYear - ranked[0].yearEur) * 100) / 100 : 0,
       winner: ranked[0] || null,
       offers: ranked.slice(0, 8),
     };
