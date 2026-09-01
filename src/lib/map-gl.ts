@@ -106,10 +106,11 @@ export function createE1Map(
   el: HTMLElement,
   center: LngLat,
   zoom = 16,
-  opts?: { controls?: boolean },
+  opts?: { controls?: boolean; draw?: boolean },
 ) {
   const ML = window.maplibregl;
   if (!ML) throw new Error("MapLibre fehlt");
+  const draw = Boolean(opts?.draw);
   return new ML.Map({
     container: el,
     style: satellite3dStyle(),
@@ -117,14 +118,13 @@ export function createE1Map(
     zoom,
     pitch: 0,
     bearing: 0,
-    maxPitch: 75,
+    maxPitch: draw ? 0 : 75,
     minZoom: 4,
     maxZoom: 20,
-    touchPitch: true,
-    dragRotate: true,
-    pitchWithRotate: true,
+    touchPitch: !draw,
+    dragRotate: !draw,
+    pitchWithRotate: !draw,
     attributionControl: { compact: true },
-    ...(opts?.controls === false ? {} : {}),
   });
 }
 
@@ -136,12 +136,14 @@ export function addOverlayLayers(map: MapLibreMap) {
       id: "e1-zone-fill",
       type: "fill",
       source: "e1-zone",
+      filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": "#c9a227", "fill-opacity": 0.16 },
     });
     map.addLayer({
       id: "e1-zone-line",
       type: "line",
       source: "e1-zone",
+      filter: ["in", ["geometry-type"], "Polygon", "LineString"],
       paint: { "line-color": "#c9a227", "line-width": 3 },
     });
   }
@@ -160,6 +162,7 @@ export function addOverlayLayers(map: MapLibreMap) {
       id: "e1-points-circle",
       type: "circle",
       source: "e1-points",
+      filter: ["==", ["geometry-type"], "Point"],
       paint: {
         "circle-radius": 5,
         "circle-color": ["case", ["==", ["get", "kind"], "start"], "#d4af37", "#f4f1e8"],

@@ -201,6 +201,53 @@ export const assignTerritory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const downloadTerritory = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view") && me.role !== "super_admin") throw new Error("Kein Zugriff");
+    const [ter] = await db<Record<string, unknown>>`select * from territories where id = ${data.id}`;
+    if (!ter) throw new Error("Gebiet nicht gefunden.");
+    const doors = await db<Record<string, unknown>>`
+      select street, house, zip, city, lat, lng from field_doors
+      where territory_id = ${data.id}
+      order by street, house
+    `;
+    const csv = [
+      "Straße;Hausnummer;PLZ;Ort;Lat;Lng",
+      ...doors.map(
+        (d) =>
+          `${asStr(d.street)};${asStr(d.house)};${asStr(d.zip)};${asStr(d.city)};${num(d.lat)};${num(d.lng)}`,
+      ),
+    ].join("\n");
+    let polygon: unknown[] = [];
+    try {
+      const gj = JSON.parse(asStr(ter.geojson)) as { features?: unknown[] };
+      polygon = gj.features || [];
+    } catch {
+      polygon = [];
+    }
+    const points = doors.map((d) => ({
+      type: "Feature",
+      properties: {
+        street: asStr(d.street),
+        house: asStr(d.house),
+        zip: asStr(d.zip),
+        city: asStr(d.city),
+      },
+      geometry: { type: "Point", coordinates: [num(d.lng), num(d.lat)] },
+    }));
+    const geojson = JSON.stringify(
+      { type: "FeatureCollection", features: [...polygon, ...points] },
+      null,
+      2,
+    );
+    const slug = asStr(ter.name).replace(/[^\w.\-äöüÄÖÜß]+/g, "_") || "gebiet";
+    return { filename: slug, csv, geojson, count: doors.length, name: asStr(ter.name) };
+  });
+
 export const deleteTerritory = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { id: string }) => d)

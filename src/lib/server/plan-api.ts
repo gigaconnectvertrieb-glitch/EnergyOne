@@ -210,6 +210,7 @@ export const listWorkPlans = createServerFn({ method: "GET" })
       city: asStr(r.city),
       state: asStr(r.state),
       territory_name: asStr(r.territory_name),
+      territory_id: asStr(r.territory_id),
       per_day: num(r.per_day),
       days: num(r.days),
       created_at: asStr(r.created_at),

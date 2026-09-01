@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { listUsers, bootstrapMe } from "@/lib/server/api";
 import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
-import { deleteTerritory, listTerritories } from "@/lib/server/field-api";
+import { assignTerritory, deleteTerritory, downloadTerritory, listTerritories } from "@/lib/server/field-api";
 import { FieldMap } from "@/components/field-map";
 import { bboxAround, bboxFromPoints } from "@/lib/geo-de";
 import { can } from "@/lib/e1";
@@ -13,6 +13,22 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/portal/planung")({ component: Page });
 
 type Place = Awaited<ReturnType<typeof searchPlaces>>[number];
+
+function downloadText(filename: string, text: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+async function pullTerritoryFile(id: string) {
+  const file = await downloadTerritory({ data: { id } });
+  downloadText(`${file.filename}.csv`, file.csv, "text/csv;charset=utf-8");
+  downloadText(`${file.filename}.geojson`, file.geojson, "application/geo+json");
+  return file;
+}
 
 function Page() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -93,8 +109,8 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebietsplanung</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen, dann komplett in die Datenbank laden — oder eine Zone auf der Karte tippen.
-        Straßen kommen als Liste A–Z mit Hausnummern. Kein Laufweg.
+        Stadt suchen. Zone mit 3 oder 4 Tipps einzeichnen, dann Straßen listen und speichern.
+        Danach CSV/GeoJSON downloaden und dem Mitarbeiter aufspielen.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
@@ -141,11 +157,8 @@ function Page() {
               center={{ lat: place.lat, lng: place.lng }}
               corners={corners}
               draw
-              onTap={async (p) => {
-                if (busy) return;
-                const next = [...corners, p].slice(0, 4);
-                setCorners(next);
-                if (next.length >= 3) await loadZone(next);
+              onTap={(p) => {
+                setCorners((prev) => (prev.length >= 4 ? prev : [...prev, p]));
               }}
             />
             {groups.length ? (
@@ -241,7 +254,8 @@ function Page() {
                         full: true,
                       },
                     });
-                    toast.success(`${res.houses || res.streets} Adressen in der Datenbank`);
+                    toast.success(`${res.houses || res.streets} Adressen geloggt`);
+                    if (res.territoryId) await pullTerritoryFile(res.territoryId);
                     reload();
                     const detail = await getWorkPlan({ data: { id: res.planId } });
                     setOpen(detail);
@@ -274,7 +288,8 @@ function Page() {
                         corners: corners.length >= 3 ? corners : undefined,
                       },
                     });
-                    toast.success(`${res.houses || res.streets} Adressen in der Datenbank`);
+                    toast.success(`${res.houses || res.streets} Adressen geloggt`);
+                    if (res.territoryId) await pullTerritoryFile(res.territoryId);
                     reload();
                     const detail = await getWorkPlan({ data: { id: res.planId } });
                     setOpen(detail);
@@ -308,6 +323,21 @@ function Page() {
             </button>
             <Button
               variant="outline"
+              className="shrink-0"
+              onClick={async () => {
+                if (!p.territory_id) return;
+                try {
+                  const file = await pullTerritoryFile(p.territory_id);
+                  toast.success(`${file.count} Straßen heruntergeladen`);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Download fehlgeschlagen");
+                }
+              }}
+            >
+              Download
+            </Button>
+            <Button
+              variant="outline"
               className="shrink-0 text-danger"
               onClick={async () => {
                 if (!window.confirm(`${p.territory_name || p.city} wirklich löschen?`)) return;
@@ -333,30 +363,72 @@ function Page() {
           <h2 className="mt-10 font-display text-2xl">Gebiete</h2>
           <div className="mt-3 grid gap-2">
             {ters.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl bg-surface p-4 gold-hairline">
-                <div>
-                  <p className="font-medium">{t.name}</p>
-                  <p className="text-xs text-muted">
-                    {t.advisor || "nicht zugewiesen"} · {t.door_count} Adressen
-                    {t.active ? "" : " · inaktiv"}
-                  </p>
+              <div key={t.id} className="rounded-2xl bg-surface p-4 gold-hairline">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{t.name}</p>
+                    <p className="text-xs text-muted">
+                      {t.advisor || "nicht zugewiesen"} · {t.door_count} Adressen geloggt
+                      {t.active ? "" : " · inaktiv"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={t.user_id}
+                      onChange={async (e) => {
+                        const userId = e.target.value;
+                        if (!userId) return;
+                        try {
+                          await assignTerritory({ data: { id: t.id, userId } });
+                          toast.success("Dem Mitarbeiter aufgespielt");
+                          reload();
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Zuweisen fehlgeschlagen");
+                        }
+                      }}
+                    >
+                      <option value="">Mitarbeiter wählen</option>
+                      {users
+                        .filter((u) => ["super_admin", "gebietsleiter", "teamleiter", "vertrieb"].includes(u.role))
+                        .map((u) => (
+                          <option key={u.user_id} value={u.user_id}>
+                            {u.first_name} {u.last_name}
+                          </option>
+                        ))}
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const file = await pullTerritoryFile(t.id);
+                          toast.success(`${file.count} Straßen heruntergeladen`);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Download fehlgeschlagen");
+                        }
+                      }}
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-danger"
+                      onClick={async () => {
+                        if (!window.confirm(`${t.name} löschen?`)) return;
+                        try {
+                          await deleteTerritory({ data: { id: t.id } });
+                          toast.success("Gebiet gelöscht");
+                          reload();
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+                        }
+                      }}
+                    >
+                      Löschen
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="text-danger"
-                  onClick={async () => {
-                    if (!window.confirm(`${t.name} löschen?`)) return;
-                    try {
-                      await deleteTerritory({ data: { id: t.id } });
-                      toast.success("Gebiet gelöscht");
-                      reload();
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
-                    }
-                  }}
-                >
-                  Löschen
-                </Button>
               </div>
             ))}
           </div>
