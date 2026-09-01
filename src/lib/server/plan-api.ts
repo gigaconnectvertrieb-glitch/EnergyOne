@@ -1,9 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can, type Role } from "@/lib/e1";
-import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY, planHouseWalk, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets, type PlanStop } from "@/lib/geo-de";
+import { bboxAround, bboxFromPoints, groupStreets, pointInPolygon, searchDeCities, uniqueStreets, type PlanStop } from "@/lib/geo-de";
 import { asStr, nid, num } from "@/lib/utils";
-import { nominatimPlaces, overpassZone } from "./geo.server";
+import { nominatimPlaces, overpassArea, overpassZone } from "./geo.server";
 import { audit, requireProfile, sql } from "./helpers";
 
 function canPlan(role: Role) {
@@ -57,6 +57,7 @@ export const importCityPlan = createServerFn({ method: "POST" })
     perDay?: number;
     userIds?: string[];
     corners?: Array<{ lat: number; lng: number }>;
+    full?: boolean;
   }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
@@ -71,12 +72,19 @@ export const importCityPlan = createServerFn({ method: "POST" })
             { lat: data.north, lng: data.east },
             { lat: data.north, lng: data.west },
           ];
-    const zone = await overpassZone({
-      south: data.south,
-      north: data.north,
-      west: data.west,
-      east: data.east,
-    });
+    const zone = data.full
+      ? await overpassArea({
+          south: data.south,
+          north: data.north,
+          west: data.west,
+          east: data.east,
+        })
+      : await overpassZone({
+          south: data.south,
+          north: data.north,
+          west: data.west,
+          east: data.east,
+        });
     const houses = zone.houses.filter((h) => (ring.length >= 3 ? pointInPolygon(h, ring) : true));
     const streets = zone.streets.filter((s) => (ring.length >= 3 ? pointInPolygon(s, ring) : true));
     if (!houses.length && !streets.length) {
@@ -108,13 +116,23 @@ export const importCityPlan = createServerFn({ method: "POST" })
       )
     `;
     const stops: PlanStop[] = houses.length
-      ? houses.map((h) => ({
+      ? groupStreets(
+          houses.map((h) => ({
+            id: nid(),
+            lat: h.lat,
+            lng: h.lng,
+            street: h.street,
+            house: h.house,
+          })),
+        ).map((s) => ({
           id: nid(),
-          lat: h.lat,
-          lng: h.lng,
-          street: `${h.street} ${h.house}`.trim(),
+          lat: s.lat,
+          lng: s.lng,
+          street: `${s.street} · ${s.houses.map((h) => h.house).join(", ")}`,
         }))
-      : uniqueStreets(streets.map((s) => ({ id: nid(), lat: s.lat, lng: s.lng, street: s.name })));
+      : uniqueStreets(streets.map((s) => ({ id: nid(), lat: s.lat, lng: s.lng, street: s.name }))).sort((a, b) =>
+          a.street.localeCompare(b.street, "de"),
+        );
     for (const h of houses.length ? houses : []) {
       await db`
         insert into field_doors (id, territory_id, street, house, zip, city, lat, lng, note, status)
@@ -129,8 +147,8 @@ export const importCityPlan = createServerFn({ method: "POST" })
         `;
       }
     }
-    const perDay = data.perDay || DEFAULT_STREETS_PER_DAY;
-    const days = planWorkdays(stops, perDay, { lat: data.lat, lng: data.lng });
+    const perDay = Math.max(stops.length, 1);
+    const days = [{ day: 1, stops, meters: 0 }];
     const planId = nid();
     await db`
       insert into work_plans (id, territory_id, city, state, per_day, created_by)
@@ -289,48 +307,37 @@ export const streetsInZone = createServerFn({ method: "POST" })
         house: h.house,
       }));
     if (houses.length) {
-      const walk = planHouseWalk(houses, corners[0]!);
-      const stops = walk.streets.flatMap((st) =>
-        st.houses.map((h) => ({
-          id: h.id,
-          street: st.street,
-          house: h.house,
-          lat: h.lat,
-          lng: h.lng,
-        })),
-      );
+      const streets = groupStreets(houses);
       return {
-        streets: walk.streets.map((st) => ({
+        streets: streets.map((st) => ({
           id: st.houses[0]?.id || st.street,
           street: st.street,
-          lat: st.houses[0]?.lat || 0,
-          lng: st.houses[0]?.lng || 0,
+          lat: st.lat,
+          lng: st.lng,
           house: st.houses.map((h) => h.house).join(", "),
           houses: st.houses.map((h) => h.house),
         })),
-        stops,
-        meters: walk.meters,
-        count: walk.count,
-        streetCount: walk.streets.length,
-        houseCount: walk.count,
+        stops: [] as Array<{ id: string; street: string; house: string; lat: number; lng: number }>,
+        meters: 0,
+        count: houses.length,
+        streetCount: streets.length,
+        houseCount: houses.length,
       };
     }
     const inside = uniqueStreets(
       zone.streets
         .filter((s) => pointInPolygon(s, corners))
         .map((s) => ({ id: s.osm_id, lat: s.lat, lng: s.lng, street: s.name })),
-    );
+    ).sort((a, b) => a.street.localeCompare(b.street, "de"));
     if (!inside.length) {
       throw new Error("In dieser Zone keine Straßen/Hausnummern. Etwas größer oder an einer Wohnstraße zeichnen.");
     }
-    const days = planWorkdays(inside, Math.max(inside.length, 1), corners[0]);
-    const ordered = days[0]?.stops || [];
     return {
-      streets: ordered.map((s) => ({ ...s, house: "", houses: [] as string[] })),
-      stops: ordered.map((s) => ({ ...s, house: "" })),
-      meters: days[0]?.meters || 0,
-      count: ordered.length,
-      streetCount: ordered.length,
+      streets: inside.map((s) => ({ ...s, house: "", houses: [] as string[] })),
+      stops: [],
+      meters: 0,
+      count: inside.length,
+      streetCount: inside.length,
       houseCount: 0,
     };
   });

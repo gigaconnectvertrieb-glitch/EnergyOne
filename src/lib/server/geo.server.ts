@@ -220,6 +220,10 @@ export async function overpassZone(bbox: {
   east: number;
 }): Promise<{ streets: OsmStreet[]; houses: HouseHit[] }> {
   const b = clampBbox(bbox);
+  return overpassBox(b);
+}
+
+async function overpassBox(b: { south: number; north: number; west: number; east: number }) {
   const query = `[out:json][timeout:20];(
   way["highway"~"^(residential|living_street|unclassified|tertiary|secondary)$"]["name"](${b.south},${b.west},${b.north},${b.east});
   nwr["addr:housenumber"]["addr:street"](${b.south},${b.west},${b.north},${b.east});
@@ -229,6 +233,53 @@ export async function overpassZone(bbox: {
   return {
     streets: streetsFromElements(elements),
     houses: hitsFromOverpass(elements),
+  };
+}
+
+function tileBbox(bbox: { south: number; north: number; west: number; east: number }, size = 0.035, maxTiles = 16) {
+  const tiles: Array<{ south: number; north: number; west: number; east: number }> = [];
+  const south = bbox.south;
+  const north = bbox.north;
+  const west = bbox.west;
+  const east = bbox.east;
+  for (let s = south; s < north && tiles.length < maxTiles; s += size) {
+    for (let w = west; w < east && tiles.length < maxTiles; w += size) {
+      tiles.push({
+        south: s,
+        west: w,
+        north: Math.min(s + size, north),
+        east: Math.min(w + size, east),
+      });
+    }
+  }
+  return tiles.length ? tiles : [clampBbox(bbox)];
+}
+
+/** Ganze Stadt/Stadtteil: Kacheln, damit Overpass nicht abwürgt. */
+export async function overpassArea(bbox: {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}): Promise<{ streets: OsmStreet[]; houses: HouseHit[]; tiles: number }> {
+  const span = Math.max(bbox.north - bbox.south, bbox.east - bbox.west);
+  const tiles = span > 0.05 ? tileBbox(bbox) : [clampBbox(bbox, 0.08)];
+  const streetMap = new Map<string, OsmStreet>();
+  const houseMap = new Map<string, HouseHit>();
+  for (const t of tiles) {
+    const part = await overpassBox(t);
+    for (const s of part.streets) {
+      const k = s.name.toLowerCase();
+      if (!streetMap.has(k)) streetMap.set(k, s);
+    }
+    for (const h of part.houses) {
+      houseMap.set(`${h.street.toLowerCase()}|${h.house}`, h);
+    }
+  }
+  return {
+    streets: [...streetMap.values()].sort((a, b) => a.name.localeCompare(b.name, "de")),
+    houses: [...houseMap.values()],
+    tiles: tiles.length,
   };
 }
 

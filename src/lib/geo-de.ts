@@ -269,6 +269,28 @@ export function uniqueStreets(stops: PlanStop[]): PlanStop[] {
 
 export type HouseStop = PlanStop & { house: string };
 
+/** Straßen A–Z, Hausnummern numerisch. Kein Laufweg. */
+export function groupStreets(houses: HouseStop[]) {
+  const groups = new Map<string, HouseStop[]>();
+  for (const h of houses) {
+    const key = h.street.trim().toLowerCase().replace(/\s+/g, " ") || "ohne name";
+    const arr = groups.get(key) || [];
+    arr.push(h);
+    groups.set(key, arr);
+  }
+  return [...groups.values()]
+    .map((hs) => {
+      const housesSorted = [...hs].sort((a, b) => a.house.localeCompare(b.house, "de", { numeric: true }));
+      return {
+        street: hs[0]!.street.trim(),
+        lat: hs.reduce((s, x) => s + x.lat, 0) / hs.length,
+        lng: hs.reduce((s, x) => s + x.lng, 0) / hs.length,
+        houses: housesSorted,
+      };
+    })
+    .sort((a, b) => a.street.localeCompare(b.street, "de"));
+}
+
 function nnOrder<T extends { lat: number; lng: number }>(items: T[], start: { lat: number; lng: number }): T[] {
   const leftover = [...items];
   const ordered: T[] = [];

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { applyWalkOrder, bboxAround, planHouseWalk, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets } from "./geo-de.ts";
+import { applyWalkOrder, bboxAround, groupStreets, planHouseWalk, planWorkdays, pointInPolygon, searchDeCities, uniqueStreets } from "./geo-de.ts";
 
 describe("geo-de", () => {
   it("finds german cities", () => {
@@ -82,5 +82,16 @@ describe("geo-de", () => {
     const swapped = applyWalkOrder(walk, [{ street: "B-Straße" }, { street: "A-Straße" }]);
     assert.equal(swapped.streets[0].street, "B-Straße");
     assert.equal(swapped.streets[1].street, "A-Straße");
+  });
+
+  it("lists streets A-Z with numeric houses, no walk", () => {
+    const g = groupStreets([
+      { id: "a", lat: 49.7, lng: 8.45, street: "Nebenweg", house: "10" },
+      { id: "b", lat: 49.7, lng: 8.45, street: "Hauptstraße", house: "12a" },
+      { id: "c", lat: 49.7, lng: 8.45, street: "Hauptstraße", house: "2" },
+    ]);
+    assert.equal(g[0]!.street, "Hauptstraße");
+    assert.equal(g[0]!.houses.map((h) => h.house).join(","), "2,12a");
+    assert.equal(g[1]!.street, "Nebenweg");
   });
 });

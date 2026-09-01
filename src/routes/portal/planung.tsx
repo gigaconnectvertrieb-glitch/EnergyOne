@@ -5,8 +5,8 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { listUsers, bootstrapMe } from "@/lib/server/api";
 import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
 import { deleteTerritory, listTerritories } from "@/lib/server/field-api";
-import { FieldMap, type WalkStop } from "@/components/field-map";
-import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
+import { FieldMap } from "@/components/field-map";
+import { bboxAround, bboxFromPoints } from "@/lib/geo-de";
 import { can } from "@/lib/e1";
 import { toast } from "sonner";
 
@@ -20,7 +20,6 @@ function Page() {
   const [hits, setHits] = useState<Place[]>([]);
   const [place, setPlace] = useState<Place | null>(null);
   const [km, setKm] = useState(2.2);
-  const [perDay, setPerDay] = useState(DEFAULT_STREETS_PER_DAY);
   const [userIds, setUserIds] = useState<string[]>([]);
   const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [plans, setPlans] = useState<Awaited<ReturnType<typeof listWorkPlans>>>([]);
@@ -28,8 +27,6 @@ function Page() {
   const [open, setOpen] = useState<Awaited<ReturnType<typeof getWorkPlan>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [corners, setCorners] = useState<{ lat: number; lng: number }[]>([]);
-  const [walk, setWalk] = useState<WalkStop[]>([]);
-  const [walkMeters, setWalkMeters] = useState(0);
   const [groups, setGroups] = useState<Array<{ street: string; houses: string[]; house?: string }>>([]);
 
   function reload() {
@@ -78,21 +75,11 @@ function Page() {
     setBusy(true);
     try {
       const res = await streetsInZone({ data: { corners: pts } });
-      setWalk(
-        (res.streets || []).map((s) => ({
-          id: s.id,
-          street: s.street,
-          lat: s.lat,
-          lng: s.lng,
-          house: s.house,
-        })),
-      );
       setGroups(res.streets || []);
-      setWalkMeters(res.meters);
       toast.success(
         res.houseCount
-          ? `${res.streetCount} Straßen · ${res.houseCount} Hausnummern · ${(res.meters / 1000).toFixed(1)} km`
-          : `${res.count} Straßen · ${(res.meters / 1000).toFixed(1)} km`,
+          ? `${res.streetCount} Straßen · ${res.houseCount} Hausnummern`
+          : `${res.count} Straßen`,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Straßen nicht geladen");
@@ -106,8 +93,8 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebietsplanung</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen, Zone mit 3 oder 4 Tipps eingrenzen. Dann werden Straßen und Hausnummern geladen
-        und als Laufweg sortiert.
+        Stadt suchen, dann komplett in die Datenbank laden — oder eine Zone auf der Karte tippen.
+        Straßen kommen als Liste A–Z mit Hausnummern. Kein Laufweg.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
@@ -131,7 +118,6 @@ function Page() {
                     setQ(h.display || h.name);
                     setHits([]);
                     setCorners([]);
-                    setWalk([]);
                     setGroups([]);
                   }}
                 >
@@ -149,12 +135,11 @@ function Page() {
         {place ? (
           <div className="mt-4 grid gap-3">
             <p className="text-sm">
-              Karte: <span className="text-gold">{place.name}</span> · 3 Tipps = Dreieck, 4 Tipps = Rechteck
+              Satellit: <span className="text-gold">{place.name}</span> · nur Zone einzeichnen, keine Punkte
             </p>
             <FieldMap
               center={{ lat: place.lat, lng: place.lng }}
               corners={corners}
-              stops={walk}
               draw
               onTap={async (p) => {
                 if (busy) return;
@@ -184,9 +169,7 @@ function Page() {
                 variant="outline"
                 onClick={() => {
                   setCorners([]);
-                  setWalk([]);
                   setGroups([]);
-                  setWalkMeters(0);
                 }}
               >
                 Zone löschen
@@ -197,11 +180,11 @@ function Page() {
                 disabled={busy || corners.length < 3}
                 onClick={() => void loadZone(corners)}
               >
-                {busy ? "Lädt OSM…" : "Straßen & Hausnummern laden"}
+                {busy ? "Lädt OSM…" : "Straßen der Zone listen"}
               </Button>
               <span className="self-center text-xs text-muted">
                 {groups.length
-                  ? `${groups.length} Straßen · ${groups.reduce((n, g) => n + (g.houses?.length || 0), 0)} Nr. · ${(walkMeters / 1000).toFixed(1)} km`
+                  ? `${groups.length} Straßen · ${groups.reduce((n, g) => n + (g.houses?.length || 0), 0)} Hausnummern`
                   : busy
                     ? "OpenStreetMap…"
                     : corners.length
@@ -209,13 +192,10 @@ function Page() {
                       : ""}
               </span>
             </div>
-            <Field label="Radius in km" hint="Großstadt: Stadtteil suchen oder Radius klein halten.">
-              <Input type="number" min={1} max={5} step={0.2} value={km} onChange={(e) => setKm(Number(e.target.value))} />
+            <Field label="Nur Kern begrenzen (km)" hint="Großstadt besser als Stadtteil suchen, z. B. Köln Nippes.">
+              <Input type="number" min={1} max={8} step={0.2} value={km} onChange={(e) => setKm(Number(e.target.value))} />
             </Field>
-            <Field label="Straßen pro Arbeitstag">
-              <Input type="number" min={8} max={80} value={perDay} onChange={(e) => setPerDay(Number(e.target.value))} />
-            </Field>
-            <Field label="Aufteilen auf">
+            <Field label="Zuweisen an">
               <div className="grid gap-2">
                 {users
                   .filter((u) => ["super_admin", "gebietsleiter", "teamleiter", "vertrieb"].includes(u.role))
@@ -236,41 +216,78 @@ function Page() {
                   })}
               </div>
             </Field>
-            <Button
-              disabled={busy}
-              onClick={async () => {
-                if (!place || !box) return;
-                setBusy(true);
-                try {
-                  const drawn = corners.length >= 3 ? bboxFromPoints(corners) : box;
-                  const res = await importCityPlan({
-                    data: {
-                      name: `${place.name} ${km} km`,
-                      city: place.name,
-                      state: place.state,
-                      lat: place.lat,
-                      lng: place.lng,
-                      ...drawn,
-                      perDay,
-                      userIds,
-                      corners: corners.length >= 3 ? corners : undefined,
-                    },
-                  });
-                  toast.success(
-                    `${res.houses || res.streets} Adressen, ${res.days} Tage`,
-                  );
-                  reload();
-                  const detail = await getWorkPlan({ data: { id: res.planId } });
-                  setOpen(detail);
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Import fehlgeschlagen");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? "Spielt Adressen ein…" : "Zone einspielen und Plan erzeugen"}
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                disabled={busy}
+                onClick={async () => {
+                  if (!place) return;
+                  setBusy(true);
+                  try {
+                    const cityBox = {
+                      south: place.south,
+                      north: place.north,
+                      west: place.west,
+                      east: place.east,
+                    };
+                    const res = await importCityPlan({
+                      data: {
+                        name: place.name,
+                        city: place.name,
+                        state: place.state,
+                        lat: place.lat,
+                        lng: place.lng,
+                        ...cityBox,
+                        userIds,
+                        full: true,
+                      },
+                    });
+                    toast.success(`${res.houses || res.streets} Adressen in der Datenbank`);
+                    reload();
+                    const detail = await getWorkPlan({ data: { id: res.planId } });
+                    setOpen(detail);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Laden fehlgeschlagen");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? "Lädt Stadt…" : "Stadt komplett in die Datenbank"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={async () => {
+                  if (!place || !box) return;
+                  setBusy(true);
+                  try {
+                    const drawn = corners.length >= 3 ? bboxFromPoints(corners) : box;
+                    const res = await importCityPlan({
+                      data: {
+                        name: `${place.name} Zone`,
+                        city: place.name,
+                        state: place.state,
+                        lat: place.lat,
+                        lng: place.lng,
+                        ...drawn,
+                        userIds,
+                        corners: corners.length >= 3 ? corners : undefined,
+                      },
+                    });
+                    toast.success(`${res.houses || res.streets} Adressen in der Datenbank`);
+                    reload();
+                    const detail = await getWorkPlan({ data: { id: res.planId } });
+                    setOpen(detail);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Import fehlgeschlagen");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Nur Zone speichern
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -286,7 +303,7 @@ function Page() {
             >
               <p className="font-medium">{p.territory_name || p.city}</p>
               <p className="text-xs text-muted">
-                {p.city} · {p.days} Tage · {p.per_day} Straßen/Tag
+                {p.city} · {p.days} Tage · gespeichert
               </p>
             </button>
             <Button
@@ -359,7 +376,7 @@ function Page() {
               <li key={d.id} className="rounded-2xl bg-surface p-4 gold-hairline">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">
-                    Tag {d.day} · {d.stop_count} Straßen · {(d.meters / 1000).toFixed(1)} km
+                    {d.stop_count} Straßen
                   </p>
                   <Select
                     value={d.user_id}
@@ -378,13 +395,13 @@ function Page() {
                   </Select>
                 </div>
                 <p className="mt-1 text-xs text-muted">{d.advisor || "nicht zugewiesen"}</p>
-                <p className="mt-2 text-sm text-muted">
-                  {d.stops
-                    .slice(0, 8)
-                    .map((s) => s.street)
-                    .join(" · ")}
-                  {d.stops.length > 8 ? " …" : ""}
-                </p>
+                <ol className="mt-3 max-h-80 overflow-auto text-sm">
+                  {d.stops.map((s) => (
+                    <li key={s.id} className="border-b border-line/50 py-1.5 last:border-0">
+                      {s.street}
+                    </li>
+                  ))}
+                </ol>
               </li>
             ))}
           </ol>
