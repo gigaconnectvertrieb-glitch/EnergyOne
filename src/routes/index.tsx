@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Check, Leaf, Shield, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea, CheckboxRow } from "@/components/ui/field";
-import { submitLead } from "@/lib/server/public";
+import { getPublicContact, submitLead } from "@/lib/server/public";
+import { formatPhone, telHref } from "@/lib/contact";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -25,6 +26,12 @@ function Home() {
 }
 
 function Hero() {
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    getPublicContact()
+      .then((c) => setPhone(c.phone || ""))
+      .catch(() => setPhone(""));
+  }, []);
   return (
     <section className="relative overflow-hidden">
       <img
@@ -59,6 +66,14 @@ function Hero() {
               </Button>
             </Link>
           </div>
+          {phone ? (
+            <p className="mt-4 text-sm text-muted">
+              Anrufen:{" "}
+              <a className="text-gold" href={telHref(phone)}>
+                {formatPhone(phone) || phone}
+              </a>
+            </p>
+          ) : null}
         </div>
         <figure className="relative overflow-hidden rounded-3xl gold-hairline">
           <img

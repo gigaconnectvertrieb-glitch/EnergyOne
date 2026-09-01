@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
 import { CheckboxRow, Field, Input, Textarea } from "@/components/ui/field";
-import { submitLead } from "@/lib/server/public";
+import { getPublicContact, submitLead } from "@/lib/server/public";
+import { formatPhone, telHref } from "@/lib/contact";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/beratung")({ component: Page });
@@ -15,6 +16,12 @@ function Page() {
   const [message, setMessage] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [office, setOffice] = useState("");
+  useEffect(() => {
+    getPublicContact()
+      .then((c) => setOffice(c.phone || ""))
+      .catch(() => setOffice(""));
+  }, []);
 
   return (
     <PublicShell>
@@ -23,7 +30,16 @@ function Page() {
         <h1 className="mt-2 font-display text-5xl">Beratung anfordern</h1>
         <p className="mt-3 text-muted">
           Wir kommen zu Ihnen. Kein Skript, keine Hotline.
+          {office ? " Oder Sie rufen uns direkt an." : ""}
         </p>
+        {office ? (
+          <p className="mt-4">
+            <a className="text-gold" href={telHref(office)}>
+              Anrufen · {formatPhone(office) || office}
+            </a>
+            <span className="ml-2 text-sm text-muted">Satellite-Festnetz</span>
+          </p>
+        ) : null}
         <form
           className="mt-8 grid gap-3 rounded-3xl bg-surface p-6 gold-hairline"
           onSubmit={async (e) => {

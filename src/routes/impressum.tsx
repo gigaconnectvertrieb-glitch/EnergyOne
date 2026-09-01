@@ -1,17 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
+import { getPublicContact } from "@/lib/server/public";
+import { formatPhone, telHref } from "@/lib/contact";
 
 export const Route = createFileRoute("/impressum")({ component: Page });
 
 function Page() {
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    getPublicContact()
+      .then((c) => setPhone(c.phone || ""))
+      .catch(() => setPhone(""));
+  }, []);
   return (
     <PublicShell>
       <div className="mx-auto max-w-2xl px-4 py-16">
         <h1 className="font-display text-5xl">Impressum</h1>
         <div className="mt-6 space-y-3 text-sm text-muted">
           <p>E1 Direktvertrieb</p>
-          <p>Geschäftsführung: Orhan Salo, Luca Marco Marrancone</p>
+          <p>Geschäftsführung: Orhan Salo, Luca-Marco Marrancone</p>
           <p>Deutschland</p>
+          {phone ? (
+            <p>
+              Telefon:{" "}
+              <a className="text-gold" href={telHref(phone)}>
+                {formatPhone(phone) || phone}
+              </a>
+              <span> · Satellite-Festnetz</span>
+            </p>
+          ) : null}
           <p>
             E-Mail:{" "}
             <a className="text-gold" href="mailto:info@e1direktvertrieb.de">

@@ -3,6 +3,29 @@ import { nid } from "@/lib/utils";
 import { sql } from "./helpers";
 import { MAIL_DOMAIN } from "@/lib/mail";
 
+export const getPublicContact = createServerFn({ method: "GET" }).handler(async () => {
+  const envPhone = (process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "").trim();
+  let phone = envPhone;
+  let label = "Satellite-Festnetz";
+  try {
+    const db = await sql();
+    const rows = await db<{ key: string; value: string }>`
+      select key, value from settings where key in ('public_phone', 'public_phone_label')
+    `;
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    if ((map.public_phone || "").trim()) phone = map.public_phone.trim();
+    if ((map.public_phone_label || "").trim()) label = map.public_phone_label.trim();
+  } catch {
+    /* Settings optional */
+  }
+  return {
+    email: `info@${MAIL_DOMAIN}`,
+    phone,
+    label,
+  };
+});
+
 export const submitLead = createServerFn({ method: "POST" })
   .validator((d: { name: string; phone: string; zip?: string; message?: string; consent: boolean }) => d)
   .handler(async ({ data }) => {

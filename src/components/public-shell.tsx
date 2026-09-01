@@ -1,10 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { Wordmark } from "./logo";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
+import { getPublicContact } from "@/lib/server/public";
+import { formatPhone, telHref } from "@/lib/contact";
 
 const NAV = [
   { to: "/", label: "Start" },
@@ -15,7 +17,13 @@ const NAV = [
 
 export function PublicShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState("");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    getPublicContact()
+      .then((c) => setPhone(c.phone || ""))
+      .catch(() => setPhone(""));
+  }, []);
 
   return (
     <div className="min-h-dvh bg-bg text-ink gold-wash">
@@ -100,7 +108,14 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </div>
           <div className="text-sm text-muted">
             <p className="mb-2 text-xs uppercase tracking-[0.2em] text-gold">Kontakt</p>
-            <p>Persönlich und ohne Callcenter.</p>
+            <p>Persönlich und ohne Callcenter. Festnetz über Satellite.</p>
+            {phone ? (
+              <p className="mt-2">
+                <a className="text-gold" href={telHref(phone)}>
+                  {formatPhone(phone) || phone}
+                </a>
+              </p>
+            ) : null}
             <p className="mt-2">
               <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
                 info@e1direktvertrieb.de

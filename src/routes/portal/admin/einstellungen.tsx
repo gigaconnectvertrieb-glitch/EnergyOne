@@ -98,7 +98,17 @@ function Page() {
               onChange={(e) => setOps({ ...ops, quality_block_rate: e.target.value })}
             />
           </Field>
-          <Field label="Firmenkonto · Name">
+          <Field
+            label="Satellite-Festnetz"
+            hint="Steht auf der Website, Impressum und Beratungsseite. Anrufbar."
+          >
+            <Input
+              value={ops.public_phone || ""}
+              onChange={(e) => setOps({ ...ops, public_phone: e.target.value })}
+              placeholder="+49 …"
+              inputMode="tel"
+            />
+          </Field>
             <Input
               value={ops.payout_debtor_name || ""}
               onChange={(e) => setOps({ ...ops, payout_debtor_name: e.target.value })}

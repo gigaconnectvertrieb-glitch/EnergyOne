@@ -2088,7 +2088,7 @@ export const getOpsSettings = createServerFn({ method: "GET" })
     if (!can(me.role, "settings.manage")) throw new Error("Kein Zugriff");
     const rows = await db<{ key: string; value: string }>`
       select key, value from settings
-      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate','storno_window_days','payout_debtor_name','payout_debtor_iban','payout_debtor_bic')
+      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate','storno_window_days','payout_debtor_name','payout_debtor_iban','payout_debtor_bic','public_phone','public_phone_label')
     `;
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
@@ -2102,12 +2102,14 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       payout_debtor_name: map.payout_debtor_name || "E1 Direktvertrieb Inh. Orhan Salo und Luca Marrancone",
       payout_debtor_iban: map.payout_debtor_iban || "",
       payout_debtor_bic: map.payout_debtor_bic || "",
+      public_phone: map.public_phone || process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "",
+      public_phone_label: map.public_phone_label || "Satellite-Festnetz",
     };
   });
 
 export const saveOpsSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string; storno_window_days?: string; payout_debtor_name?: string; payout_debtor_iban?: string; payout_debtor_bic?: string }) => d)
+  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string; storno_window_days?: string; payout_debtor_name?: string; payout_debtor_iban?: string; payout_debtor_bic?: string; public_phone?: string; public_phone_label?: string }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
