@@ -48,15 +48,12 @@ export function Wordmark({
         </span>
         <span
           className={cn(
-            "inline-grid place-items-center rounded-full border font-sans font-semibold leading-none text-gold",
-            compact
-              ? "size-3.5 border-gold/70 text-[8px]"
-              : "size-4 border-gold text-[9px] md:size-[1.125rem] md:text-[10px]",
+            "font-sans font-semibold text-gold",
+            compact ? "text-sm" : "text-base md:text-lg",
           )}
-          title="Eingetragene Marke"
-          aria-label="Marke"
+          title="Marke"
         >
-          R
+          ®
         </span>
       </span>
     </Link>
