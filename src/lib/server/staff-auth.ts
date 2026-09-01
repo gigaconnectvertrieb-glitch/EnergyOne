@@ -121,7 +121,8 @@ async function ensureFounder(staffId: string) {
     await db`
       update profiles
       set role = 'super_admin', status = 'active', onboarding_status = 'aktiv',
-          first_name = ${spec.first}, last_name = ${spec.last}, staff_id = ${staffId}
+          first_name = ${spec.first}, last_name = ${spec.last}, staff_id = ${staffId},
+          commission_stufe = 13
       where user_id = ${byStaff.user_id}
     `;
     return { id: byStaff.user_id, email: byStaff.email || spec.email };
@@ -129,11 +130,11 @@ async function ensureFounder(staffId: string) {
   const [byMail] = await db<{ id: string }>`select id from "user" where lower(email) = ${spec.email}`;
   if (byMail) {
     await db`
-      insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id)
-      values (${byMail.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId})
+      insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id, commission_stufe)
+      values (${byMail.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId}, 13)
       on conflict (user_id) do update set
         role = 'super_admin', status = 'active', staff_id = ${staffId},
-        first_name = ${spec.first}, last_name = ${spec.last}
+        first_name = ${spec.first}, last_name = ${spec.last}, commission_stufe = 13
     `;
     return { id: byMail.id, email: spec.email };
   }
@@ -144,9 +145,9 @@ async function ensureFounder(staffId: string) {
     emailVerified: true,
   });
   await db`
-    insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id)
-    values (${created.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId})
-    on conflict (user_id) do update set role = 'super_admin', status = 'active', staff_id = ${staffId}
+    insert into profiles (user_id, first_name, last_name, role, status, onboarding_status, region_id, staff_id, commission_stufe)
+    values (${created.id}, ${spec.first}, ${spec.last}, 'super_admin', 'active', 'aktiv', 'reg-sued', ${staffId}, 13)
+    on conflict (user_id) do update set role = 'super_admin', status = 'active', staff_id = ${staffId}, commission_stufe = 13
   `;
   return { id: created.id, email: spec.email };
 }
