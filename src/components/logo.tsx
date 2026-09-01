@@ -49,7 +49,7 @@ export function Wordmark({
       </span>
       <span
         className={cn(
-          "ml-3 shrink-0 font-sans font-semibold text-gold",
+          "ml-1 shrink-0 font-sans font-semibold text-gold",
           compact ? "text-sm" : "text-base md:text-lg",
         )}
         title="Marke"
