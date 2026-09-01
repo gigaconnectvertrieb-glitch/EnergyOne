@@ -60,11 +60,17 @@ function Hero() {
             </Link>
           </div>
         </div>
-        <img
-          src="/logo-full.jpg"
-          alt="E1 Direktvertrieb – Energie, die zu Ihnen passt."
-          className="mx-auto max-h-[28rem] w-full max-w-md rounded-3xl object-contain bg-bg gold-hairline"
-        />
+        <figure className="relative overflow-hidden rounded-3xl gold-hairline">
+          <img
+            src="/hero-founders.jpg"
+            alt="Orhan Salo und Luca-Marco Marrancone, Gründer E1 Direktvertrieb"
+            className="h-full min-h-72 w-full object-cover object-[50%_20%]"
+          />
+          <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg via-bg/70 to-transparent px-5 pb-4 pt-16">
+            <p className="font-medium">Orhan Salo · Luca-Marco Marrancone</p>
+            <p className="text-sm text-muted">Geschäftsführer · persönlich vor Ort</p>
+          </figcaption>
+        </figure>
       </div>
     </section>
   );
@@ -201,14 +207,12 @@ function Steps() {
 function Founders() {
   const people = [
     {
-      initials: "OS",
       name: "Orhan Salo",
       role: "Geschäftsführer & Gründer",
       bio: "Head of Sales & Team. Baut Vertrieb, Organisation und Kundenbeziehung – und steht selbst vor Ort für ehrliche Beratung.",
     },
     {
-      initials: "LM",
-      name: "Luca Marco Marrancone",
+      name: "Luca-Marco Marrancone",
       role: "Geschäftsführer & Gründer",
       bio: "Head of Sales & Team. Entwickelt Menschen und Strukturen, damit Beratung in ganz Deutschland persönlich bleibt.",
     },
@@ -221,17 +225,17 @@ function Founders() {
         Wir sind kein Konzern ohne Gesicht. Wir stehen mit unserem Namen dafür ein,
         dass Beratung wieder persönlich wird.
       </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
+      <img
+        src="/hero-founders.jpg"
+        alt="Das E1-Team mit den Gründern Orhan Salo und Luca-Marco Marrancone"
+        className="mt-8 h-56 w-full rounded-3xl object-cover object-[50%_18%] gold-hairline md:h-80"
+      />
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
         {people.map((p) => (
-          <article key={p.name} className="flex gap-4 rounded-3xl bg-surface p-5 gold-hairline">
-            <div className="grid size-20 shrink-0 place-items-center rounded-2xl bg-elevated font-display text-2xl text-gold gold-hairline">
-              {p.initials}
-            </div>
-            <div>
-              <h3 className="text-lg font-medium">{p.name}</h3>
-              <p className="text-sm text-gold">{p.role}</p>
-              <p className="mt-2 text-sm text-muted">{p.bio}</p>
-            </div>
+          <article key={p.name} className="rounded-3xl bg-surface p-5 gold-hairline">
+            <h3 className="text-lg font-medium">{p.name}</h3>
+            <p className="text-sm text-gold">{p.role}</p>
+            <p className="mt-2 text-sm text-muted">{p.bio}</p>
           </article>
         ))}
       </div>
@@ -268,7 +272,7 @@ function CareerTeaser() {
     <section className="mx-auto max-w-6xl px-4 py-16">
       <div className="overflow-hidden rounded-3xl bg-elevated gold-hairline">
         <div className="grid md:grid-cols-2">
-          <img src="/gold-energy.jpg" alt="" className="h-56 w-full object-cover md:h-full" />
+          <img src="/hero-karriere.jpg" alt="E1 Team" className="h-56 w-full object-cover object-[50%_20%] md:h-full" />
           <div className="p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-gold">Karriere</p>
             <h2 className="mt-2 font-display text-4xl">Verkaufen, ohne sich zu verbiegen.</h2>

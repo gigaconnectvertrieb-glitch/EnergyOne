@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { SignedIn, SignedOut } from "@/lib/auth/gates";
-import { Wordmark, BrandLockup } from "./logo";
+import { Wordmark } from "./logo";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,6 @@ const NAV = [
   { to: "/ueber-uns", label: "Über uns" },
   { to: "/energie", label: "Energie" },
   { to: "/karriere", label: "Karriere" },
-  { to: "/agb", label: "AGB" },
 ];
 
 export function PublicShell({ children }: { children: ReactNode }) {
@@ -85,7 +84,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
       <footer className="mt-16 border-t border-line">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-3">
           <div>
-            <BrandLockup className="h-40 w-auto max-w-[14rem]" />
+            <Wordmark />
             <p className="mt-3 max-w-xs text-sm text-muted">
               Unabhängige Energieberatung. Direkt. Persönlich. Für Sie.
             </p>
@@ -97,7 +96,6 @@ export function PublicShell({ children }: { children: ReactNode }) {
               <Link to="/datenschutz">Datenschutz</Link>
               <Link to="/agb">AGB</Link>
               <Link to="/login">Mitarbeiter-Portal</Link>
-              <Link to="/kunde">Kundenportal</Link>
             </div>
           </div>
           <div className="text-sm text-muted">
