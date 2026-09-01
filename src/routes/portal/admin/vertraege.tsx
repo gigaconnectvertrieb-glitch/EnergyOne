@@ -6,6 +6,7 @@ import {
   downloadHvContract,
   getHvContract,
   listHvContracts,
+  pollHvSignatures,
   previewMusterHv,
   saveHvTabletSign,
   sendHvProvisionMail,
@@ -315,7 +316,24 @@ function HvPanel({ openId }: { openId?: string }) {
         </Button>
       </form>
 
-      <h2 className="mt-10 font-display text-2xl">Gespeicherte HV-Verträge</h2>
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-2xl">Gespeicherte HV-Verträge</h2>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              const r = await pollHvSignatures();
+              toast.success(`${r.completed} neu unterschrieben, ${r.checked} geprüft`);
+              load();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Prüfung fehlgeschlagen");
+            }
+          }}
+        >
+          Unterschriften prüfen
+        </Button>
+      </div>
       {listErr ? <p className="mt-2 text-sm text-danger">{listErr}</p> : null}
       {list.length === 0 && !listErr ? (
         <p className="mt-2 text-sm text-muted">Noch keiner. Oben anlegen — dann erscheint er hier und bleibt in der Datenbank.</p>
@@ -330,7 +348,11 @@ function HvPanel({ openId }: { openId?: string }) {
                 </p>
                 <p className="text-xs text-muted">
                   {r.staff_id || "ohne ID"} · Stufe {r.stufe} · {r.city || "—"} · {deDate(r.created_at)} ·{" "}
-                  {r.signed_at ? `unterschrieben (${r.signed_channel === "tablet" ? "Tablet" : "DocuSign"})` : "noch offen"}
+                  {r.signed_by_company && r.signed_by_agent
+                    ? "beide Seiten unterschrieben, PDF in der Datenbank"
+                    : r.signed_at
+                      ? `teilweise (${r.signed_channel === "tablet" ? "Tablet" : "DocuSign"})`
+                      : "noch offen"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

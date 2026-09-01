@@ -4,7 +4,7 @@ import { can } from "@/lib/e1";
 import { fillHvVertrag, fillHvProvisionSheet, musterHvInput, type HvInput } from "@/lib/hv-vertrag";
 import { buildPagedPdf } from "@/lib/sign";
 import { nid } from "@/lib/utils";
-import { docusignReady, sendDocusignEnvelope } from "./docusign.server";
+import { docusignReady, pollPendingSignatures, sendDocusignEnvelope } from "./docusign.server";
 import { gmailAppPasswordReady, gmailSmtpUser, sendViaAppPassword } from "./smtp-gmail.server";
 import { putFile } from "./ops.server";
 import { requireProfile, sql } from "./helpers";
@@ -87,6 +87,7 @@ export const listHvContracts = createServerFn({ method: "GET" })
     if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
       throw new Error("Kein Zugriff");
     }
+    await pollPendingSignatures().catch(() => null);
     const rows = await db<{
       id: string;
       staff_id: string | null;
@@ -98,8 +99,11 @@ export const listHvContracts = createServerFn({ method: "GET" })
       signed_at: string | null;
       signed_channel: string | null;
       email: string | null;
+      signed_by_company: boolean | null;
+      signed_by_agent: boolean | null;
     }>`
-      select id, staff_id, first_name, last_name, city, stufe, created_at, signed_at, signed_channel, email
+      select id, staff_id, first_name, last_name, city, stufe, created_at, signed_at, signed_channel, email,
+             signed_by_company, signed_by_agent
       from staff_contracts
       order by created_at desc
       limit 80
@@ -220,8 +224,10 @@ export const sendHvSignEmail = createServerFn({ method: "POST" })
           pdf,
           contractId: row.id,
           subject: "Ihr E1-Handelsvertretervertrag zur Unterschrift",
-          blurb: "Bitte den Handelsvertretervertrag digital unterschreiben. Danach liegt er automatisch bei E1.",
+          blurb: "Zuerst unterschreibt E1, danach Sie. Das fertige PDF liegt danach in der Datenbank.",
           filename: downloadName(row.last_name, row.id),
+          companyEmail: "business@e1direktvertrieb.de",
+          companyName: "E1 Direktvertrieb",
         });
       } catch (e) {
         status = "failed";
@@ -261,7 +267,9 @@ export const saveHvTabletSign = createServerFn({ method: "POST" })
       values (${fileId}, ${row.id}, ${"tablet_sign"}, ${stored.path.split("/").pop() || "sign.png"}, ${"image/png"}, ${stored.path})
     `;
     await db`
-      update staff_contracts set signed_at = now(), signed_channel = 'tablet' where id = ${row.id}
+      update staff_contracts
+      set signed_at = now(), signed_channel = 'tablet', signed_by_agent = true
+      where id = ${row.id}
     `;
     await db`
       insert into sign_envelopes (
@@ -376,4 +384,15 @@ export const sendHvProvisionMail = createServerFn({ method: "POST" })
       pdf,
     });
     return { ok: true, to: email, filename };
+  });
+
+export const pollHvSignatures = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    return pollPendingSignatures();
   });

@@ -92,6 +92,8 @@ export async function sendDocusignEnvelope(input: {
   subject?: string;
   blurb?: string;
   filename?: string;
+  companyEmail?: string;
+  companyName?: string;
 }) {
   const auth = await docusignToken();
   if (!auth) throw new Error("DocuSign ist nicht verbunden.");
@@ -112,13 +114,30 @@ export async function sendDocusignEnvelope(input: {
     ],
     recipients: {
       signers: [
+        ...(input.companyEmail
+          ? [
+              {
+                email: input.companyEmail,
+                name: input.companyName || "E1 Direktvertrieb",
+                recipientId: "1",
+                routingOrder: "1",
+                tabs: { signHereTabs: [{ anchorString: "/sign1/", anchorUnits: "pixels", anchorYOffset: "-10" }] },
+              },
+            ]
+          : []),
         {
           email: input.email,
           name: input.name,
-          recipientId: "1",
-          routingOrder: "1",
+          recipientId: input.companyEmail ? "2" : "1",
+          routingOrder: input.companyEmail ? "2" : "1",
           tabs: {
-            signHereTabs: [{ anchorString: "/sign1/", anchorUnits: "pixels", anchorYOffset: "-10" }],
+            signHereTabs: [
+              {
+                anchorString: input.companyEmail ? "/sign2/" : "/sign1/",
+                anchorUnits: "pixels",
+                anchorYOffset: "-10",
+              },
+            ],
           },
         },
       ],
@@ -152,6 +171,41 @@ export async function downloadSignedPdf(envelopeId: string) {
   return buf;
 }
 
+export async function getEnvelopeStatus(envelopeId: string) {
+  const auth = await docusignToken();
+  if (!auth) return null;
+  const account = env("DOCUSIGN_ACCOUNT_ID");
+  const res = await fetch(`${auth.base}/restapi/v2.1/accounts/${account}/envelopes/${envelopeId}`, {
+    headers: { authorization: `Bearer ${auth.token}` },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { status?: string };
+  return json.status || null;
+}
+
+export async function pollPendingSignatures() {
+  if (!docusignReady()) return { checked: 0, completed: 0 };
+  const db = await sql();
+  const rows = await db<{ id: string; docusign_envelope_id: string }>`
+    select id, docusign_envelope_id from sign_envelopes
+    where provider = 'docusign'
+      and docusign_envelope_id is not null
+      and status in ('queued', 'sent', 'delivered')
+    order by sent_at desc
+    limit 40
+  `;
+  let completed = 0;
+  for (const row of rows) {
+    const st = await getEnvelopeStatus(row.docusign_envelope_id);
+    if (!st) continue;
+    const mapped = signEventToStatus(st);
+    if (!mapped) continue;
+    const r = await applyEnvelopeEvent(row.docusign_envelope_id, st);
+    if (r.ok && mapped === "completed") completed += 1;
+  }
+  return { checked: rows.length, completed };
+}
+
 export async function applyEnvelopeEvent(envelopeId: string, event: string) {
   const status = signEventToStatus(event);
   if (!status) return { ok: false as const, reason: "unmapped" };
@@ -179,7 +233,13 @@ export async function applyEnvelopeEvent(envelopeId: string, event: string) {
     `;
     await db`update sign_envelopes set signed_file_id = ${fileId} where id = ${asStr(row.id)}`;
     await db`
-      update staff_contracts set signed_at = now(), signed_channel = 'email' where id = ${staffId}
+      update staff_contracts
+      set signed_at = now(),
+          signed_channel = 'email',
+          signed_by_agent = true,
+          signed_by_company = true,
+          signed_pdf_path = ${stored.path}
+      where id = ${staffId}
     `;
     const [sc] = await db<{ user_id: string | null }>`select user_id from staff_contracts where id = ${staffId}`;
     if (sc?.user_id) {
