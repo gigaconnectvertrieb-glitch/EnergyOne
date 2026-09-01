@@ -75,11 +75,10 @@ function Page() {
     <PublicShell>
       <div className="mx-auto max-w-3xl px-4 py-16">
         <p className="text-xs uppercase tracking-[0.28em] text-gold">Tarifrechner</p>
-        <h1 className="mt-2 font-display text-5xl">Was Sie heute zahlen. Was möglich ist.</h1>
+        <h1 className="mt-2 font-display text-5xl">Was kostet Ihr Strom wirklich?</h1>
         <p className="mt-4 text-muted">
-          Keine 8.000 PLZ abtippen. Sie tragen Arbeitspreis und Grundpreis von der
-          letzten Rechnung ein. Die PLZ merken wir für die genaue Kalkulation,
-          sobald New Sales den Preis zu Gebiet und Verbrauch liefert.
+          Drei Zahlen von der letzten Rechnung: Verbrauch, Preis pro Kilowattstunde, Grundpreis.
+          Wir zeigen daneben, was ein günstigerer Tarif ungefähr wäre — ohne Kleingedrucktes.
         </p>
         <p className="mt-2 text-sm text-muted">
           {live ? "Vergleichspreis aus euren hinterlegten Werten." : "Vergleich ist ein Richtwert, kein verbindliches Angebot."}
@@ -144,17 +143,41 @@ function Page() {
 
         {result.ok ? (
           <div className="mt-6 rounded-3xl bg-surface p-6 gold-hairline">
-            <p className="text-sm text-muted">Unverbindliche Schätzung · {compare.label}</p>
-            <p className="mt-2 font-display text-4xl tabular-nums">
-              {result.saveYear >= 0 ? `${eur(result.saveYear)} / Jahr` : `${eur(Math.abs(result.saveYear))} teurer`}
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              Heute {eur(result.currentYear)} · Vergleich {eur(result.compareYear)}
-              {result.saveYear > 0 ? ` · ca. ${eur(result.saveMonth)} / Monat` : ""}
-            </p>
+            <p className="text-[11px] uppercase tracking-[0.28em] text-gold">Was das heißt</p>
+            <dl className="mt-4 grid gap-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted">So viel zahlen Sie heute im Jahr</dt>
+                <dd className="tabular-nums">{eur(result.currentYear)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted">So viel wäre es bei einem günstigeren Tarif</dt>
+                <dd className="tabular-nums">{eur(result.compareYear)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-line pt-3">
+                <dt className="font-medium">
+                  {result.saveYear >= 0 ? "Das könnten Sie sparen" : "Der Vergleich wäre teurer"}
+                </dt>
+                <dd className="font-display text-2xl tabular-nums text-gold">
+                  {eur(Math.abs(result.saveYear))}
+                  <span className="ml-1 text-sm font-sans font-normal text-muted">/ Jahr</span>
+                </dd>
+              </div>
+            </dl>
+            {result.saveYear > 0 ? (
+              <p className="mt-3 text-sm text-muted">
+                Das sind etwa {eur(result.saveMonth)} im Monat. Kein Angebot — eine Rechnung aus Ihren Angaben.
+                Den genauen Preis zu Ihrer PLZ holen wir, wenn Sie uns schreiben.
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-muted">
+                Nach Ihren Zahlen wäre ein Wechsel gerade nicht günstiger. Trotzdem können wir den Standort prüfen.
+              </p>
+            )}
           </div>
         ) : (
-          <p className="mt-6 text-sm text-muted">Arbeitspreis von der Rechnung eintragen, dann erscheint die Schätzung.</p>
+          <p className="mt-6 text-sm text-muted">
+            Tragen Sie den Arbeitspreis von Ihrer Strom- oder Gasrechnung ein. Dann rechnen wir Jahr und Monat aus.
+          </p>
         )}
 
         <form
