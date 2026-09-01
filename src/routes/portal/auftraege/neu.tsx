@@ -60,6 +60,7 @@ function Capture() {
   const [email, setEmail] = useState("");
   const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
   const [meter, setMeter] = useState("");
+  const [providerOld, setProviderOld] = useState("");
   const [oldArbeit, setOldArbeit] = useState("");
   const [oldGrund, setOldGrund] = useState("");
   const [deliveryKind, setDeliveryKind] = useState<"wechsel" | "neueinzug">("wechsel");
