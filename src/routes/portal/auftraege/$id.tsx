@@ -174,6 +174,8 @@ function Page() {
         <p className="mt-2 text-xs text-muted">
           E1-Mustervertrag bleibt im Code (Flag customer_energy_contracts) und kann später wieder an.
         </p>
+      </div>
+
       {next.length ? (
         <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
           <h2 className="text-sm font-medium">Status ändern</h2>
