@@ -335,3 +335,77 @@ export const createStaff = createServerFn({ method: "POST" })
     `;
     return { userId: created.id, inviteCode: code, staffId, email };
   });
+
+async function wipeAuth(db: Awaited<ReturnType<typeof sql>>, userId: string) {
+  await db`delete from session where "userId" = ${userId}`.catch(async () => {
+    await db`delete from "session" where user_id = ${userId}`.catch(() => {});
+  });
+  await db`delete from account where "userId" = ${userId}`.catch(() => {});
+  await db`delete from "user" where id = ${userId}`.catch(() => {});
+}
+
+export const deleteStaff = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { userId: string; purgeContracts?: boolean }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage")) throw new Error("Keine Berechtigung.");
+    if (data.userId === context.userId) throw new Error("Sie können sich nicht selbst löschen.");
+    const [row] = await db<Record<string, unknown>>`
+      select user_id, first_name, last_name, role, staff_id, status from profiles where user_id = ${data.userId}
+    `;
+    if (!row) throw new Error("Mitarbeiter nicht gefunden.");
+    if (String(row.role) === "super_admin") throw new Error("Geschäftsführung kann nicht gelöscht werden.");
+    const staffId = String(row.staff_id || "").toLowerCase();
+    if (staffId === "orhan" || staffId === "luca") throw new Error("Gründer-Zugang bleibt.");
+    const [cnt] = await db<{ n: number }>`
+      select count(*)::int as n from contracts where user_id = ${data.userId}
+    `;
+    const n = Number(cnt?.n || 0);
+    const purge = Boolean(data.purgeContracts) || n === 0;
+
+    const extra = [
+      db`delete from profile_flags where user_id = ${data.userId}`,
+      db`delete from knowledge_progress where user_id = ${data.userId}`,
+      db`delete from notifications where user_id = ${data.userId}`,
+      db`delete from push_subscriptions where user_id = ${data.userId}`,
+      db`delete from goal_nudges where user_id = ${data.userId}`,
+      db`delete from tax_expenses where user_id = ${data.userId}`,
+      db`delete from tax_settings where user_id = ${data.userId}`,
+      db`delete from territory_members where user_id = ${data.userId}`,
+      db`delete from field_visits where user_id = ${data.userId}`,
+      db`delete from work_days where user_id = ${data.userId}`,
+      db`delete from quality_alerts where user_id = ${data.userId}`,
+    ];
+    for (const q of extra) {
+      try {
+        await q;
+      } catch {
+        /* Tabelle kann fehlen */
+      }
+    }
+    await db`update territories set user_id = null where user_id = ${data.userId}`.catch(() => {});
+
+    if (purge && n > 0) {
+      await db`delete from payout_items where user_id = ${data.userId}`.catch(() => {});
+      await db`delete from commissions where user_id = ${data.userId}`.catch(() => {});
+      await db`delete from contract_status_history where contract_id in (select id from contracts where user_id = ${data.userId})`.catch(() => {});
+      await db`delete from documents where contract_id in (select id from contracts where user_id = ${data.userId})`.catch(() => {});
+      await db`delete from contracts where user_id = ${data.userId}`.catch(() => {});
+    }
+
+    if (purge) {
+      await db`delete from profiles where user_id = ${data.userId}`;
+      await wipeAuth(db, data.userId);
+      return { ok: true, purged: true, contracts: n };
+    }
+
+    await db`
+      update profiles
+      set status = 'deleted', staff_id = null, totp_secret = null, totp_enabled = false, invite_code = null
+      where user_id = ${data.userId}
+    `;
+    await wipeAuth(db, data.userId);
+    return { ok: true, purged: false, contracts: n };
+  });

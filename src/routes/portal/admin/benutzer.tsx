@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listRegions, listStaffFlags, listUsers, setStaffFlag, updateUser } from "@/lib/server/api";
-import { createStaff } from "@/lib/server/staff-auth";
+import { createStaff, deleteStaff } from "@/lib/server/staff-auth";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/e1";
 import { STAFF_UNLOCKS } from "@/lib/features";
 import { MAIL_DOMAIN, workspaceLocalPart } from "@/lib/mail";
@@ -52,7 +52,7 @@ function Page() {
       <h1 className="font-display text-4xl">Benutzer & Rechte</h1>
       <p className="text-sm text-muted">
         Mitarbeiter anlegen → 5-stelligen Schlüssel mitgeben → der richtet Google Authenticator ein.
-        Aus dem Team entfernen sperrt Login und Gebiet, Aufträge bleiben. Wieder aufnehmen geht jederzeit.
+        Aus dem Team entfernen sperrt Login. Löschen nimmt den Dummy komplett raus — Mitarbeiter-ID ist danach wieder frei.
       </p>
 
       <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline md:grid-cols-2" onSubmit={onCreate}>
@@ -235,6 +235,32 @@ function Page() {
                     }}
                   >
                     Wieder aufnehmen
+                  </Button>
+                ) : null}
+                {u.role !== "super_admin" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-danger"
+                    onClick={async () => {
+                      const name = `${u.first_name} ${u.last_name}`;
+                      if (!window.confirm(`${name} löschen? Login weg, ID frei.`)) return;
+                      let purge = u.orders === 0;
+                      if (u.orders > 0) {
+                        purge = window.confirm(
+                          `${u.orders} Aufträge hängen an ${name}.\nOK = Aufträge mitlöschen (für Testdummies).\nAbbrechen = Aufträge bleiben, Person verschwindet nur aus der Liste.`,
+                        );
+                      }
+                      try {
+                        await deleteStaff({ data: { userId: u.user_id, purgeContracts: purge } });
+                        toast.success("Gelöscht");
+                        load();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Löschen fehlgeschlagen");
+                      }
+                    }}
+                  >
+                    Löschen
                   </Button>
                 ) : null}
               </div>

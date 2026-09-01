@@ -1242,7 +1242,7 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
   if (!can(me.role, "users.manage") && !can(me.role, "team.view")) throw new Error("Kein Zugriff");
   const ids = can(me.role, "users.manage") ? null : await visibleUserIds(db, me);
   const params = [];
-  let where = "where coalesce(p.is_demo,false) = false";
+  let where = "where coalesce(p.is_demo,false) = false and p.status <> 'deleted'";
   if (ids) {
     params.push(ids);
     where += ` and p.user_id = any($${params.length})`;
