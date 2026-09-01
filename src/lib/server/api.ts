@@ -1219,6 +1219,8 @@ export const listUsers = createServerFn({ method: "GET" }).middleware([authMiddl
     invite_code: r.invite_code && !r.totp_enabled ? asStr(r.invite_code) : null,
     staff_id: r.staff_id ? asStr(r.staff_id) : null,
     hv_contract_id: r.hv_contract_id ? asStr(r.hv_contract_id) : null,
+    payout_iban: r.payout_iban ? asStr(r.payout_iban) : "",
+    payout_name: r.payout_name ? asStr(r.payout_name) : "",
   }));
 });
 export const listBookableStaff = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -1306,6 +1308,8 @@ export const updateUser = createServerFn({ method: "POST" }).middleware([authMid
         user_type = coalesce(${data.userType ?? null}, user_type),
         monthly_target = coalesce(${data.monthlyTarget ?? null}, monthly_target),
         commission_stufe = coalesce(${data.commissionStufe ?? null}, commission_stufe),
+        payout_iban = coalesce(${data.payoutIban === void 0 ? null : data.payoutIban ? (await import("@/lib/iban")).optionalIban(data.payoutIban) : ""}, payout_iban),
+        payout_name = coalesce(${data.payoutName ?? null}, payout_name),
         onboarding_status = case when ${data.status ?? ""} = 'active' then 'aktiv' else onboarding_status end
       where user_id = ${data.userId}
     `;
@@ -2041,7 +2045,7 @@ export const getOpsSettings = createServerFn({ method: "GET" })
     if (!can(me.role, "settings.manage")) throw new Error("Kein Zugriff");
     const rows = await db<{ key: string; value: string }>`
       select key, value from settings
-      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate','storno_window_days')
+      where key in ('require_2fa','newsales_handover_to','quality_warn_rate','quality_block_rate','storno_window_days','payout_debtor_name','payout_debtor_iban','payout_debtor_bic')
     `;
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
@@ -2052,12 +2056,15 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       quality_block_rate: map.quality_block_rate || "0.40",
       storno_window_days: map.storno_window_days || "14",
       newsales_api: (await import("@/lib/newsales")).newsalesConfigured(),
+      payout_debtor_name: map.payout_debtor_name || "E1 Direktvertrieb Inh. Orhan Salo und Luca Marrancone",
+      payout_debtor_iban: map.payout_debtor_iban || "",
+      payout_debtor_bic: map.payout_debtor_bic || "",
     };
   });
 
 export const saveOpsSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string; storno_window_days?: string }) => d)
+  .validator((d: { require_2fa?: string; newsales_handover_to?: string; quality_warn_rate?: string; quality_block_rate?: string; storno_window_days?: string; payout_debtor_name?: string; payout_debtor_iban?: string; payout_debtor_bic?: string }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);

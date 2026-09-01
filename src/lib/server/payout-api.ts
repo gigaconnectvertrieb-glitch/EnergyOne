@@ -240,3 +240,49 @@ export const payoutCsv = createServerFn({ method: "POST" })
       csv: `${header}\n${body}\n`,
     };
   });
+
+export const payoutSepaXml = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!canPay(me.role) && !can(me.role, "reports.export")) throw new Error("Kein Export.");
+    const [run] = await db<Record<string, unknown>>`select * from payout_runs where id = ${data.id}`;
+    if (!run) throw new Error("Lauf nicht gefunden.");
+    const rows = await db<Record<string, unknown>>`
+      select p.user_id, p.first_name, p.last_name, p.payout_iban, p.payout_name,
+             sum(i.amount)::text as amount
+      from payout_items i
+      join profiles p on p.user_id = i.user_id
+      where i.run_id = ${data.id}
+      group by p.user_id, p.first_name, p.last_name, p.payout_iban, p.payout_name
+      order by p.last_name
+    `;
+    const settings = await db<{ key: string; value: string }>`
+      select key, value from settings
+      where key in ('payout_debtor_name','payout_debtor_iban','payout_debtor_bic')
+    `;
+    const map: Record<string, string> = {};
+    for (const s of settings) map[s.key] = s.value;
+    const missing = rows.filter((r) => !asStr(r.payout_iban)).map((r) => `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim());
+    const { buildPain001 } = await import("@/lib/sepa");
+    const xml = buildPain001({
+      messageId: `E1-${asStr(run.id).slice(0, 12)}`,
+      executionDate: asStr(run.scheduled_for).slice(0, 10),
+      debtorName: map.payout_debtor_name || "E1 Direktvertrieb",
+      debtorIban: map.payout_debtor_iban || "",
+      debtorBic: map.payout_debtor_bic || "",
+      credits: rows.map((r) => ({
+        name: asStr(r.payout_name) || `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+        iban: asStr(r.payout_iban),
+        amount: num(r.amount),
+        remittance: `${asStr(run.title)}`.slice(0, 140),
+      })),
+    });
+    return {
+      filename: `E1-SEPA-${asStr(run.scheduled_for).slice(0, 10)}.xml`,
+      xml,
+      missing,
+    };
+  });

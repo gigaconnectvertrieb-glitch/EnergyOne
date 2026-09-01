@@ -164,6 +164,21 @@ function Page() {
                   <option value="3">Stufe 3</option>
                   <option value="13">Stufe 13 · Agentur</option>
                 </Select>
+                <Input
+                  placeholder="Auszahlungs-IBAN"
+                  defaultValue={u.payout_iban || ""}
+                  onBlur={async (e) => {
+                    const v = e.target.value.trim();
+                    if (v === (u.payout_iban || "")) return;
+                    try {
+                      await updateUser({ data: { userId: u.user_id, payoutIban: v } });
+                      toast.success("IBAN gespeichert");
+                      load();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "IBAN ungültig");
+                    }
+                  }}
+                />
                 <Select
                   value={u.status}
                   onChange={async (e) => {

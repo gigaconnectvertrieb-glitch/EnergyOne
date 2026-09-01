@@ -98,7 +98,25 @@ function Page() {
               onChange={(e) => setOps({ ...ops, quality_block_rate: e.target.value })}
             />
           </Field>
-          <Button type="submit">Speichern</Button>
+          <Field label="Firmenkonto · Name">
+            <Input
+              value={ops.payout_debtor_name || ""}
+              onChange={(e) => setOps({ ...ops, payout_debtor_name: e.target.value })}
+            />
+          </Field>
+          <Field label="Firmenkonto · IBAN" hint="Absender für SEPA-Sammelüberweisung. Nicht das Online-Banking-Passwort.">
+            <Input
+              value={ops.payout_debtor_iban || ""}
+              onChange={(e) => setOps({ ...ops, payout_debtor_iban: e.target.value.toUpperCase() })}
+              autoComplete="off"
+            />
+          </Field>
+          <Field label="Firmenkonto · BIC (optional)">
+            <Input
+              value={ops.payout_debtor_bic || ""}
+              onChange={(e) => setOps({ ...ops, payout_debtor_bic: e.target.value.toUpperCase() })}
+            />
+          </Field>
         </form>
       ) : null}
       <div className="mt-6 grid gap-2">

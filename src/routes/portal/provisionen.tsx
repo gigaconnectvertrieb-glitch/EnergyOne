@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listCommissions, setCommissionStatus } from "@/lib/server/api";
-import { cancelPayout, executePayout, listPayoutRuns, planPayout, payoutCsv } from "@/lib/server/payout-api";
+import { cancelPayout, executePayout, listPayoutRuns, planPayout, payoutCsv, payoutSepaXml } from "@/lib/server/payout-api";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { deDate, eur } from "@/lib/utils";
@@ -144,6 +144,28 @@ function Page() {
                   }}
                 >
                   CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const file = await payoutSepaXml({ data: { id: r.id } });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(new Blob([file.xml], { type: "application/xml" }));
+                      a.download = file.filename;
+                      a.click();
+                      if (file.missing.length) {
+                        toast.message(`Ohne IBAN, nicht in der Datei: ${file.missing.join(", ")}`);
+                      } else {
+                        toast.success("SEPA-Datei fürs Banking");
+                      }
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "SEPA fehlgeschlagen");
+                    }
+                  }}
+                >
+                  SEPA XML
                 </Button>
                 {r.status === "geplant" ? (
                   <>
