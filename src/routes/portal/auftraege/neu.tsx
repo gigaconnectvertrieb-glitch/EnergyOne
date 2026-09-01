@@ -42,6 +42,7 @@ function Capture() {
   const [tariffId, setTariffId] = useState("");
   const [kwh, setKwh] = useState("");
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({ providers: [], items: [] });
+  const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
   const [compare, setCompare] = useState<Awaited<ReturnType<typeof compareTariffs>> | null>(null);
   const [comparing, setComparing] = useState(false);
   const [stufe, setStufe] = useState(1);
