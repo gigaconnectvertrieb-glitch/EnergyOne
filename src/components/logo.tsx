@@ -46,9 +46,18 @@ export function Wordmark({
         >
           Direktvertrieb
         </span>
-        <sup className="ml-0.5 -translate-y-1 text-[0.55em] font-semibold leading-none tracking-normal text-gold" title="Marke">
-          ®
-        </sup>
+        <span
+          className={cn(
+            "inline-grid place-items-center rounded-full border font-sans font-semibold leading-none text-gold",
+            compact
+              ? "size-3.5 border-gold/70 text-[8px]"
+              : "size-4 border-gold text-[9px] md:size-[1.125rem] md:text-[10px]",
+          )}
+          title="Eingetragene Marke"
+          aria-label="Marke"
+        >
+          R
+        </span>
       </span>
     </Link>
   );
