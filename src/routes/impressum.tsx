@@ -18,7 +18,7 @@ function Page() {
       <div className="mx-auto max-w-2xl px-4 py-16">
         <h1 className="font-display text-5xl">Impressum</h1>
         <div className="mt-6 space-y-3 text-sm text-muted">
-          <p>E1 Direktvertrieb</p>
+          <p>E1 Direktvertrieb®</p>
           <p>Geschäftsführung: Orhan Salo, Luca-Marco Marrancone</p>
           <p>Deutschland</p>
           {phone ? (

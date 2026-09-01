@@ -42,7 +42,7 @@ function Hero() {
       <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-bg/75 to-bg" />
       <div className="relative mx-auto flex min-h-[88dvh] max-w-6xl flex-col justify-end px-4 pb-16 pt-28 md:pb-24">
         <p className="reveal text-[11px] uppercase tracking-[0.42em] text-gold">
-          E1 Direktvertrieb · Deutschland
+          E1 Direktvertrieb® · Deutschland
         </p>
         <h1 className="reveal reveal-d1 mt-6 max-w-4xl font-display text-5xl leading-[0.95] md:text-7xl">
           Energie, die zu Ihnen passt.

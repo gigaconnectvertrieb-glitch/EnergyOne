@@ -46,6 +46,9 @@ export function Wordmark({
         >
           Direktvertrieb
         </span>
+        <sup className="ml-0.5 -translate-y-1 text-[0.55em] font-semibold leading-none tracking-normal text-gold" title="Marke">
+          ®
+        </sup>
       </span>
     </Link>
   );
