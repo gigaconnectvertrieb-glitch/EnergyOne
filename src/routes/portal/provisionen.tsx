@@ -75,6 +75,15 @@ function Page() {
   }
 
   const sum = rows.reduce((a, r) => a + r.amount, 0);
+  const byPerson = Object.values(
+    rows.reduce<Record<string, { name: string; n: number; amount: number }>>((acc, r) => {
+      const cur = acc[r.user_id] || { name: r.advisor, n: 0, amount: 0 };
+      cur.n += 1;
+      cur.amount += r.amount;
+      acc[r.user_id] = cur;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.amount - a.amount);
   const runLabel: Record<string, string> = {
     geplant: "Geplant",
     ausgefuehrt: "Durchgeführt",
@@ -86,8 +95,28 @@ function Page() {
       <h1 className="font-display text-4xl">Provisionen</h1>
       <p className="text-sm text-muted">
         Freigeben, Auszahlung auf einen Termin legen, am Stichtag durchführen. Summe dieser Ansicht: {eur(sum)} netto / {eur(vatOn(sum).gross)} brutto.
-        Liste ist netto, 19 % USt kommen oben drauf. Kleinunternehmer ohne USt — Schalter im Steuerbuch. Bei der Auszahlung bekommt jeder Netto, USt und wie viel zur Seite gelegt werden soll.
+        Liste ist netto, 19 % USt kommen oben drauf. Kleinunternehmer ohne USt — Schalter im Steuerbuch.
       </p>
+
+      <h2 className="mt-8 font-display text-2xl">Wem wir was zahlen</h2>
+      <p className="mt-1 text-sm text-muted">
+        Nach Filter. Offen = noch nicht freigegeben. Freigegeben = bereit zur Überweisung.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {byPerson.map((p) => {
+          const v = vatOn(p.amount);
+          return (
+            <div key={p.name} className="rounded-2xl bg-surface p-4 gold-hairline">
+              <p className="font-medium">{p.name}</p>
+              <p className="mt-1 tabular-nums text-gold">{eur(p.amount)} netto</p>
+              <p className="text-xs text-muted">
+                {eur(v.gross)} brutto · {p.n} {p.n === 1 ? "Position" : "Positionen"}
+              </p>
+            </div>
+          );
+        })}
+        {byPerson.length === 0 ? <p className="text-sm text-muted">Keine Positionen in diesem Filter.</p> : null}
+      </div>
 
       <h2 className="mt-8 font-display text-2xl">Auszahlungsläufe</h2>
       <div className="mt-3 grid gap-2">
