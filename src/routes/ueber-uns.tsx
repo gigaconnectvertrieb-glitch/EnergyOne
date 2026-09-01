@@ -12,7 +12,7 @@ function Page() {
         <h1 className="mt-2 font-display text-5xl">Wir sind kein Konzern ohne Gesicht.</h1>
         <p className="mt-4 text-lg text-muted">
           E1 Direktvertrieb ist persönlicher Energievertrieb für Strom und Gas.
-          Gegründet von Orhan Salo und Luca-Marco Marrancone – aus dem Vertrieb
+          Gegründet von Orhan Salo und Luca-Marco Marrancone, aus dem Vertrieb
           heraus, für Menschen, die ehrliche Beratung wollen.
         </p>
         <img
@@ -26,7 +26,7 @@ function Page() {
             <p className="text-sm text-gold">Geschäftsführer & Gründer</p>
             <p className="mt-3 text-sm text-muted">
               Head of Sales. Steht selbst beim Kunden, baut Teams und besteht
-              darauf, dass Abschlüsse halten – nicht nur auf dem Papier.
+              darauf, dass Abschlüsse halten. Nicht nur auf dem Papier.
             </p>
           </article>
           <article className="rounded-3xl bg-surface p-6 gold-hairline">

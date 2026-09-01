@@ -25,7 +25,7 @@ function Page() {
           <p className="text-xs uppercase tracking-[0.28em] text-gold">Karriere</p>
           <h1 className="mt-2 font-display text-5xl">Verkaufen, ohne sich zu verbiegen.</h1>
           <p className="mt-4 text-muted">
-            Bei E1 zählt, was Sie erreichen – nicht, wem Sie folgen. Eigenverantwortlich,
+            Bei E1 zählt, was Sie erreichen, nicht wem Sie folgen. Eigenverantwortlich,
             persönlich von der Geschäftsführung begleitet, fair bezahlt. Bewerbungen landen
             direkt bei{" "}
             <a className="text-gold" href="mailto:bewerbung@e1direktvertrieb.de">

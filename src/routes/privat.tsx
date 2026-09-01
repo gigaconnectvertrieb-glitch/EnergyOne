@@ -14,8 +14,7 @@ function Page() {
         <p className="reveal text-[11px] uppercase tracking-[0.36em] text-gold">Privathaushalt</p>
         <h1 className="reveal reveal-d1 mt-4 font-display text-5xl md:text-6xl">Strom und Gas für Zuhause.</h1>
         <p className="reveal reveal-d2 mt-4 text-lg text-muted">
-          Wohnung oder Haus. Wir erklären Tarif, Verbrauch und Wechsel persönlich —
-          ohne Hotline, ohne Druck.
+          Wohnung oder Haus. Wir erklären Tarif, Verbrauch und Wechsel persönlich, ohne Hotline, ohne Druck.
         </p>
         <ul className="reveal reveal-d3 mt-8 grid gap-3 text-sm text-muted">
           <li>Wechsel ohne Versorgungslücke</li>

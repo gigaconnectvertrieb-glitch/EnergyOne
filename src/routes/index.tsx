@@ -73,8 +73,8 @@ function Hero() {
 
 function TrustStrip() {
   const items = [
-    { title: "Privat", text: "Haushalt, Strom und Gas – verständlich an der Tür." },
-    { title: "Gewerbe", text: "Praxis, Laden, Büro, Betrieb – ein Ansprechpartner." },
+    { title: "Privat", text: "Haushalt, Strom und Gas. Verständlich an der Tür." },
+    { title: "Gewerbe", text: "Praxis, Laden, Büro, Betrieb. Ein Ansprechpartner." },
     { title: "Ohne Druck", text: "Sie entscheiden. Wir erklären." },
   ];
   return (
@@ -103,7 +103,7 @@ function Audience() {
           <div className="relative flex h-full flex-col justify-end p-8">
             <p className="text-[11px] uppercase tracking-[0.28em] text-gold">Privathaushalt</p>
             <h3 className="mt-2 font-display text-3xl">Zuhause.</h3>
-            <p className="mt-2 max-w-sm text-sm text-muted">Wohnung oder Haus. Tarif, Wechsel, Widerruf — in Ruhe erklärt.</p>
+            <p className="mt-2 max-w-sm text-sm text-muted">Wohnung oder Haus. Tarif, Wechsel, Widerruf. In Ruhe erklärt.</p>
           </div>
         </Link>
         <Link to="/firmen" className="group relative min-h-72 overflow-hidden rounded-[1.75rem]">
@@ -157,7 +157,7 @@ function BeratungBand() {
           <p className="text-xs uppercase tracking-[0.28em] text-gold">Beratung anfordern</p>
           <h2 className="mt-3 font-display text-4xl">Beratung anfordern</h2>
           <p className="mt-4 text-muted">
-            Privat oder Gewerbe – dieselbe Nummer, derselbe Draht. Kein Callcenter.
+            Privat oder Gewerbe. Dieselbe Nummer, derselbe Draht. Kein Callcenter.
           </p>
         </div>
         <form onSubmit={onSubmit} className="rounded-3xl bg-surface p-5 gold-hairline md:p-6">
@@ -214,12 +214,12 @@ function Steps() {
     {
       n: "2",
       t: "Individueller Vergleich",
-      d: "Wir vergleichen Tarife, Kosten und Anbieter – transparent und unabhängig.",
+      d: "Wir vergleichen Tarife, Kosten und Anbieter. Transparent und unabhängig.",
     },
     {
       n: "3",
       t: "Sie entscheiden",
-      d: "Sie erhalten alle Fakten und entscheiden selbst – frei, sicher und in Ihrem Tempo.",
+      d: "Sie erhalten alle Fakten und entscheiden selbst. Frei, sicher und in Ihrem Tempo.",
     },
   ];
   return (
@@ -244,12 +244,12 @@ function Founders() {
     {
       name: "Orhan Salo",
       role: "Geschäftsführer & Gründer",
-      bio: "Head of Sales & Team. Baut Vertrieb, Organisation und Kundenbeziehung – und steht selbst vor Ort für ehrliche Beratung.",
+      bio: "Head of Sales und Team. Baut Vertrieb, Organisation und Kundenbeziehung und steht selbst vor Ort.",
     },
     {
       name: "Luca-Marco Marrancone",
       role: "Geschäftsführer & Gründer",
-      bio: "Head of Sales & Team. Entwickelt Menschen und Strukturen, damit Beratung in ganz Deutschland persönlich bleibt.",
+      bio: "Head of Sales und Team. Entwickelt Menschen und Strukturen, damit Beratung in ganz Deutschland persönlich bleibt.",
     },
   ];
   return (
@@ -280,10 +280,10 @@ function Founders() {
 
 function Facts() {
   const facts = [
-    "Der Strom- und Gasmarkt in Deutschland ist liberalisiert – Sie wählen frei.",
+    "Der Strom- und Gasmarkt in Deutschland ist liberalisiert. Sie wählen frei.",
     "Grundversorgung ist ein Auffangnetz, oft teurer als ein guter Tarif.",
     "Der Wechsel erfolgt ohne Versorgungslücke.",
-    "Den Preis beeinflussen Beschaffung, Netze, Steuern und Umlagen – wir erklären jeden Bestandteil.",
+    "Den Preis beeinflussen Beschaffung, Netze, Steuern und Umlagen. Wir erklären jeden Bestandteil.",
   ];
   return (
     <section className="border-y border-line bg-surface">
@@ -306,7 +306,7 @@ function Faq() {
   const items = [
     {
       q: "Kommt wirklich jemand zu mir nach Hause?",
-      a: "Ja. E1 ist Direktvertrieb vor Ort – kein Callcenter, keine Warteschleife.",
+      a: "Ja. E1 ist Direktvertrieb vor Ort. Kein Callcenter, keine Warteschleife.",
     },
     {
       q: "Bin ich verpflichtet, etwas abzuschließen?",
@@ -314,7 +314,7 @@ function Faq() {
     },
     {
       q: "Was kostet die Beratung?",
-      a: "Die Erstberatung ist für Sie unverbindlich. Provisionen laufen über den Energievertrag, nicht über eine Beratungsgebühr an der Tür.",
+      a: "Die Erstberatung ist unverbindlich. Provisionen laufen über den Energievertrag, nicht über eine Gebühr an der Tür.",
     },
     {
       q: "Beraten Sie auch Firmen?",
@@ -322,7 +322,7 @@ function Faq() {
     },
     {
       q: "Kann ich Strom und Gas gleichzeitig wechseln?",
-      a: "Ja. Gas darf parallel laufen. Aktiv ist maximal ein Stromvertrag – das ist bei uns eine harte Regel.",
+      a: "Ja. Gas darf parallel laufen. Aktiv ist maximal ein Stromvertrag.",
     },
   ];
   return (

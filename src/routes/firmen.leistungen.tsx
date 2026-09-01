@@ -13,7 +13,7 @@ const LEISTUNGEN = [
   },
   {
     t: "Gas",
-    w: "Heizung, Küche, Produktion — wenn der Standort Gas hat",
+    w: "Heizung, Küche, Produktion, wenn der Standort Gas hat",
     i: "Verbrauch, Zählernummer, Wunschtermin.",
     d: "Eigener Vertrag, derselbe Ansprechpartner wie beim Strom. Kein zweites Callcenter.",
   },
@@ -43,7 +43,7 @@ function Page() {
             Was wir konkret machen.
           </h1>
           <p className="reveal reveal-d2 mt-4 max-w-xl text-muted">
-            Kein Portal-Vergleich. Aufnahme, Prüfung, Wechsel — mit Namen.
+            Kein Portal-Vergleich. Aufnahme, Prüfung, Wechsel. Mit Namen.
           </p>
         </div>
       </section>

@@ -162,7 +162,7 @@ function Page() {
             </dl>
             {result.saveYear > 0 ? (
               <p className="mt-3 text-sm text-muted">
-                Das sind etwa {eur(result.saveMonth)} im Monat. Kein Angebot — eine Rechnung aus Ihren Angaben.
+                Das sind etwa {eur(result.saveMonth)} im Monat. Kein Angebot, nur eine Rechnung aus Ihren Angaben.
                 Den genauen Preis zu Ihrer PLZ holen wir, wenn Sie uns schreiben.
               </p>
             ) : (

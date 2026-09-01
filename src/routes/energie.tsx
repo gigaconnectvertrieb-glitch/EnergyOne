@@ -25,7 +25,7 @@ function Page() {
           </p>
           <p>
             <strong className="text-ink">Grundversorgung</strong> ist das Auffangnetz,
-            wenn kein Vertrag greift – meist teurer als ein klar kalkulierter Tarif.
+            wenn kein Vertrag greift. Meist teurer als ein klar kalkulierter Tarif.
           </p>
           <p>
             <strong className="text-ink">Wechsel ohne Lücke:</strong> Der neue Lieferant
@@ -33,7 +33,7 @@ function Page() {
           </p>
           <p>
             Phase 1: E1 vermittelt über den Partner New Sales. Phase 2: eigene E1-Tarife.
-            Die Beratung bleibt dieselbe – persönlich, vor Ort, ohne Druck.
+            Die Beratung bleibt dieselbe. Persönlich, vor Ort, ohne Druck.
           </p>
         </div>
       </div>
