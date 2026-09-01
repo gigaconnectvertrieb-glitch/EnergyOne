@@ -7,6 +7,7 @@ export type WalkStop = {
   lat: number;
   lng: number;
   seq?: number;
+  house?: string;
 };
 
 type Props = {
@@ -132,7 +133,7 @@ export function FieldMap({ center, corners = [], stops = [], draw, onTap, onStop
           fillColor: i === 0 ? "#d4af37" : "#f4f1e8",
           fillOpacity: 1,
         });
-        m.bindTooltip(`${i + 1} ${s.street}`, { direction: "top", opacity: 0.95 });
+        m.bindTooltip(`${i + 1} ${s.street}${s.house ? ` ${s.house}` : ""}`, { direction: "top", opacity: 0.95 });
         m.on("click", () => stopRef.current?.(s));
         m.addTo(map as never);
         group.push(m);

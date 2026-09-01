@@ -6,7 +6,7 @@ import { listUsers, bootstrapMe } from "@/lib/server/api";
 import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
 import { deleteTerritory, listTerritories } from "@/lib/server/field-api";
 import { FieldMap, type WalkStop } from "@/components/field-map";
-import { bboxAround, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
+import { bboxAround, bboxFromPoints, DEFAULT_STREETS_PER_DAY } from "@/lib/geo-de";
 import { can } from "@/lib/e1";
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ function Page() {
   const [corners, setCorners] = useState<{ lat: number; lng: number }[]>([]);
   const [walk, setWalk] = useState<WalkStop[]>([]);
   const [walkMeters, setWalkMeters] = useState(0);
+  const [groups, setGroups] = useState<Array<{ street: string; houses: string[]; house?: string }>>([]);
 
   function reload() {
     listWorkPlans().then(setPlans).catch(() => setPlans([]));
@@ -72,13 +73,41 @@ function Page() {
 
   const box = place ? bboxAround(place.lat, place.lng, km) : null;
 
+  async function loadZone(pts: { lat: number; lng: number }[]) {
+    if (pts.length < 3) return;
+    setBusy(true);
+    try {
+      const res = await streetsInZone({ data: { corners: pts } });
+      setWalk(
+        (res.streets || []).map((s) => ({
+          id: s.id,
+          street: s.street,
+          lat: s.lat,
+          lng: s.lng,
+          house: s.house,
+        })),
+      );
+      setGroups(res.streets || []);
+      setWalkMeters(res.meters);
+      toast.success(
+        res.houseCount
+          ? `${res.streetCount} Straßen · ${res.houseCount} Hausnummern · ${(res.meters / 1000).toFixed(1)} km`
+          : `${res.count} Straßen · ${(res.meters / 1000).toFixed(1)} km`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Straßen nicht geladen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl pb-10">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebietsplanung</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen, dann 3× tippen (Dreieck) oder 4× (Rechteck). Die Straßen in der Zone kommen als Laufweg,
-        nächste Straße zuerst.
+        Stadt suchen, Zone mit 3 oder 4 Tipps eingrenzen. Dann werden Straßen und Hausnummern geladen
+        und als Laufweg sortiert.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
@@ -103,6 +132,7 @@ function Page() {
                     setHits([]);
                     setCorners([]);
                     setWalk([]);
+                    setGroups([]);
                   }}
                 >
                   <span>
@@ -127,29 +157,23 @@ function Page() {
               stops={walk}
               draw
               onTap={async (p) => {
+                if (busy) return;
                 const next = [...corners, p].slice(0, 4);
                 setCorners(next);
-                if (next.length >= 3) {
-                  setBusy(true);
-                  try {
-                    const res = await streetsInZone({ data: { corners: next } });
-                    setWalk(res.streets);
-                    setWalkMeters(res.meters);
-                    toast.success(`${res.count} Straßen, Laufweg ${(res.meters / 1000).toFixed(1)} km`);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Straßen nicht geladen");
-                  } finally {
-                    setBusy(false);
-                  }
-                }
+                if (next.length >= 3) await loadZone(next);
               }}
             />
-            {walk.length ? (
-              <ol className="max-h-64 overflow-auto rounded-2xl bg-elevated p-3 text-sm">
-                {walk.map((s, i) => (
-                  <li key={s.id} className="flex gap-2 py-1">
-                    <span className="w-6 text-gold">{i + 1}</span>
-                    {s.street}
+            {groups.length ? (
+              <ol className="max-h-72 overflow-auto rounded-2xl bg-elevated p-3 text-sm">
+                {groups.map((s, i) => (
+                  <li key={`${s.street}-${i}`} className="flex gap-2 border-b border-line/60 py-2 last:border-0">
+                    <span className="w-6 shrink-0 text-gold">{i + 1}</span>
+                    <div className="min-w-0">
+                      <p className="font-medium">{s.street}</p>
+                      <p className="text-xs leading-relaxed text-muted">
+                        {s.houses?.length ? s.houses.join(" · ") : s.house || "ohne Hausnummern"}
+                      </p>
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -161,13 +185,28 @@ function Page() {
                 onClick={() => {
                   setCorners([]);
                   setWalk([]);
+                  setGroups([]);
                   setWalkMeters(0);
                 }}
               >
                 Zone löschen
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || corners.length < 3}
+                onClick={() => void loadZone(corners)}
+              >
+                {busy ? "Lädt OSM…" : "Straßen & Hausnummern laden"}
+              </Button>
               <span className="self-center text-xs text-muted">
-                {walk.length ? `${walk.length} Straßen · ${(walkMeters / 1000).toFixed(1)} km` : busy ? "Straßen…" : ""}
+                {groups.length
+                  ? `${groups.length} Straßen · ${groups.reduce((n, g) => n + (g.houses?.length || 0), 0)} Nr. · ${(walkMeters / 1000).toFixed(1)} km`
+                  : busy
+                    ? "OpenStreetMap…"
+                    : corners.length
+                      ? `${corners.length}/4 Ecken`
+                      : ""}
               </span>
             </div>
             <Field label="Radius in km" hint="Großstadt: Stadtteil suchen oder Radius klein halten.">
@@ -203,6 +242,7 @@ function Page() {
                 if (!place || !box) return;
                 setBusy(true);
                 try {
+                  const drawn = corners.length >= 3 ? bboxFromPoints(corners) : box;
                   const res = await importCityPlan({
                     data: {
                       name: `${place.name} ${km} km`,
@@ -210,12 +250,15 @@ function Page() {
                       state: place.state,
                       lat: place.lat,
                       lng: place.lng,
-                      ...box,
+                      ...drawn,
                       perDay,
                       userIds,
+                      corners: corners.length >= 3 ? corners : undefined,
                     },
                   });
-                  toast.success(`${res.streets} Straßen, ${res.days} Tage`);
+                  toast.success(
+                    `${res.houses || res.streets} Adressen, ${res.days} Tage`,
+                  );
                   reload();
                   const detail = await getWorkPlan({ data: { id: res.planId } });
                   setOpen(detail);
@@ -226,7 +269,7 @@ function Page() {
                 }
               }}
             >
-              {busy ? "Spielt Straßen ein…" : "Straßen einspielen und Plan erzeugen"}
+              {busy ? "Spielt Adressen ein…" : "Zone einspielen und Plan erzeugen"}
             </Button>
           </div>
         ) : null}

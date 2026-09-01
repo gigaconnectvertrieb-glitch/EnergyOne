@@ -1,6 +1,13 @@
 import { bboxAround, STREET_CAP, type DeCity } from "@/lib/geo-de";
 
 const UA = "E1Direktvertrieb/1.0 (info@e1direktvertrieb.de)";
+const HOUSE_CAP = 1500;
+const OVERPASS_MIRRORS = [
+  process.env.OVERPASS_URL,
+  "https://overpass.openstreetmap.fr/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+].filter((u): u is string => Boolean(u));
 
 export type PlaceHit = DeCity & {
   osm_id?: string;
@@ -23,6 +30,16 @@ function asNum(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+async function fetchJson(url: string | URL, init: RequestInit, err: string) {
+  const res = await fetch(url, {
+    ...init,
+    headers: { "user-agent": UA, accept: "application/json", ...(init.headers || {}) },
+    signal: init.signal ?? AbortSignal.timeout(18000),
+  });
+  if (!res.ok) throw new Error(err);
+  return res.json();
+}
+
 export async function nominatimPlaces(query: string): Promise<PlaceHit[]> {
   const q = query.trim();
   if (q.length < 2) return [];
@@ -32,9 +49,7 @@ export async function nominatimPlaces(query: string): Promise<PlaceHit[]> {
   url.searchParams.set("countrycodes", "de");
   url.searchParams.set("limit", "8");
   url.searchParams.set("q", q);
-  const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/json" } });
-  if (!res.ok) throw new Error("Städtesuche gerade nicht erreichbar.");
-  const rows = (await res.json()) as Array<{
+  const rows = (await fetchJson(url, {}, "Städtesuche gerade nicht erreichbar.")) as Array<{
     lat: string;
     lon: string;
     display_name: string;
@@ -62,8 +77,7 @@ export async function nominatimPlaces(query: string): Promise<PlaceHit[]> {
   });
 }
 
-function clampBbox(p: { south: number; north: number; west: number; east: number }) {
-  const max = 0.06;
+function clampBbox(p: { south: number; north: number; west: number; east: number }, max = 0.045) {
   let { south, north, west, east } = p;
   if (north - south > max) {
     const mid = (north + south) / 2;
@@ -78,27 +92,63 @@ function clampBbox(p: { south: number; north: number; west: number; east: number
   return { south, north, west, east };
 }
 
-export async function overpassStreets(bbox: { south: number; north: number; west: number; east: number }): Promise<OsmStreet[]> {
-  const b = clampBbox(bbox);
-  const query = `[out:json][timeout:25];way["highway"~"^(residential|living_street|unclassified|tertiary)$"]["name"](${b.south},${b.west},${b.north},${b.east});out center ${STREET_CAP};`;
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!res.ok) throw new Error("Straßenimport gerade nicht erreichbar. In einer Minute erneut versuchen.");
-  const json = (await res.json()) as {
-    elements?: Array<{ id: number; tags?: { name?: string }; center?: { lat: number; lon: number } }>;
+type OverpassEl = {
+  id?: number;
+  type?: string;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: {
+    name?: string;
+    highway?: string;
+    "addr:housenumber"?: string;
+    "addr:street"?: string;
+    "addr:place"?: string;
+    "addr:postcode"?: string;
   };
+};
+
+async function overpassJson(query: string): Promise<{ elements?: OverpassEl[] }> {
+  let last = "keine Antwort";
+  for (const url of OVERPASS_MIRRORS) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "user-agent": UA,
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          accept: "application/json",
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(22000),
+      });
+      if (!res.ok) {
+        last = `HTTP ${res.status}`;
+        continue;
+      }
+      const json = (await res.json()) as { elements?: OverpassEl[]; remark?: string };
+      if (Array.isArray(json.elements)) return json;
+      last = "leere Antwort";
+    } catch (e) {
+      last = e instanceof Error ? e.message.replace(/^fetch failed$/i, "Verbindung abgebrochen") : "timeout";
+    }
+  }
+  throw new Error(
+    `OpenStreetMap antwortet nicht (${last}). Zone etwas kleiner zeichnen und nochmal versuchen.`,
+  );
+}
+
+function streetsFromElements(elements: OverpassEl[]): OsmStreet[] {
   const byName = new Map<string, { osm_id: string; name: string; lat: number; lng: number; n: number }>();
-  for (const el of json.elements || []) {
+  for (const el of elements) {
     const name = el.tags?.name?.trim();
-    const lat = el.center?.lat;
-    const lng = el.center?.lon;
-    if (!name || lat == null || lng == null) continue;
+    if (!name || !el.tags?.highway) continue;
+    const lat = el.center?.lat ?? el.lat;
+    const lng = el.center?.lon ?? el.lon;
+    if (lat == null || lng == null) continue;
     const key = name.toLowerCase().replace(/\s+/g, " ");
     const prev = byName.get(key);
-    if (!prev) byName.set(key, { osm_id: String(el.id), name, lat, lng, n: 1 });
+    if (!prev) byName.set(key, { osm_id: String(el.id || name), name, lat, lng, n: 1 });
     else {
       prev.lat += lat;
       prev.lng += lng;
@@ -112,6 +162,16 @@ export async function overpassStreets(bbox: { south: number; north: number; west
     lat: s.lat / s.n,
     lng: s.lng / s.n,
   }));
+}
+
+export async function overpassStreets(bbox: {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}): Promise<OsmStreet[]> {
+  const zone = await overpassZone(bbox);
+  return zone.streets;
 }
 
 export type AddressHit = {
@@ -132,15 +192,7 @@ export type HouseHit = {
   zip?: string;
 };
 
-function hitsFromOverpass(
-  elements: Array<{
-    lat?: number;
-    lon?: number;
-    center?: { lat: number; lon: number };
-    tags?: { "addr:housenumber"?: string; "addr:street"?: string; "addr:place"?: string; "addr:postcode"?: string };
-  }>,
-  streetFallback = "",
-): HouseHit[] {
+function hitsFromOverpass(elements: OverpassEl[], streetFallback = ""): HouseHit[] {
   const seen = new Set<string>();
   const out: HouseHit[] = [];
   for (const el of elements) {
@@ -153,11 +205,31 @@ function hitsFromOverpass(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ house, lat: la, lng: ln, street: st, zip: el.tags?.["addr:postcode"] || "" });
+    if (out.length >= HOUSE_CAP) break;
   }
   return out.sort((a, b) => {
     const s = a.street.localeCompare(b.street, "de");
     return s || a.house.localeCompare(b.house, "de", { numeric: true });
   });
+}
+
+export async function overpassZone(bbox: {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}): Promise<{ streets: OsmStreet[]; houses: HouseHit[] }> {
+  const b = clampBbox(bbox);
+  const query = `[out:json][timeout:20];(
+  way["highway"~"^(residential|living_street|unclassified|tertiary|secondary)$"]["name"](${b.south},${b.west},${b.north},${b.east});
+  nwr["addr:housenumber"]["addr:street"](${b.south},${b.west},${b.north},${b.east});
+);out center;`;
+  const json = await overpassJson(query);
+  const elements = json.elements || [];
+  return {
+    streets: streetsFromElements(elements),
+    houses: hitsFromOverpass(elements),
+  };
 }
 
 export async function nominatimAddress(query: string): Promise<AddressHit[]> {
@@ -169,9 +241,7 @@ export async function nominatimAddress(query: string): Promise<AddressHit[]> {
   url.searchParams.set("countrycodes", "de");
   url.searchParams.set("limit", "8");
   url.searchParams.set("q", q);
-  const res = await fetch(url, { headers: { "user-agent": UA, accept: "application/json" } });
-  if (!res.ok) throw new Error("Adresssuche gerade nicht erreichbar.");
-  const rows = (await res.json()) as Array<{
+  const rows = (await fetchJson(url, {}, "Adresssuche gerade nicht erreichbar.")) as Array<{
     lat: string;
     lon: string;
     display_name: string;
@@ -198,35 +268,25 @@ export async function nominatimAddress(query: string): Promise<AddressHit[]> {
 }
 
 export async function overpassHouses(lat: number, lng: number, street?: string): Promise<HouseHit[]> {
-  const query = `[out:json][timeout:25];nwr["addr:housenumber"](around:220,${lat},${lng});out center;`;
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!res.ok) return [];
-  const json = (await res.json()) as { elements?: Parameters<typeof hitsFromOverpass>[0] };
-  const all = hitsFromOverpass(json.elements || [], street);
-  const want = (street || "").trim().toLowerCase();
-  if (!want) return all.slice(0, 200);
-  const match = all.filter((h) => h.street.toLowerCase().includes(want) || want.includes(h.street.toLowerCase()));
-  return (match.length ? match : all).slice(0, 200);
+  try {
+    const query = `[out:json][timeout:20];nwr["addr:housenumber"](around:220,${lat},${lng});out center;`;
+    const json = await overpassJson(query);
+    const all = hitsFromOverpass(json.elements || [], street);
+    const want = (street || "").trim().toLowerCase();
+    if (!want) return all.slice(0, 200);
+    const match = all.filter((h) => h.street.toLowerCase().includes(want) || want.includes(h.street.toLowerCase()));
+    return (match.length ? match : all).slice(0, 200);
+  } catch {
+    return [];
+  }
 }
 
-export async function overpassHousesBbox(bbox: { south: number; north: number; west: number; east: number }): Promise<HouseHit[]> {
-  const b = clampBbox({
-    south: bbox.south,
-    north: bbox.north,
-    west: bbox.west,
-    east: bbox.east,
-  });
-  const query = `[out:json][timeout:40];nwr["addr:housenumber"](${b.south},${b.west},${b.north},${b.east});out center;`;
-  const res = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "user-agent": UA, "content-type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!res.ok) return [];
-  const json = (await res.json()) as { elements?: Parameters<typeof hitsFromOverpass>[0] };
-  return hitsFromOverpass(json.elements || []).slice(0, 1500);
+export async function overpassHousesBbox(bbox: {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}): Promise<HouseHit[]> {
+  const zone = await overpassZone(bbox);
+  return zone.houses;
 }
