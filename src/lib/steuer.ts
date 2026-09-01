@@ -121,13 +121,21 @@ export function elsterCsv(input: {
 
 export const ELSTER_URL = "https://www.elster.de/eportal/login/softpse";
 
+export function vatOn(net: number) {
+  const s = splitMoney(net, UST_RATE, false);
+  return { net: round2(s.net), vat: round2(s.vat), gross: round2(s.gross) };
+}
+
 export function leftover(input: {
   proviPaid: number;
   expensesCash: number;
   ustSetAside: number;
   estSetAside: number;
+  /** Liste ist netto, 19 % kommen oben drauf — USt nicht vom Netto abziehen. */
+  vatOnTop?: boolean;
 }) {
-  return input.proviPaid - input.expensesCash - input.ustSetAside - input.estSetAside;
+  const vatCut = input.vatOnTop === false ? input.ustSetAside : 0;
+  return input.proviPaid - input.expensesCash - vatCut - input.estSetAside;
 }
 
 export type ExpenseCadence = "einmal" | "monat" | "jahr";
@@ -144,27 +152,34 @@ export function payoutSetAside(input: {
   monthlyFix: number;
   yearlyBa: number;
 }) {
-  const payout = round2(Math.max(0, input.payout));
-  const ytd = round2(Math.max(0, input.paidYtd) + payout);
-  const ust = input.kleinunternehmer ? 0 : round2(payout * UST_RATE);
+  const net = round2(Math.max(0, input.payout));
+  const ytd = round2(Math.max(0, input.paidYtd) + net);
+  const money = input.kleinunternehmer ? { net, vat: 0, gross: net } : vatOn(net);
+  const ust = money.vat;
   const taxable = Math.max(0, ytd - Math.max(0, input.yearlyBa));
   const estYear = estReserve(taxable);
-  const est = ytd > 0 ? round2(estYear * (payout / ytd)) : 0;
+  const est = ytd > 0 ? round2(estYear * (net / ytd)) : 0;
   const fix = round2(Math.max(0, input.monthlyFix));
   const setAside = round2(ust + est + fix);
-  const keep = round2(payout - setAside);
-  return { ust, est, fix, setAside, keep };
+  const keep = round2(net - est - fix);
+  return { ust, est, fix, setAside, keep, net: money.net, gross: money.gross };
 }
 
 export function payoutHintText(sum: number, aside: ReturnType<typeof payoutSetAside>) {
   const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  const net = aside.net ?? sum;
+  const gross = aside.gross ?? (aside.ust ? round2(net + aside.ust) : net);
+  const head =
+    aside.ust > 0
+      ? `Auszahlung ${eur(net)} netto + ${eur(aside.ust)} USt 19% = ${eur(gross)} brutto.`
+      : `Auszahlung ${eur(net)} netto (Kleinunternehmer, ohne USt).`;
   const parts = [
-    aside.ust > 0 ? `ca. ${eur(aside.ust)} USt` : null,
+    aside.ust > 0 ? `${eur(aside.ust)} USt ans Finanzamt` : null,
     aside.est > 0 ? `ca. ${eur(aside.est)} ESt` : null,
     aside.fix > 0 ? `${eur(aside.fix)} Fixkosten` : null,
   ].filter(Boolean);
   const lay = parts.length ? `Zur Seite legen: ${parts.join(", ")}.` : "Keine Steuerrücklage hinterlegt.";
-  return `Auszahlung ${eur(sum)}. ${lay} Ungefähr bleibt ${eur(Math.max(0, aside.keep))}. Genaues im Steuerbuch.`;
+  return `${head} ${lay} Ungefähr bleibt ${eur(Math.max(0, aside.keep))} vom Netto. Genaues im Steuerbuch.`;
 }
 
 export type Reminder = {

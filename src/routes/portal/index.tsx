@@ -4,6 +4,7 @@ import { getDashboard } from "@/lib/server/api";
 import { downloadMyTerritory, getFieldHome } from "@/lib/server/field-api";
 import { STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { eur } from "@/lib/utils";
+import { vatOn } from "@/lib/steuer";
 import { StatusBadge } from "@/components/status-badge";
 import { AuthChip } from "@/components/mail-status";
 import { GoalCard } from "@/components/goal-card";
@@ -100,15 +101,15 @@ function Dashboard() {
         <GoalCard />
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Dein Umsatz" value={eur(data.myTurnover || 0)} hint="eigene Abschlüsse, nicht storniert" />
+        <Kpi label="Dein Umsatz" value={eur(data.myTurnover || 0)} hint={`netto · zzgl. 19% = ${eur(vatOn(data.myTurnover || 0).gross)} brutto`} />
         <Kpi label="Abschlüsse Monat" value={String(data.monthWon)} hint={`Ziel ${data.target}`} />
         <Kpi label="Neue Aufträge" value={String(data.monthCount)} hint="diesen Monat" />
-        <Kpi label="Provision offen" value={eur(data.commissionOpen)} hint={`Freigegeben ${eur(data.commissionApproved)}`} />
+        <Kpi label="Provision offen" value={eur(data.commissionOpen)} hint={`netto · brutto ${eur(vatOn(data.commissionOpen).gross)} · frei ${eur(data.commissionApproved)}`} />
         {data.me.role === "super_admin" || data.me.role === "buchhaltung" ? (
           <>
-            <Kpi label="Agentur New Sales" value={eur(data.agencyGross || 0)} hint="Stufe 13 gesamt" />
-            <Kpi label="An Mitarbeiter" value={eur(data.agencyAdvisor || 0)} hint="deren Stufen" />
-            <Kpi label="E1-Marge" value={eur(data.agencyMargin || 0)} hint={`abzgl. Fix ${eur(data.agencyFix || 0)} → ${eur((data.agencyMargin || 0) - (data.agencyFix || 0))}`} />
+            <Kpi label="Agentur New Sales" value={eur(data.agencyGross || 0)} hint={`Stufe 13 netto · brutto ${eur(vatOn(data.agencyGross || 0).gross)}`} />
+            <Kpi label="An Mitarbeiter" value={eur(data.agencyAdvisor || 0)} hint={`deren Stufen netto · brutto ${eur(vatOn(data.agencyAdvisor || 0).gross)}`} />
+            <Kpi label="E1-Marge" value={eur(data.agencyMargin || 0)} hint={`netto · brutto ${eur(vatOn(data.agencyMargin || 0).gross)} · abzgl. Fix ${eur(data.agencyFix || 0)}`} />
           </>
         ) : null}
         <Kpi label="Stornos gesamt" value={String(data.storno)} hint={`${data.total} Aufträge`} />

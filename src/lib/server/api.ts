@@ -31,6 +31,7 @@ import {
   type WorkspaceAccountStatus,
 } from "@/lib/mail";
 import { asStr, nid, num } from "@/lib/utils";
+import { vatOn } from "@/lib/steuer";
 import {
   assertCanSeeUser,
   audit,
@@ -1194,12 +1195,23 @@ export const updateUser = createServerFn({ method: "POST" }).middleware([authMid
   const me = await requireProfile(db, context.userId);
   if (!can(me.role, "users.manage") && !can(me.role, "roles.assign")) throw new Error("Keine Berechtigung.");
   const old = await loadProfile(db, data.userId);
+  if (!old) throw new Error("Mitarbeiter nicht gefunden.");
+  if (data.status === "inactive" || data.status === "blocked") {
+    if (data.userId === context.userId) throw new Error("Sie können sich nicht selbst entfernen.");
+    if (old.role === "super_admin") throw new Error("Geschäftsführung kann nicht aus dem Team entfernt werden.");
+  }
   await db`
       update profiles set
         role = coalesce(${data.role ?? null}, role),
         status = coalesce(${data.status ?? null}, status),
         region_id = coalesce(${data.regionId ?? null}, region_id),
-        supervisor_id = ${data.supervisorId === void 0 ? old?.supervisor_id ?? null : data.supervisorId},
+        supervisor_id = ${
+          data.status === "inactive" || data.status === "blocked"
+            ? null
+            : data.supervisorId === void 0
+              ? old.supervisor_id ?? null
+              : data.supervisorId
+        },
         user_type = coalesce(${data.userType ?? null}, user_type),
         monthly_target = coalesce(${data.monthlyTarget ?? null}, monthly_target),
         commission_stufe = coalesce(${data.commissionStufe ?? null}, commission_stufe),
@@ -1238,6 +1250,20 @@ export const updateUser = createServerFn({ method: "POST" }).middleware([authMid
     }
   }
   if (data.status === "inactive" || data.status === "blocked") {
+    try {
+      await db`update territories set user_id = null where user_id = ${data.userId}`;
+    } catch {
+      /* field tables */
+    }
+    try {
+      await db`delete from session where "userId" = ${data.userId}`;
+    } catch {
+      try {
+        await db`delete from "session" where user_id = ${data.userId}`;
+      } catch {
+        /* session table */
+      }
+    }
     const person = await loadProfile(db, data.userId);
     if (person) {
       try {
@@ -1964,8 +1990,21 @@ export const exportOpsCsv = createServerFn({ method: "POST" })
       return {
         filename: "e1-provisionen.csv",
         csv: csvTable(
-          ["Datum", "Berater", "Typ", "Produkt", "Betrag", "Status", "Auftrag"],
-          rows.map((r) => [asStr(r.calculated_at), `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(), asStr(r.type), asStr(r.product), num(r.amount), asStr(r.status), asStr(r.contract_id)]),
+          ["Datum", "Berater", "Typ", "Produkt", "Netto", "USt 19%", "Brutto", "Status", "Auftrag"],
+          rows.map((r) => {
+            const v = vatOn(num(r.amount));
+            return [
+              asStr(r.calculated_at),
+              `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+              asStr(r.type),
+              asStr(r.product),
+              v.net.toFixed(2).replace(".", ","),
+              v.vat.toFixed(2).replace(".", ","),
+              v.gross.toFixed(2).replace(".", ","),
+              asStr(r.status),
+              asStr(r.contract_id),
+            ];
+          }),
         ),
       };
     }
@@ -1986,15 +2025,20 @@ export const exportOpsCsv = createServerFn({ method: "POST" })
       return {
         filename: "e1-datev-provisionen.csv",
         csv: csvTable(
-          ["Belegfeld1", "Buchungstext", "Umsatz", "SollHaben", "Datum", "Berater"],
-          rows.map((r) => [
-            asStr(r.contract_id),
-            `Provision ${asStr(r.type)} ${asStr(r.contract_id)}`,
-            num(r.amount).toFixed(2).replace(".", ","),
-            num(r.amount) >= 0 ? "S" : "H",
-            asStr(r.calculated_at).slice(0, 10),
-            asStr(r.last_name),
-          ]),
+          ["Belegfeld1", "Buchungstext", "Netto", "USt 19%", "Brutto", "SollHaben", "Datum", "Berater"],
+          rows.map((r) => {
+            const v = vatOn(num(r.amount));
+            return [
+              asStr(r.contract_id),
+              `Provision ${asStr(r.type)} ${asStr(r.contract_id)} netto zzgl. 19% USt`,
+              v.net.toFixed(2).replace(".", ","),
+              v.vat.toFixed(2).replace(".", ","),
+              v.gross.toFixed(2).replace(".", ","),
+              num(r.amount) >= 0 ? "S" : "H",
+              asStr(r.calculated_at).slice(0, 10),
+              asStr(r.last_name),
+            ];
+          }),
         ),
       };
     }
@@ -2037,10 +2081,14 @@ export const exportOpsCsv = createServerFn({ method: "POST" })
           "Tarif",
           "Anbieter",
           "kWh",
-          "Provision EUR",
+          "Provision netto",
+          "USt 19%",
+          "Brutto",
           "Status",
         ],
-        rows.map((r) => [
+        rows.map((r) => {
+          const v = vatOn(num(r.commission_amount));
+          return [
           asStr(r.created_at).slice(0, 16).replace("T", " "),
           asStr(r.staff_id),
           `${asStr(r.advisor_first)} ${asStr(r.advisor_last)}`.trim(),
@@ -2052,9 +2100,12 @@ export const exportOpsCsv = createServerFn({ method: "POST" })
           asStr(r.product),
           asStr(r.provider),
           num(r.consumption_kwh),
-          num(r.commission_amount).toFixed(2).replace(".", ","),
+          v.net.toFixed(2).replace(".", ","),
+          v.vat.toFixed(2).replace(".", ","),
+          v.gross.toFixed(2).replace(".", ","),
           asStr(r.status),
-        ]),
+        ];
+        }),
       ),
     };
   });

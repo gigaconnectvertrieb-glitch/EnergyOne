@@ -5,6 +5,8 @@ import { Field, Input, Select, CheckboxRow } from "@/components/ui/field";
 import { SignaturePad } from "@/components/signature-pad";
 import { bootstrapMe, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
 import { toast } from "sonner";
+import { NettoBrutto } from "@/components/netto-brutto";
+import { vatOn } from "@/lib/steuer";
 import { eur } from "@/lib/utils";
 
 export const Route = createFileRoute("/portal/auftraege/neu")({
@@ -137,8 +139,8 @@ function Capture() {
       });
       toast.success(
         res.margin
-          ? `In der Datenbank · Berater ${eur(res.advisor)} · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}`
-          : `In der Datenbank · ${eur(res.amount)}`,
+          ? `In der Datenbank · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}`
+          : `In der Datenbank · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
       );
       nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
@@ -262,12 +264,18 @@ function Capture() {
         )}
         {quote?.ok ? (
           <>
-            <p className="mt-3 font-display text-4xl text-gold">{eur(quote.advisor)}</p>
-            <p className="text-sm text-muted">Berater Stufe {quote.stufe}</p>
+            <div className="mt-3">
+              <NettoBrutto net={quote.advisor} />
+            </div>
+            <p className="text-sm text-muted">Berater Stufe {quote.stufe} · Liste netto, zzgl. 19% USt</p>
             {quote.margin > 0 && (role === "super_admin" || role === "buchhaltung" || role === "gebietsleiter") ? (
               <>
-                <p className="mt-2 text-sm">Agentur NS 13 {eur(quote.agency)}</p>
-                <p className="text-sm text-gold">E1-Marge {eur(quote.margin)}</p>
+                <p className="mt-2 text-sm">
+                  Agentur NS 13 {eur(quote.agency)} netto / {eur(vatOn(quote.agency).gross)} brutto
+                </p>
+                <p className="text-sm text-gold">
+                  E1-Marge {eur(quote.margin)} netto / {eur(vatOn(quote.margin).gross)} brutto
+                </p>
               </>
             ) : null}
           </>

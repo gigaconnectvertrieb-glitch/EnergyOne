@@ -53,6 +53,7 @@ function Page() {
       <h1 className="font-display text-4xl">Benutzer & Rechte</h1>
       <p className="text-sm text-muted">
         Mitarbeiter anlegen → 5-stelligen Schlüssel mitgeben → der richtet Google Authenticator ein.
+        Aus dem Team entfernen sperrt Login und Gebiet, Aufträge bleiben. Wieder aufnehmen geht jederzeit.
       </p>
 
       <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline md:grid-cols-2" onSubmit={onCreate}>
@@ -175,16 +176,61 @@ function Page() {
                 <Select
                   value={u.status}
                   onChange={async (e) => {
-                    await updateUser({ data: { userId: u.user_id, status: e.target.value } });
-                    toast.success("Status gesetzt");
-                    load();
+                    try {
+                      await updateUser({ data: { userId: u.user_id, status: e.target.value } });
+                      toast.success("Status gesetzt");
+                      load();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Nicht erlaubt");
+                    }
                   }}
                 >
                   <option value="pending">Prüfung</option>
                   <option value="active">Aktiv</option>
-                  <option value="inactive">Inaktiv</option>
+                  <option value="inactive">Inaktiv · raus</option>
                   <option value="blocked">Gesperrt</option>
                 </Select>
+                {u.role !== "super_admin" && (u.status === "active" || u.status === "pending") ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-danger"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `${u.first_name} ${u.last_name} aus dem Team entfernen?\n\nLogin gesperrt, Gebiet weg, Workspace-Postfach gesperrt.\nAufträge und Provisionen bleiben in der Datenbank.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      try {
+                        await updateUser({ data: { userId: u.user_id, status: "inactive" } });
+                        toast.success("Aus dem Team entfernt");
+                        load();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Nicht erlaubt");
+                      }
+                    }}
+                  >
+                    Aus Team entfernen
+                  </Button>
+                ) : null}
+                {u.role !== "super_admin" && (u.status === "inactive" || u.status === "blocked") ? (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await updateUser({ data: { userId: u.user_id, status: "active" } });
+                        toast.success("Wieder im Team");
+                        load();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Nicht erlaubt");
+                      }
+                    }}
+                  >
+                    Wieder aufnehmen
+                  </Button>
+                ) : null}
               </div>
             </div>
           </div>

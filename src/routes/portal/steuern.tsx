@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { addTaxExpense, deleteTaxExpense, getSteuer, saveSteuerSettings } from "@/lib/server/steuer-api";
-import { EXPENSE_CATS, type ExpenseCat } from "@/lib/steuer";
+import { EXPENSE_CATS, vatOn, type ExpenseCat } from "@/lib/steuer";
 import { STEUER_AUSGABEN, STEUER_FRISTEN, STEUER_KENNZAHLEN, STEUER_PFLICHTEN } from "@/lib/steuer-wissen";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -89,7 +89,7 @@ function Page() {
       {tab === "buch" ? (
         <>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <Kpi t="Provision ausgezahlt" v={eur(data.paid)} h={`offen ${eur(data.offen)}`} />
+            <Kpi t="Provision ausgezahlt" v={eur(data.paid)} h={`netto · brutto ${eur(data.kleinunternehmer ? data.paid : vatOn(data.paid).gross)} · offen ${eur(data.offen)}`} />
             <Kpi t="Ausgaben (Cash)" v={eur(data.cash)} h={`davon BA ${eur(data.ba)}`} />
             <Kpi t="Zurücklegen USt + ESt" v={eur(data.ustSetAside + data.estSetAside)} h={data.kleinunternehmer ? "Kleinunternehmer: keine USt" : `USt ${eur(data.ustSetAside)}`} />
             <Kpi t="Noch übrig" v={eur(data.leftover)} h="nach Ausgaben und Steuerrücklage" gold />
@@ -368,10 +368,10 @@ function Agentur({
   return (
     <>
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <Kpi t="New Sales Stufe 13" v={eur(ag.gross)} h="was New Sales der Agentur zahlt" />
-        <Kpi t="An Mitarbeiter" v={eur(ag.advisor)} h="deren Stufen 1–3 plus eigene Abschlüsse" />
-        <Kpi t="E1-Marge" v={eur(ag.margin)} h={`Fixkosten ${eur(ag.fix)}`} />
-        <Kpi t="Übrig nach Steuer" v={eur(ag.leftover)} h={`USt ${eur(ag.ustSetAside)} · ESt ${eur(ag.estSetAside)}`} gold />
+        <Kpi t="New Sales Stufe 13" v={eur(ag.gross)} h={`netto · brutto ${eur(vatOn(ag.gross).gross)} — was New Sales der Agentur zahlt`} />
+        <Kpi t="An Mitarbeiter" v={eur(ag.advisor)} h={`netto · brutto ${eur(vatOn(ag.advisor).gross)}`} />
+        <Kpi t="E1-Marge" v={eur(ag.margin)} h={`netto · brutto ${eur(vatOn(ag.margin).gross)} · Fix ${eur(ag.fix)}`} />
+        <Kpi t="Übrig nach Steuer" v={eur(ag.leftover)} h={`USt ${eur(ag.ustSetAside)} (oben drauf) · ESt ${eur(ag.estSetAside)}`} gold />
       </div>
       <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline" onSubmit={saveExp}>
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Agentur-Fixkosten</p>

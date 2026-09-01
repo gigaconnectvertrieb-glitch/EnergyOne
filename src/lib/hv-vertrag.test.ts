@@ -48,5 +48,6 @@ describe("handelsvertretervertrag", () => {
     const anlage = fillHvAnlage1(bands, 1).join("\n");
     assert.match(anlage, /Anzahl Positionen Stufe 1: 1/);
     assert.match(anlage, /E1 Strom Fair/);
+    assert.match(anlage, /19 %/);
   });
 });

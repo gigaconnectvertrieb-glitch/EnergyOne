@@ -1,21 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listUsers } from "@/lib/server/api";
+import { bootstrapMe, listUsers, updateUser } from "@/lib/server/api";
 import { getTeamGoals } from "@/lib/server/goal-api";
-import { ROLE_LABELS } from "@/lib/e1";
+import { ROLE_LABELS, can } from "@/lib/e1";
 import { eur } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/team")({ component: Page });
 
 function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof getTeamGoals>>>([]);
+  const [canKick, setCanKick] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     listUsers()
       .then(setRows)
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Kein Zugriff"));
     getTeamGoals().then(setGoals).catch(() => setGoals([]));
+    bootstrapMe()
+      .then((m) => setCanKick(can(m.profile.role, "users.manage")))
+      .catch(() => setCanKick(false));
   }, []);
   return (
     <div>
@@ -46,18 +52,62 @@ function Page() {
       ) : null}
       <div className="mt-4 grid gap-2">
         {rows.map((u) => (
-          <div key={u.user_id} className="flex items-center justify-between rounded-2xl bg-surface p-4 gold-hairline">
+          <div key={u.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface p-4 gold-hairline">
             <div>
               <p className="font-medium">
                 {u.first_name} {u.last_name} {u.is_demo ? <span className="text-xs text-muted">(Demo)</span> : null}
               </p>
               <p className="text-xs text-muted">
-                {ROLE_LABELS[u.role]} · {u.region_name || "ohne Region"} · {u.status}
+                {ROLE_LABELS[u.role]} · {u.region_name || "ohne Region"} ·{" "}
+                {u.status === "active" ? "aktiv" : u.status === "inactive" ? "raus" : u.status === "blocked" ? "gesperrt" : u.status}
               </p>
             </div>
-            <p className="text-xs tabular-nums text-muted">
-              {u.orders} Aufträge · {u.stornos} Storno
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs tabular-nums text-muted">
+                {u.orders} Aufträge · {u.stornos} Storno
+              </p>
+              {canKick && u.role !== "super_admin" && (u.status === "active" || u.status === "pending") ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-danger"
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `${u.first_name} ${u.last_name} aus dem Team entfernen? Login und Gebiet weg. Aufträge bleiben.`,
+                      )
+                    ) {
+                      return;
+                    }
+                    try {
+                      await updateUser({ data: { userId: u.user_id, status: "inactive" } });
+                      toast.success("Aus dem Team entfernt");
+                      listUsers().then(setRows);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Keine Berechtigung");
+                    }
+                  }}
+                >
+                  Entfernen
+                </Button>
+              ) : null}
+              {canKick && u.role !== "super_admin" && (u.status === "inactive" || u.status === "blocked") ? (
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await updateUser({ data: { userId: u.user_id, status: "active" } });
+                      toast.success("Wieder im Team");
+                      listUsers().then(setRows);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Keine Berechtigung");
+                    }
+                  }}
+                >
+                  Wieder aufnehmen
+                </Button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>

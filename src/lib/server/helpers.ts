@@ -47,6 +47,9 @@ export async function loadProfile(db: Sql, userId: string): Promise<Profile | nu
 export async function requireProfile(db: Sql, userId: string): Promise<Profile> {
   const p = await loadProfile(db, userId);
   if (!p) throw new Error("Profil nicht gefunden");
+  if (p.status === "inactive" || p.status === "blocked") {
+    throw new Error("Zugang deaktiviert. Die Geschäftsführung hat Sie aus dem Team genommen.");
+  }
   return p;
 }
 

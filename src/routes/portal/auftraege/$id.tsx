@@ -6,6 +6,8 @@ import { SIGN_STATUS_LABELS, type SignStatus } from "@/lib/sign";
 import { SignaturePad } from "@/components/signature-pad";
 import { CANCEL_REASONS, STATUS_LABELS, TRANSITIONS, type ContractStatus } from "@/lib/e1";
 import { deDate, deDateTime, eur } from "@/lib/utils";
+import { NettoBrutto } from "@/components/netto-brutto";
+import { vatOn } from "@/lib/steuer";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -97,17 +99,21 @@ function Page() {
           {c.start_date ? <p>Lieferbeginn {deDate(c.start_date)}</p> : null}
         </Card>
         <Card title="Provision">
-          <p className="font-display text-2xl">{eur(c.advisor_amount ?? c.commission_amount)}</p>
-          <p className="text-sm text-muted">Berater Stufe {c.commission_stufe || 1}</p>
+          <NettoBrutto net={c.advisor_amount ?? c.commission_amount} size="md" />
+          <p className="text-sm text-muted">Berater Stufe {c.commission_stufe || 1} · Liste netto, zzgl. 19% USt</p>
           {c.show_split ? (
             <>
-              <p className="mt-2 text-sm">Agentur (NS 13) {eur(c.agency_amount ?? c.commission_amount)}</p>
-              <p className="text-sm text-gold">E1-Marge {eur(c.margin_amount ?? 0)}</p>
+              <p className="mt-2 text-sm">
+                Agentur (NS 13) {eur(c.agency_amount ?? c.commission_amount)} netto / {eur(vatOn(c.agency_amount ?? c.commission_amount).gross)} brutto
+              </p>
+              <p className="text-sm text-gold">
+                E1-Marge {eur(c.margin_amount ?? 0)} netto / {eur(vatOn(c.margin_amount ?? 0).gross)} brutto
+              </p>
             </>
           ) : null}
           {data.commissions.map((x) => (
             <p key={x.id} className="text-xs text-muted">
-              {x.type} · {eur(x.amount)} · {x.status}
+              {x.type} · {eur(x.amount)} netto / {eur(vatOn(x.amount).gross)} brutto · {x.status}
             </p>
           ))}
         </Card>

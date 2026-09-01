@@ -5,6 +5,7 @@ import { cancelPayout, executePayout, listPayoutRuns, planPayout, payoutCsv } fr
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { deDate, eur } from "@/lib/utils";
+import { vatOn } from "@/lib/steuer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/provisionen")({ component: Page });
@@ -63,9 +64,12 @@ function Page() {
   }
 
   function exportCsv() {
-    const header = "Datum;Berater;Typ;Produkt;Betrag;Status";
+    const header = "Datum;Berater;Typ;Produkt;Netto;USt 19%;Brutto;Status";
     const body = rows
-      .map((r) => `${deDate(r.calculated_at)};${r.advisor};${r.type};${r.product_name};${r.amount};${r.status}`)
+      .map((r) => {
+        const v = vatOn(r.amount);
+        return `${deDate(r.calculated_at)};${r.advisor};${r.type};${r.product_name};${v.net.toFixed(2).replace(".", ",")};${v.vat.toFixed(2).replace(".", ",")};${v.gross.toFixed(2).replace(".", ",")};${r.status}`;
+      })
       .join("\n");
     downloadCsv("provisionen.csv", `${header}\n${body}`);
   }
@@ -81,8 +85,8 @@ function Page() {
     <div>
       <h1 className="font-display text-4xl">Provisionen</h1>
       <p className="text-sm text-muted">
-        Freigeben, Auszahlung auf einen Termin legen, am Stichtag durchführen. Summe dieser Ansicht: {eur(sum)}.
-        Bei der Auszahlung bekommt jeder einen Hinweis, wie viel für USt, ESt und Fixkosten zur Seite gelegt werden soll.
+        Freigeben, Auszahlung auf einen Termin legen, am Stichtag durchführen. Summe dieser Ansicht: {eur(sum)} netto / {eur(vatOn(sum).gross)} brutto.
+        Liste ist netto, 19 % USt kommen oben drauf. Kleinunternehmer ohne USt — Schalter im Steuerbuch. Bei der Auszahlung bekommt jeder Netto, USt und wie viel zur Seite gelegt werden soll.
       </p>
 
       <h2 className="mt-8 font-display text-2xl">Auszahlungsläufe</h2>
@@ -93,7 +97,7 @@ function Page() {
               <div>
                 <p className="font-medium">{r.title}</p>
                 <p className="text-xs text-muted">
-                  Termin {deDate(r.scheduled_for)} · {r.items} Positionen · {eur(r.total)} · {runLabel[r.status] || r.status}
+                  Termin {deDate(r.scheduled_for)} · {r.items} Positionen · {eur(r.total)} netto / {eur(vatOn(r.total).gross)} brutto · {runLabel[r.status] || r.status}
                   {r.executed_at ? ` · ausgeführt ${deDate(r.executed_at)}` : ""}
                 </p>
               </div>
@@ -203,7 +207,10 @@ function Page() {
                 {r.paid_at ? ` · gezahlt ${deDate(r.paid_at)}` : ""}
               </p>
             </div>
-            <p className="tabular-nums text-gold">{eur(r.amount)}</p>
+            <div className="text-right">
+              <p className="tabular-nums text-gold">{eur(r.amount)}</p>
+              <p className="text-[11px] text-muted">{eur(vatOn(r.amount).gross)} brutto</p>
+            </div>
           </label>
         ))}
       </div>

@@ -42,6 +42,18 @@ function Page() {
       .then((m) => setAllowed(can(m.profile.role, "team.view")))
       .catch(() => setAllowed(false));
   }, []);
+  useEffect(() => {
+    if (q.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      searchPlaces({ data: { q } })
+        .then(setHits)
+        .catch(() => setHits([]));
+    }, 220);
+    return () => clearTimeout(t);
+  }, [q]);
 
   if (allowed === null) return <div className="h-40 animate-pulse rounded-3xl bg-surface" />;
   if (!allowed) {
@@ -57,19 +69,6 @@ function Page() {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (q.trim().length < 2) {
-      setHits([]);
-      return;
-    }
-    const t = setTimeout(() => {
-      searchPlaces({ data: { q } })
-        .then(setHits)
-        .catch(() => setHits([]));
-    }, 220);
-    return () => clearTimeout(t);
-  }, [q]);
 
   const box = place ? bboxAround(place.lat, place.lng, km) : null;
 

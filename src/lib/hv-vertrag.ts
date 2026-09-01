@@ -47,7 +47,7 @@ export function fillHvAnlage1(bands: HvBand[] | undefined, stufe: number): strin
   return [
     "ANLAGE 1 — PROVISIONSORDNUNG STUFE 1 (Stand Vertragsbeginn)",
     "",
-    "Gültig ab Vertragsbeginn. Beträge netto, zzgl. gesetzlicher USt., soweit anfallend.",
+    "Gültig ab Vertragsbeginn. Beträge der Liste sind netto. Gesetzliche USt. (derzeit 19 %) kommt oben drauf, soweit keine Kleinunternehmerregelung greift.",
     `Dieser Vertrag startet in Stufe ${stufe}. Nur die nachstehenden Stufe-1-Sätze gelten.`,
     "Stufe 2 und 3 gelten erst nach unterzeichneter Zusatzvereinbarung oder Freischaltung durch die GF.",
     "Keine Strukturprovision in Stufe 1.",
@@ -75,7 +75,7 @@ export function fillHvProvisionSheet(d: HvInput): string[] {
     `Stufe: ${stufe}    Gebiet: ${dash(d.region, "[Gebiet]")}`,
     `Gültig ab: ${dash(d.start, "Vertragsbeginn")}`,
     "",
-    "Beträge in EUR netto. Gesetzliche USt. extra, soweit anfallend.",
+    "Beträge der Liste sind EUR netto. Gesetzliche USt. (derzeit 19 %) kommt oben drauf, soweit keine Kleinunternehmerregelung greift.",
     "Fällig nach Bestätigung des Kundenvertrags und Ablauf von 14 Tagen Widerruf.",
     "Storno in diesen 14 Tagen: voller Wegfall. Danach keine Rückrechnung außer Pflichtverletzung.",
     "Höherstufung nur durch Zusatzvereinbarung der Geschäftsführung.",

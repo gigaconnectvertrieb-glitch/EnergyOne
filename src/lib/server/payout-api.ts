@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { can, type Role } from "@/lib/e1";
 import { asStr, nid, num } from "@/lib/utils";
+import { vatOn } from "@/lib/steuer";
 import { audit, notify, requireProfile, sql } from "./helpers";
 
 function canPay(role: Role) {
@@ -227,12 +228,12 @@ export const payoutCsv = createServerFn({ method: "POST" })
       where i.run_id = ${data.id}
       order by p.last_name, p.first_name
     `;
-    const header = "Mitarbeiter-ID;Berater;Typ;Kunde;Betrag;Status";
+    const header = "Mitarbeiter-ID;Berater;Typ;Kunde;Netto;USt 19%;Brutto;Status";
     const body = rows
-      .map(
-        (r) =>
-          `${asStr(r.staff_id)};${asStr(r.first_name)} ${asStr(r.last_name)};${asStr(r.type)};${asStr(r.customer)};${num(r.amount).toFixed(2).replace(".", ",")};${asStr(r.status)}`,
-      )
+      .map((r) => {
+        const v = vatOn(num(r.amount));
+        return `${asStr(r.staff_id)};${asStr(r.first_name)} ${asStr(r.last_name)};${asStr(r.type)};${asStr(r.customer)};${v.net.toFixed(2).replace(".", ",")};${v.vat.toFixed(2).replace(".", ",")};${v.gross.toFixed(2).replace(".", ",")};${asStr(r.status)}`;
+      })
       .join("\n");
     return {
       filename: `E1-Auszahlung-${asStr(run.scheduled_for).slice(0, 10)}.csv`,

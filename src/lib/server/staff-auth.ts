@@ -286,10 +286,14 @@ export const loginTotp = createServerFn({ method: "POST" })
       left join "user" u on u.id = p.user_id
       where lower(p.staff_id) = ${staffId}
     `;
-    if (!row?.totp_enabled || !row.totp_secret || row.status === "blocked" || !verifyTotp(row.totp_secret, totp)) {
+    if (!row?.totp_enabled || !row.totp_secret || !verifyTotp(row.totp_secret, totp)) {
       await recordAuthFail("totp", staffId);
       await auditAuth("auth.login_fail", await clientIp(), { id: staffId });
       throw new Error("Anmeldung fehlgeschlagen.");
+    }
+    if (row.status !== "active") {
+      await recordAuthFail("totp", staffId);
+      throw new Error("Zugang deaktiviert. Bitte die Geschäftsführung kontaktieren.");
     }
     await recordAuthOk("totp", staffId);
     await auditAuth("auth.login_ok", await clientIp(), { id: staffId });

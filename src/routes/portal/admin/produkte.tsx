@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { listTariffs, quoteCommission } from "@/lib/server/api";
 import { Field, Input, Select } from "@/components/ui/field";
 import { eur } from "@/lib/utils";
+import { vatOn } from "@/lib/steuer";
 import { formatKwhRange } from "@/lib/tariffs";
 
 export const Route = createFileRoute("/portal/admin/produkte")({ component: Page });
@@ -70,13 +71,14 @@ function Page() {
                     <span>
                       Stufe {b.stufe} · {formatKwhRange(b.kwh_from, b.kwh_to)}
                     </span>
-                    <span className="text-gold">{eur(b.amount_eur)}</span>
+                    <span className="text-gold">{eur(b.amount_eur)} netto</span>
                   </li>
                 ))}
                 <li className="text-xs text-muted">
-                  Stufe 1 bei 3.500 kWh: {quote.ok ? eur(quote.advisor) : "kein Band"}
+                  Stufe 1 bei 3.500 kWh: {quote.ok ? `${eur(quote.advisor)} netto / ${eur(quote.gross ?? vatOn(quote.advisor).gross)} brutto` : "kein Band"}
                   {quote.ok && quote.margin > 0 ? ` · Agentur ${eur(quote.agency)} · Marge ${eur(quote.margin)}` : ""}
                 </li>
+                <li className="text-[11px] text-muted">Liste netto, zzgl. 19 % USt</li>
               </ul>
             ) : null}
           </button>

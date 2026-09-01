@@ -23,7 +23,7 @@ export const STEUER_PFLICHTEN = [
   },
   {
     t: "Umsatzsteuer",
-    b: "Kleinunternehmer (§ 19 UStG): Vorjahr ≤ 25.000 € und laufendes Jahr ≤ 100.000 € netto. Überschreiten der 100.000 € unterjährig beendet die Befreiung sofort. Sonst USt-VA (monatlich/quartalsweise), dafür Vorsteuerabzug.",
+    b: "Kleinunternehmer (§ 19 UStG): Vorjahr ≤ 25.000 € und laufendes Jahr ≤ 100.000 € netto. Überschreiten der 100.000 € unterjährig beendet die Befreiung sofort. Sonst USt-VA (monatlich/quartalsweise), dafür Vorsteuerabzug. Die E1-Provisionsliste ist netto — 19 % USt kommen oben drauf (160 € → 190,40 € brutto), außer Kleinunternehmer.",
   },
   {
     t: "IHK",
