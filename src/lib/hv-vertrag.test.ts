@@ -22,6 +22,12 @@ describe("handelsvertretervertrag", () => {
     zip: "80331",
     city: "München",
     staffId: "max.muster",
+    email: "max@example.de",
+    phone: "0170000000",
+    birth: "01.01.1990",
+    taxId: "DE12",
+    tradeNo: "G-1",
+    start: "01.09.2026",
     stufe: 1,
     bands,
   }).join("\n");
@@ -37,7 +43,7 @@ describe("handelsvertretervertrag", () => {
     assert.match(lines, /Luca-Marco Marrancone/);
     assert.match(lines, /Max Muster/);
     assert.match(lines, /Provisionsordnung/);
-    assert.match(lines, /Vertragsstrafen/);
+    assert.match(lines, /Vertragsstrafe/);
     assert.match(lines, /per E-Mail/i);
     assert.doesNotMatch(lines, /90,00 EUR/);
     assert.doesNotMatch(lines, /E1 Strom Fair/);

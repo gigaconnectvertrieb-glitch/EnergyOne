@@ -24,9 +24,16 @@ export const createHvContract = createServerFn({ method: "POST" })
       throw new Error("Nur Geschäftsführung erstellt Handelsvertreterverträge.");
     }
     if (!data.first?.trim() || !data.last?.trim()) throw new Error("Name fehlt.");
-    if (!data.street?.trim() || !data.zip?.trim() || !data.city?.trim()) {
-      throw new Error("Adresse fehlt.");
+    if (!data.street?.trim() || !data.house?.trim() || !data.zip?.trim() || !data.city?.trim()) {
+      throw new Error("Vollständige Adresse fehlt.");
     }
+    if (!data.staffId?.trim()) throw new Error("Mitarbeiter-ID fehlt.");
+    if (!data.email?.trim()) throw new Error("E-Mail fehlt.");
+    if (!data.phone?.trim()) throw new Error("Telefon fehlt.");
+    if (!data.start?.trim()) throw new Error("Vertragsbeginn fehlt.");
+    if (!data.birth?.trim()) throw new Error("Geburtsdatum fehlt.");
+    if (!data.taxId?.trim()) throw new Error("Steuer-ID fehlt.");
+    if (!data.tradeNo?.trim()) throw new Error("Gewerbeanmeldung fehlt.");
     const input: HvInput = {
       ...data,
       first: data.first.trim(),

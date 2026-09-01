@@ -233,14 +233,14 @@ function HvPanel({ openId }: { openId?: string }) {
           </Field>
         </div>
         <Field label="Mitarbeiter-ID">
-          <Input value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })} />
+          <Input value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })} required />
         </Field>
         <div className="grid grid-cols-[1fr_5.5rem] gap-3">
           <Field label="Straße">
             <Input value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} required />
           </Field>
           <Field label="Nr.">
-            <Input value={form.house} onChange={(e) => setForm({ ...form, house: e.target.value })} />
+            <Input value={form.house} onChange={(e) => setForm({ ...form, house: e.target.value })} required />
           </Field>
         </div>
         <div className="grid grid-cols-[7rem_1fr] gap-3">
@@ -253,11 +253,11 @@ function HvPanel({ openId }: { openId?: string }) {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Telefon">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
           </Field>
           <Field label="E-Mail">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Input className="flex-1" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Input className="flex-1" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               <Button
                 type="button"
                 variant="outline"
@@ -292,17 +292,20 @@ function HvPanel({ openId }: { openId?: string }) {
             <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} />
           </Field>
           <Field label="Beginn">
-            <Input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
+            <Input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} required />
           </Field>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Steuer-ID / USt-IdNr.">
-            <Input value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
+          <Field label="Geburtsdatum">
+            <Input value={form.birth} onChange={(e) => setForm({ ...form, birth: e.target.value })} required placeholder="TT.MM.JJJJ" />
           </Field>
-          <Field label="Gewerbe-Nr.">
-            <Input value={form.tradeNo} onChange={(e) => setForm({ ...form, tradeNo: e.target.value })} />
+          <Field label="Steuer-ID / USt-IdNr.">
+            <Input value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} required />
           </Field>
         </div>
+        <Field label="Gewerbe-Nr.">
+          <Input value={form.tradeNo} onChange={(e) => setForm({ ...form, tradeNo: e.target.value })} required />
+        </Field>
         <p className="text-xs text-muted">
           Immer Stufe 1. Höherstufung nur Zusatzvereinbarung. Enthält Provisionsordnung, AGB,
           Datenschutz, Vertragsstrafen und Freistellung.
@@ -371,7 +374,7 @@ function HvPanel({ openId }: { openId?: string }) {
                     setSign("");
                   }}
                 >
-                  Tablet
+                  Tablet unterschreiben
                 </Button>
                 <Button
                   variant="outline"
@@ -382,7 +385,7 @@ function HvPanel({ openId }: { openId?: string }) {
                     setMail(r.email || "");
                   }}
                 >
-                  DocuSign
+                  Per DocuSign an Vertreter
                 </Button>
                 <Button
                   variant="outline"
