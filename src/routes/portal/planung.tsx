@@ -107,10 +107,10 @@ function Page() {
   return (
     <div className="mx-auto max-w-3xl pb-10">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
-      <h1 className="mt-1 font-display text-4xl">Gebietsplanung</h1>
+      <h1 className="mt-1 font-display text-4xl">Gebiete</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen. Zone mit 3 oder 4 Tipps einzeichnen, dann Straßen listen und speichern.
-        Danach CSV/GeoJSON downloaden und dem Mitarbeiter aufspielen.
+        Stadt suchen, Straßen laden, einem Mitarbeiter aufspielen. Der sieht das Gebiet dann in der Feld-App.
+        Ihr (Orhan, Luca) plant hier — nicht doppelt auf einer zweiten Karte.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
@@ -266,7 +266,7 @@ function Page() {
                   }
                 }}
               >
-                {busy ? "Lädt Stadt…" : "Stadt komplett in die Datenbank"}
+                {busy ? "Spielt auf…" : userIds.length ? "Laden und dem Mitarbeiter aufspielen" : "Stadt speichern"}
               </Button>
               <Button
                 variant="outline"
@@ -300,7 +300,7 @@ function Page() {
                   }
                 }}
               >
-                Nur Zone speichern
+                {busy ? "Speichert…" : userIds.length ? "Zone aufspielen" : "Nur Zone speichern"}
               </Button>
             </div>
           </div>

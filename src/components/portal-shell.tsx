@@ -53,8 +53,7 @@ function items(role: Role, flags: Record<string, boolean>) {
   const base = [
     { to: "/portal", label: "Dashboard", icon: LayoutDashboard, show: true },
     { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList, show: true },
-    { to: "/portal/feld", label: "Gebiet", icon: Map, show: flags.field_routing !== false },
-    { to: "/portal/planung", label: "Planung", icon: Map, show: flags.field_routing !== false && can(role, "team.view") },
+    { to: "/portal/planung", label: "Gebiete", icon: Map, show: flags.field_routing !== false && can(role, "team.view") },
     { to: "/portal/kunden", label: "Kunden", icon: Users, show: true },
     { to: "/portal/postfach", label: "Postfach", icon: Mail, show: true },
     { to: "/portal/provisionen", label: "Provisionen", icon: Wallet, show: true },
@@ -66,7 +65,6 @@ function items(role: Role, flags: Record<string, boolean>) {
   const admin = [
     { to: "/portal/admin/benutzer", label: "Benutzer", icon: Shield, show: can(role, "users.manage") || can(role, "team.view") },
     { to: "/portal/admin/regionen", label: "Regionen", icon: Map, show: can(role, "settings.manage") || can(role, "team.view") },
-    { to: "/portal/admin/gebiete", label: "Gebiete", icon: Map, show: flags.field_routing !== false && (can(role, "settings.manage") || can(role, "team.view")) },
     { to: "/portal/admin/produkte", label: "Tarife", icon: Briefcase, show: can(role, "products.manage") || can(role, "contracts.view_all") },
     { to: "/portal/admin/leads", label: "Leads", icon: ScrollText, show: can(role, "contracts.view_all") || role === "teamleiter" },
     { to: "/portal/admin/onboarding", label: "Onboarding", icon: Users, show: flags.recruiting_pipeline && can(role, "users.manage") },
@@ -218,7 +216,9 @@ export function PortalShell() {
           { to: "/portal", label: "Home", icon: LayoutDashboard },
           { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList },
           { to: "/portal/auftraege/neu", label: "Neu", icon: Plus },
-          { to: "/portal/feld", label: "Gebiet", icon: Map },
+          can(me.profile.role, "team.view")
+            ? { to: "/portal/planung", label: "Gebiete", icon: Map }
+            : { to: "/app", label: "Feld", icon: Map },
           { to: "/portal/provisionen", label: "Provision", icon: Wallet },
         ].map((i) => (
           <Link

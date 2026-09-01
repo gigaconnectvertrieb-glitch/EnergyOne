@@ -155,10 +155,20 @@ export const importCityPlan = createServerFn({ method: "POST" })
       values (${planId}, ${terId}, ${data.city}, ${data.state}, ${perDay}, ${context.userId})
     `;
     const users = (data.userIds || []).filter(Boolean);
-    const assignees = users.length ? users : [owner];
+    const assignees = users.length ? users : [];
+    for (const uid of assignees) {
+      await db`
+        insert into territory_members (territory_id, user_id)
+        values (${terId}, ${uid})
+        on conflict do nothing
+      `;
+    }
+    if (assignees[0]) {
+      await db`update territories set user_id = ${assignees[0]} where id = ${terId}`;
+    }
     for (const d of days) {
       const dayId = nid();
-      const uid = assignees[(d.day - 1) % assignees.length];
+      const uid = assignees.length ? assignees[(d.day - 1) % assignees.length] : owner;
       await db`
         insert into work_days (id, plan_id, day_index, user_id, meters, stop_count, status)
         values (${dayId}, ${planId}, ${d.day}, ${uid}, ${d.meters}, ${d.stops.length}, ${"offen"})

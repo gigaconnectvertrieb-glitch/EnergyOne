@@ -9,9 +9,27 @@ import {
   weekKey,
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
-import { applyWalkOrder, bboxAround, bboxFromPoints, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
-import { nominatimAddress, overpassHouses, overpassHousesBbox } from "./geo.server";
+import { groupStreets, pointInPolygon } from "@/lib/geo-de";
+import { nominatimAddress, overpassHouses } from "./geo.server";
 import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
+import type { Sql } from "@/lib/db";
+
+async function assignedTerritory(db: Sql, userId: string) {
+  const [ter] = await db<Record<string, unknown>>`
+    select t.* from territories t
+    where t.active = true
+      and (
+        t.user_id = ${userId}
+        or exists (
+          select 1 from territory_members m
+          where m.territory_id = t.id and m.user_id = ${userId}
+        )
+      )
+    order by t.updated_at desc
+    limit 1
+  `;
+  return ter || null;
+}
 
 function mapDoor(r: Record<string, unknown>) {
   return {
@@ -33,12 +51,7 @@ export const getFieldHome = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [ter] = await db<Record<string, unknown>>`
-      select * from territories
-      where active = true and user_id = ${me.user_id}
-      order by updated_at desc
-      limit 1
-    `;
+    const ter = await assignedTerritory(db, me.user_id);
     const used = ter || null;
     const week = weekKey();
     const [open] = await db<{ n: number }>`
@@ -65,10 +78,7 @@ export const getMyTerritory = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [own] = await db<Record<string, unknown>>`
-      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
-    `;
-    const mine = own || null;
+    const mine = await assignedTerritory(db, me.user_id);
     if (!mine) {
       return { name: "", filename: "", center_lat: 51.16, center_lng: 10.45, geojsonText: "", doors: [] as ReturnType<typeof mapDoor>[] };
     }
@@ -90,9 +100,7 @@ export const downloadMyTerritory = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [mine] = await db<Record<string, unknown>>`
-      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
-    `;
+    const mine = await assignedTerritory(db, me.user_id);
     if (!mine && (me.role === "super_admin" || me.role === "teamleiter")) {
       const [any] = await db<Record<string, unknown>>`select * from territories where active = true order by updated_at desc limit 1`;
       if (!any) throw new Error("Kein Gebiet zugewiesen.");
@@ -127,7 +135,13 @@ export const listTerritories = createServerFn({ method: "GET" })
     if (!can(me.role, "team.view") && me.role !== "super_admin") throw new Error("Kein Zugriff");
     const rows = await db<Record<string, unknown>>`
       select t.*, p.first_name, p.last_name, r.name as region_name,
-             (select count(*)::int from field_doors d where d.territory_id = t.id) as door_count
+             (select count(*)::int from field_doors d where d.territory_id = t.id) as door_count,
+             (
+               select string_agg(trim(m.first_name || ' ' || m.last_name), ', ' order by m.last_name)
+               from territory_members tm
+               join profiles m on m.user_id = tm.user_id
+               where tm.territory_id = t.id
+             ) as member_names
       from territories t
       left join profiles p on p.user_id = t.user_id
       left join regions r on r.id = t.region_id
@@ -140,7 +154,7 @@ export const listTerritories = createServerFn({ method: "GET" })
       region_id: asStr(r.region_id),
       region_name: asStr(r.region_name),
       user_id: asStr(r.user_id),
-      advisor: `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+      advisor: asStr(r.member_names) || `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
       door_count: num(r.door_count),
       center_lat: num(r.center_lat),
       center_lng: num(r.center_lng),
@@ -173,6 +187,9 @@ export const uploadTerritory = createServerFn({ method: "POST" })
         values (${nid()}, ${id}, ${door.street}, ${door.house}, ${door.zip}, ${door.city}, ${door.lat}, ${door.lng}, ${door.note || null})
       `;
     }
+    if (userId) {
+      await db`insert into territory_members (territory_id, user_id) values (${id}, ${userId}) on conflict do nothing`;
+    }
     await audit(db, {
       userId: context.userId,
       action: "territory.upload",
@@ -190,7 +207,12 @@ export const assignTerritory = createServerFn({ method: "POST" })
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     if (!can(me.role, "team.view")) throw new Error("Kein Zugriff");
+    await db`delete from territory_members where territory_id = ${data.id}`;
     await db`update territories set user_id = ${data.userId}, updated_at = now() where id = ${data.id}`;
+    await db`
+      insert into territory_members (territory_id, user_id)
+      values (${data.id}, ${data.userId})
+    `;
     await audit(db, {
       userId: context.userId,
       action: "territory.assign",
@@ -388,9 +410,7 @@ export const openFieldObject = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [ter] = await db<Record<string, unknown>>`
-      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
-    `;
+    const ter = await assignedTerritory(db, me.user_id);
     let inTerritory = true;
     let territoryName = "";
     if (ter?.geojson) {
@@ -445,9 +465,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [ter] = await db<Record<string, unknown>>`
-      select * from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
-    `;
+    const ter = await assignedTerritory(db, me.user_id);
     if (!ter) {
       return {
         name: "",
@@ -468,29 +486,22 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
     } catch {
       ring = [];
     }
-    const box = ring.length >= 3 ? bboxFromPoints(ring) : bboxAround(num(ter.center_lat), num(ter.center_lng), 1.2);
-    const raw = await overpassHousesBbox(box);
-    const houses = raw
-      .filter((h) => !ring.length || pointInPolygon(h, ring))
-      .map((h, i) => ({
-        id: `${h.street}-${h.house}-${i}`,
-        street: h.street,
-        house: h.house,
-        lat: h.lat,
-        lng: h.lng,
-      }));
-    const start = {
-      lat: data.lat || num(ter.center_lat),
-      lng: data.lng || num(ter.center_lng),
+    const doors = await db<Record<string, unknown>>`
+      select id, street, house, lat, lng from field_doors where territory_id = ${asStr(ter.id)} order by street, house
+    `;
+    const houses = doors.map((d) => ({
+      id: asStr(d.id),
+      street: asStr(d.street),
+      house: asStr(d.house),
+      lat: num(d.lat),
+      lng: num(d.lng),
+    }));
+    const grouped = groupStreets(houses.map((h) => ({ ...h, house: h.house || "" })));
+    const walk = {
+      streets: grouped.map((s) => ({ street: s.street, houses: s.houses, meters: 0 })),
+      meters: 0,
+      count: houses.length,
     };
-    let walk = planHouseWalk(houses, start);
-    const saved = ter.walk_order;
-    if (saved && typeof saved === "object") {
-      const rawOrder = saved as { streets?: Array<{ street: string; houses?: string[] }> };
-      if (Array.isArray(rawOrder.streets) && rawOrder.streets.length) {
-        walk = applyWalkOrder(walk, rawOrder.streets);
-      }
-    }
     return {
       name: asStr(ter.name),
       id: asStr(ter.id),
@@ -498,7 +509,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       ring,
       houses,
       walk,
-      custom: Boolean(saved),
+      custom: false,
     };
   });
 
@@ -508,12 +519,10 @@ export const saveWalkOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [ter] = await db<{ id: string }>`
-      select id from territories where active = true and user_id = ${me.user_id} order by updated_at desc limit 1
-    `;
+    const ter = await assignedTerritory(db, me.user_id);
     if (!ter) throw new Error("Kein Gebiet zugewiesen.");
     const payload = data.reset ? null : JSON.stringify({ streets: data.streets });
-    await db`update territories set walk_order = ${payload}::jsonb, updated_at = now() where id = ${ter.id}`;
+    await db`update territories set walk_order = ${payload}::jsonb, updated_at = now() where id = ${asStr(ter.id)}`;
     return { ok: true };
   });
 

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getDashboard } from "@/lib/server/api";
 import { downloadMyTerritory, getFieldHome } from "@/lib/server/field-api";
-import { STATUS_LABELS, type ContractStatus } from "@/lib/e1";
+import { can, STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { eur } from "@/lib/utils";
 import { vatOn } from "@/lib/steuer";
 import { StatusBadge } from "@/components/status-badge";
@@ -71,9 +71,11 @@ function Dashboard() {
             <Link to="/app" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
               Feld-App
             </Link>
-            <Link to="/portal/feld" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-              Karte öffnen
-            </Link>
+            {can(data.me.role, "team.view") ? (
+              <Link to="/portal/planung" className="rounded-xl px-4 py-3 text-sm gold-hairline">
+                Gebiete aufspielen
+              </Link>
+            ) : null}
             <button
               type="button"
               className="rounded-xl px-4 py-3 text-sm gold-hairline"
