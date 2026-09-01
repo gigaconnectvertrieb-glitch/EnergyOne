@@ -5,7 +5,14 @@ import { getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { SATELLITE, SATELLITE_ATTR, SATELLITE_LABELS } from "@/lib/map-tiles";
+import {
+  addOverlayLayers,
+  boundsOf,
+  createE1Map,
+  loadMapLibre,
+  setGeojson,
+  type MapLibreMap,
+} from "@/lib/map-gl";
 
 type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
@@ -14,12 +21,8 @@ type Walk = Awaited<ReturnType<typeof getTerritoryWalk>>;
 export function FieldRouter({ center }: { center: { lat: number; lng: number } }) {
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<{
-    setView: (ll: [number, number], z: number) => void;
-    fitBounds: (b: unknown, o?: unknown) => void;
-    remove: () => void;
-  } | null>(null);
-  const layerRef = useRef<{ remove: () => void }[]>([]);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<Array<{ remove: () => void }>>([]);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [obj, setObj] = useState<Obj | null>(null);
@@ -32,32 +35,33 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
   useEffect(() => {
     let cancelled = false;
     async function boot() {
-      await loadLeaflet();
+      await loadMapLibre();
       if (cancelled || !ref.current || mapRef.current) return;
-      const L = (window as unknown as { L: LeafletNS }).L;
-      const map = L.map(ref.current, { zoomControl: false, preferCanvas: true });
-      map.setView([center.lat, center.lng], 12);
-      L.tileLayer(SATELLITE, {
-        attribution: SATELLITE_ATTR,
-        maxZoom: 19,
-        maxNativeZoom: 19,
-      }).addTo(map);
-      L.tileLayer(SATELLITE_LABELS, {
-        maxZoom: 19,
-        maxNativeZoom: 19,
-        opacity: 0.9,
-      }).addTo(map);
+      const map = createE1Map(ref.current, center, 15, { controls: false });
       mapRef.current = map;
-      map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
+      map.on("load", () => {
+        map.resize();
+        addOverlayLayers(map);
+        void loadWalk();
+      });
+      map.on("click", (e) => {
+        if (!e?.lngLat) return;
         if (tapStartRef.current) {
           tapStartRef.current = false;
           setTapStart(false);
-          void loadWalk(e.latlng.lat, e.latlng.lng);
+          void loadWalk(e.lngLat.lat, e.lngLat.lng);
           return;
         }
-        void pick({ lat: e.latlng.lat, lng: e.latlng.lng, street: "", house: "", zip: "", city: "", display: "" });
+        void pick({
+          lat: e.lngLat.lat,
+          lng: e.lngLat.lng,
+          street: "",
+          house: "",
+          zip: "",
+          city: "",
+          display: "",
+        });
       });
-      void loadWalk();
     }
     void boot();
     return () => {
@@ -80,44 +84,72 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
   }
 
   function paint(data: Walk) {
-    const L = (window as unknown as { L: LeafletNS }).L;
     const map = mapRef.current;
-    if (!L || !map) return;
-    layerRef.current.forEach((x) => x.remove());
-    layerRef.current = [];
-    if (data.ring.length >= 3) {
-      const poly = L.polygon(
-        data.ring.map((p) => [p.lat, p.lng] as [number, number]),
-        { color: "#c9a227", weight: 3, fillColor: "#c9a227", fillOpacity: 0.12 },
-      );
-      poly.addTo(map);
-      layerRef.current.push(poly);
+    if (!map?.getSource("e1-zone")) return;
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+    const ring = data.ring;
+    setGeojson(map, "e1-zone", {
+      type: "FeatureCollection",
+      features:
+        ring.length >= 3
+          ? [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [[...ring.map((p) => [p.lng, p.lat]), [ring[0]!.lng, ring[0]!.lat]]],
+                },
+                properties: {},
+              },
+            ]
+          : [],
+    });
+    const linePts = data.walk.streets.flatMap((s) => s.houses.map((h) => [h.lng, h.lat] as [number, number]));
+    setGeojson(map, "e1-route", {
+      type: "FeatureCollection",
+      features:
+        linePts.length >= 2
+          ? [{ type: "Feature", geometry: { type: "LineString", coordinates: linePts }, properties: {} }]
+          : [],
+    });
+    setGeojson(map, "e1-points", {
+      type: "FeatureCollection",
+      features: data.houses.map((h, i) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [h.lng, h.lat] },
+        properties: { kind: i === 0 ? "start" : "pt" },
+      })),
+    });
+    const ML = window.maplibregl;
+    if (ML && data.houses.length <= 280) {
+      for (const h of data.houses) {
+        const el = document.createElement("span");
+        el.className = "e1-hn";
+        el.textContent = h.house;
+        el.onclick = (ev) => {
+          ev.stopPropagation();
+          void pick({
+            lat: h.lat,
+            lng: h.lng,
+            street: h.street,
+            house: h.house,
+            zip: "",
+            city: "",
+            display: `${h.street} ${h.house}`,
+          });
+        };
+        const mk = new ML.Marker({ element: el }).setLngLat([h.lng, h.lat]).addTo(map);
+        markersRef.current.push(mk);
+      }
+    }
+    const b = boundsOf(ring.length >= 3 ? ring : data.houses);
+    if (b) {
       try {
-        map.fitBounds(poly.getBounds(), { padding: [28, 28], maxZoom: 18 });
+        map.fitBounds(b, { padding: 40, maxZoom: 18, duration: 500 });
       } catch {
         /* */
       }
-    }
-    const linePts = data.walk.streets.flatMap((s) => s.houses.map((h) => [h.lat, h.lng] as [number, number]));
-    if (linePts.length >= 2) {
-      const line = L.polyline(linePts, { color: "#c9a227", weight: 3, opacity: 0.9 });
-      line.addTo(map);
-      layerRef.current.push(line);
-    }
-    for (const h of data.houses) {
-      const icon = L.divIcon({
-        className: "e1-hn",
-        html: `<span>${escapeHtml(h.house)}</span>`,
-        iconSize: [26, 16],
-        iconAnchor: [13, 8],
-      });
-      const m = L.marker([h.lat, h.lng], { icon, keyboard: false });
-      m.bindTooltip(`${h.street} ${h.house}`, { direction: "top" });
-      m.on("click", () => {
-        void pick({ lat: h.lat, lng: h.lng, street: h.street, house: h.house, zip: "", city: "", display: `${h.street} ${h.house}` });
-      });
-      m.addTo(map);
-      layerRef.current.push(m);
     }
   }
 
@@ -136,19 +168,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
 
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
     setHits([]);
-    const L = (window as unknown as { L: LeafletNS }).L;
-    mapRef.current?.setView([h.lat, h.lng], 18);
-    if (L && mapRef.current) {
-      const m = L.circleMarker([h.lat, h.lng], {
-        radius: 8,
-        color: "#fff",
-        weight: 2,
-        fillColor: "#c9a227",
-        fillOpacity: 1,
-      });
-      m.addTo(mapRef.current);
-      layerRef.current.push(m);
-    }
+    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
     setBusy(true);
     try {
       const next = await openFieldObject({
@@ -176,6 +196,9 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
   return (
     <div className="relative -mx-4 -mt-3 h-[calc(100dvh-7.5rem)] min-h-[28rem] overflow-hidden bg-[#d4e0d4]">
       <div ref={ref} className="absolute inset-0" />
+      <p className="pointer-events-none absolute bottom-24 left-3 right-3 z-[1100] text-center text-[11px] text-gold/90">
+        Zwei Finger nach oben ziehen — Häuser stehen in 3D
+      </p>
 
       <div className="absolute left-3 right-3 top-3 z-[1200] grid gap-2">
         <div className="overflow-hidden rounded-xl bg-white text-[#1a1a1a] shadow-lg">
@@ -251,7 +274,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
                   const v = e.target.value;
                   setHouse(v);
                   const h = obj.houses.find((x) => x.house === v);
-                  if (h) mapRef.current?.setView([h.lat, h.lng], 18);
+                  if (h) mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
                 }}
               >
                 {obj.houses.map((h) => (
@@ -307,59 +330,4 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       ) : null}
     </div>
   );
-}
-
-type LeafletNS = {
-  map: (el: HTMLElement, o: unknown) => {
-    setView: (ll: [number, number], z: number) => void;
-    fitBounds: (b: unknown, o?: unknown) => void;
-    on: (ev: string, fn: (e: { latlng: { lat: number; lng: number } }) => void) => void;
-    remove: () => void;
-  };
-  tileLayer: (u: string, o: unknown) => { addTo: (m: unknown) => void };
-  polygon: (ll: [number, number][], o: unknown) => {
-    addTo: (m: unknown) => void;
-    remove: () => void;
-    getBounds: () => unknown;
-  };
-  polyline: (ll: [number, number][], o: unknown) => { addTo: (m: unknown) => void; remove: () => void };
-  divIcon: (o: unknown) => unknown;
-  marker: (ll: [number, number], o: unknown) => {
-    addTo: (m: unknown) => void;
-    remove: () => void;
-    bindTooltip: (s: string, o?: unknown) => void;
-    on: (ev: string, fn: () => void) => void;
-  };
-  circleMarker: (ll: [number, number], o: unknown) => {
-    addTo: (m: unknown) => void;
-    remove: () => void;
-    bindTooltip: (s: string, o?: unknown) => void;
-    on: (ev: string, fn: () => void) => void;
-  };
-};
-
-function escapeHtml(s: string) {
-  const amp = "&" + "amp;";
-  const lt = "&" + "lt;";
-  const gt = "&" + "gt;";
-  const quot = "&" + "#34;";
-  return s.replace(/&/g, amp).replace(/</g, lt).replace(/>/g, gt).replace(/"/g, quot);
-}
-
-let leafletPromise: Promise<void> | null = null;
-function loadLeaflet() {
-  if ((window as unknown as { L?: unknown }).L) return Promise.resolve();
-  if (leafletPromise) return leafletPromise;
-  leafletPromise = new Promise((resolve, reject) => {
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(css);
-    const s = document.createElement("script");
-    s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Karte nicht geladen"));
-    document.body.appendChild(s);
-  });
-  return leafletPromise;
 }
