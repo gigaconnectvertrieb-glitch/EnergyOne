@@ -39,9 +39,9 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
   return (
     <div className="min-h-dvh bg-bg text-ink gold-wash">
       <header className="site-header sticky top-0 z-40 bg-bg/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-[4.25rem] max-w-6xl items-center justify-between gap-4 px-4 md:h-20">
-          <Wordmark to={firmen ? "/firmen" : "/"} />
-          <nav className="hidden items-center gap-6 lg:flex">
+        <div className="flex h-[4.25rem] w-full items-center px-3 md:h-20 md:px-5">
+          <Wordmark to={firmen ? "/firmen" : "/"} className="shrink-0" />
+          <nav className="ml-10 hidden items-center gap-7 lg:flex">
             {NAV.map((n) => (
               <Link
                 key={n.to}
@@ -55,7 +55,7 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
               </Link>
             ))}
           </nav>
-          <div className="hidden items-center gap-2 lg:flex">
+          <div className="ml-auto hidden items-center gap-2 lg:flex">
             <SignedOut>
               <Link to="/login" className="px-3 py-2 text-sm text-muted hover:text-ink">
                 Login
