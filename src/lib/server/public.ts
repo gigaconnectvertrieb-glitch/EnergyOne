@@ -91,8 +91,6 @@ export const submitLead = createServerFn({ method: "POST" })
         text,
         purpose: "lead",
       });
-        purpose: "lead",
-      });
     } catch {
       /* queued when Workspace verbunden */
     }
