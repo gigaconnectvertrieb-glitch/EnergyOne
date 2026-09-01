@@ -19,7 +19,6 @@ function Home() {
       <Steps />
       <Founders />
       <Facts />
-      <CareerTeaser />
       <Faq />
     </PublicShell>
   );
@@ -273,28 +272,6 @@ function Facts() {
             </li>
           ))}
         </ul>
-      </div>
-    </section>
-  );
-}
-
-function CareerTeaser() {
-  return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
-      <div className="overflow-hidden rounded-3xl bg-elevated gold-hairline">
-        <div className="grid md:grid-cols-2">
-          <img src="/hero-karriere.jpg" alt="E1-Team" className="h-56 w-full object-cover object-[50%_40%] md:h-full" />
-          <div className="p-8">
-            <p className="text-xs uppercase tracking-[0.28em] text-gold">Karriere</p>
-            <h2 className="mt-2 font-display text-4xl">Verkaufen, ohne sich zu verbiegen.</h2>
-            <p className="mt-3 text-muted">
-              Eigenverantwortung, faire Provision, direkter Draht zur Geschäftsführung.
-            </p>
-            <Link to="/karriere">
-              <Button className="mt-6">Jetzt bewerben</Button>
-            </Link>
-          </div>
-        </div>
       </div>
     </section>
   );
