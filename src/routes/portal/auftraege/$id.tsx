@@ -149,8 +149,8 @@ function Page() {
         <h2 className="text-sm font-medium">Unterschrift</h2>
         <p className="mt-1 text-sm text-muted">
           {c.signature_confirmed
-            ? "Vertrag ist unterschrieben und liegt im Auftrag."
-            : "Vor Ort auf dem Tablet, oder per E-Mail rausschicken. Sobald der Kunde signiert, kommt das PDF automatisch hier rein."}
+            ? "Unterschrift liegt im Auftrag."
+            : "E1 erzeugt vorerst keinen eigenen Stromvertrag. Der Lieferant oder der Anwalt liefert die Urkunde. Hier nur ablegen, wenn etwas unterschrieben vorliegt."}
         </p>
         {sign?.envelopes.length ? (
           <ul className="mt-3 grid gap-1 text-sm">
@@ -168,64 +168,12 @@ function Page() {
             Dateien: {sign.files.map((f) => f.filename).join(", ")}
           </p>
         ) : null}
-        <Field label="Kunden-E-Mail">
-          <Input value={signMail} onChange={(e) => setSignMail(e.target.value)} placeholder="kunde@…" />
-        </Field>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              try {
-                const file = await downloadContractPdf({ data: { contractId: id } });
-                const a = document.createElement("a");
-                a.href = `data:application/pdf;base64,${file.base64}`;
-                a.download = file.filename;
-                a.click();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "PDF fehlgeschlagen");
-              }
-            }}
-          >
-            Vertrag als PDF
-          </Button>
-          <Button
-            size="sm"
-            onClick={async () => {
-              try {
-                const r = await sendSignEmail({ data: { contractId: id, email: signMail } });
-                toast.success(r.queued ? "Vorgemerkt — DocuSign-Keys in Render setzen" : "An den Kunden gesendet");
-                load();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Versand fehlgeschlagen");
-              }
-            }}
-          >
-            Per E-Mail zur Unterschrift
-          </Button>
-        </div>
-        <p className="mt-5 text-xs uppercase tracking-[0.2em] text-gold">Vor Ort · Tablet</p>
-        <div className="mt-2">
-          <SignaturePad value={pad} onChange={setPad} />
-        </div>
-        <Button
-          className="mt-3"
-          size="sm"
-          variant="outline"
-          onClick={async () => {
-            try {
-              await saveTabletSignature({ data: { contractId: id, image: pad } });
-              toast.success("Unterschrift gespeichert");
-              load();
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Pad leer?");
-            }
-          }}
-        >
-          Tablet-Unterschrift speichern
-        </Button>
-      </div>
-
+        <p className="mt-3 text-sm text-muted line-through">
+          Vertrag als PDF erzeugen und per DocuSign oder Tablet an den Kunden senden.
+        </p>
+        <p className="mt-2 text-xs text-muted">
+          E1-Mustervertrag bleibt im Code (Flag customer_energy_contracts) und kann später wieder an.
+        </p>
       {next.length ? (
         <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
           <h2 className="text-sm font-medium">Status ändern</h2>

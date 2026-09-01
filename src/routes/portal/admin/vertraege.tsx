@@ -14,7 +14,6 @@ import {
 } from "@/lib/server/hv-api";
 import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
-import { previewMusterVertrag } from "@/lib/server/sign-api";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { deDate } from "@/lib/utils";
@@ -45,16 +44,20 @@ function savePdf(filename: string, b64: string) {
 
 function Page() {
   const { id } = Route.useSearch();
-  const [tab, setTab] = useState<"hv" | "kunde">("hv");
   return (
     <div className="mx-auto max-w-3xl pb-16">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Recht</p>
       <h1 className="mt-1 font-display text-4xl">HV-Verträge</h1>
       <p className="mt-2 text-sm text-muted">
-        Jeder erzeugte Vertrag liegt in der Datenbank. Unten die gespeicherten Urkunden öffnen und lesen —
-        nicht nur herunterladen. Mitarbeiter auswählen, Name und Adresse, dann erzeugen.
+        Handelsvertreterverträge erzeugen, unterschreiben, speichern.
       </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <p className="mt-3 text-sm text-muted line-through">
+        Muster Stromkunde erzeugen und per Klick als E1-Vertrag verschicken.
+      </p>
+      <p className="text-sm text-muted">
+        Stromverträge kommen vom Lieferanten oder vom Anwalt. Die Erzeugung im Portal ist abgeschaltet und kann später wieder an.
+      </p>
+      <div className="mt-4">
         <Button
           variant="outline"
           onClick={async () => {
@@ -68,29 +71,8 @@ function Page() {
         >
           Muster Handelsvertreter (PDF)
         </Button>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            try {
-              const data = await previewMusterVertrag();
-              savePdf("E1-Muster-Stromliefervertrag.pdf", data.pdfBase64);
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Muster fehlgeschlagen");
-            }
-          }}
-        >
-          Muster Stromkunde (PDF)
-        </Button>
       </div>
-      <div className="mt-4 flex gap-2">
-        <Button variant={tab === "hv" ? "default" : "outline"} onClick={() => setTab("hv")}>
-          Handelsvertreter
-        </Button>
-        <Button variant={tab === "kunde" ? "default" : "outline"} onClick={() => setTab("kunde")}>
-          Kunden-Muster
-        </Button>
-      </div>
-      {tab === "hv" ? <HvPanel openId={id} /> : <KundePanel />}
+      <HvPanel openId={id} />
     </div>
   );
 }
@@ -490,26 +472,4 @@ function HvPanel({ openId }: { openId?: string }) {
   );
 }
 
-function KundePanel() {
-  const [data, setData] = useState<Awaited<ReturnType<typeof previewMusterVertrag>> | null>(null);
-  useEffect(() => {
-    previewMusterVertrag().then(setData).catch(() => setData(null));
-  }, []);
-  return (
-    <>
-      <Button
-        className="mt-6"
-        variant="outline"
-        onClick={() => {
-          if (!data) return;
-          savePdf("E1-Mustervertrag-Strom.pdf", data.pdfBase64);
-        }}
-      >
-        Kunden-Muster PDF
-      </Button>
-      <pre className="mt-6 max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-3xl bg-surface p-5 text-xs leading-relaxed gold-hairline">
-        {data?.lines.join("\n") || "Laden…"}
-      </pre>
-    </>
-  );
-}
+
