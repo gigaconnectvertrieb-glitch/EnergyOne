@@ -78,10 +78,7 @@ function Page() {
         <h1 className="mt-2 font-display text-5xl">Was kostet Ihr Strom wirklich?</h1>
         <p className="mt-4 text-muted">
           Drei Zahlen von der letzten Rechnung: Verbrauch, Preis pro Kilowattstunde, Grundpreis.
-          Wir zeigen daneben, was ein günstigerer Tarif ungefähr wäre — ohne Kleingedrucktes.
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          {live ? "Vergleichspreis aus euren hinterlegten Werten." : "Vergleich ist ein Richtwert, kein verbindliches Angebot."}
+          Darunter steht, was Sie heute zahlen und was Sie sparen könnten.
         </p>
 
         <div className="mt-8 grid gap-3 rounded-3xl bg-surface p-6 gold-hairline">
@@ -130,13 +127,13 @@ function Page() {
           <Field label="Jahresverbrauch kWh">
             <Input inputMode="numeric" value={kwh} onChange={(e) => setKwh(e.target.value)} />
           </Field>
-          <Field label="Ihr Arbeitspreis ct/kWh" hint="Steht auf der Jahresrechnung. Nicht raten.">
+          <Field label="Preis pro kWh in Cent" hint="Auf der Jahresrechnung, oft „Arbeitspreis“.">
             <Input inputMode="decimal" value={currentCt} onChange={(e) => setCurrentCt(e.target.value.replace(",", "."))} />
           </Field>
-          <Field label="Ihr Grundpreis €/Jahr" hint="Monat × 12, falls nur monatlich gedruckt.">
+          <Field label="Grundpreis im Jahr in Euro" hint="Steht monatlich da? Einfach mal 12 nehmen.">
             <Input inputMode="decimal" value={currentGrund} onChange={(e) => setCurrentGrund(e.target.value.replace(",", "."))} />
           </Field>
-          <Field label="PLZ" hint="Für später den Netzpreis. Rechnet heute noch nicht den Endpreis.">
+          <Field label="Postleitzahl">
             <Input inputMode="numeric" value={zip} onChange={(e) => setZip(e.target.value.replace(/[^\d]/g, "").slice(0, 5))} />
           </Field>
         </div>
@@ -201,7 +198,7 @@ function Page() {
             }
           }}
         >
-          <p className="text-sm text-muted">Ergebnis prüfen lassen — wir holen den Preis zu Ihrer PLZ.</p>
+          <p className="text-sm text-muted">Soll jemand von uns das mit Ihrer Adresse nachrechnen?</p>
           <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
