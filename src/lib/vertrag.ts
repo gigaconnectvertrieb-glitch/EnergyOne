@@ -3,9 +3,12 @@
 export const PRICE_PLACEHOLDER = "—,—";
 
 export type VertragArt = "strom" | "gas";
+export type VertragKunde = "privat" | "gewerbe";
 
 export type VertragData = {
   art: VertragArt;
+  kind?: VertragKunde;
+  company?: string;
   first: string;
   last: string;
   street: string;
@@ -27,6 +30,7 @@ export type VertragData = {
   grundpreis?: string;
   laufzeitMonate?: string;
   lieferant?: string;
+  ustId?: string;
 };
 
 export function dash(v?: string | null, fallback = PRICE_PLACEHOLDER) {
@@ -35,173 +39,184 @@ export function dash(v?: string | null, fallback = PRICE_PLACEHOLDER) {
 }
 
 export function fillVertrag(d: VertragData): string[] {
+  const gewerbe = d.kind === "gewerbe";
   const energie = d.art === "gas" ? "Gas (Erdgas)" : "Strom (elektrische Energie)";
+  const titel = d.art === "gas" ? "GASLIEFERVERTRAG" : "STROMLIEFERVERTRAG";
   const gvv = d.art === "gas" ? "GasGVV" : "StromGVV";
-  const ap = dash(d.arbeitspreis, `${PRICE_PLACEHOLDER} ct/kWh (Platzhalter bis Tariffreigabe)`);
-  const gp = dash(d.grundpreis, `${PRICE_PLACEHOLDER} €/Monat (Platzhalter bis Tariffreigabe)`);
-  const lieferant = dash(
-    d.lieferant,
-    "der vermittelte Lieferant (über New Sales / nach Freigabe eigener E1-Tarif)",
-  );
+  const ap = dash(d.arbeitspreis, `${PRICE_PLACEHOLDER} ct/kWh`);
+  const gp = dash(d.grundpreis, `${PRICE_PLACEHOLDER} EUR/Monat`);
+  const lieferant = dash(d.lieferant, "[Lieferant, Registergericht, HRB]");
   const laufzeit = dash(d.laufzeitMonate, "12");
-  const start = dash(d.start, "nächstmöglicher Lieferbeginn nach Widerrufsfrist und Netzabmeldung");
-  const iban = dash(d.iban, "[IBAN — Platzhalter]");
+  const start = dash(d.start, "nächstmöglicher Termin nach Netzbestätigung");
+  const iban = dash(d.iban, "[IBAN]");
   const inhaber = dash(d.owner, `${d.first} ${d.last}`.trim() || "[Kontoinhaber]");
+  const kundeName = gewerbe
+    ? `${dash(d.company, "[Firma]")} vertreten durch ${dash(d.first, "[Vorname]")} ${dash(d.last, "[Nachname]")}`
+    : `${dash(d.first, "[Vorname]")} ${dash(d.last, "[Nachname]")}`;
+  const adresse = `${dash(d.street, "[Straße]")} ${dash(d.house, "[Nr.]")}, ${dash(d.zip, "[PLZ]")} ${dash(d.city, "[Ort]")}`;
 
-  return [
+  const kopf = [
     "E1 DIREKTVERTRIEB",
-    "Energie, die zu Ihnen passt.",
+    "Inhaber Orhan Salo und Luca-Marco Marrancone",
+    "info@e1direktvertrieb.de",
     "",
-    d.art === "gas" ? "GASLIEFERVERTRAG" : "STROMLIEFERVERTRAG",
-    "Haushaltskunde  |  Fernabsatz- und Haustürgeschäft  |  deutsches Recht",
+    titel,
+    gewerbe ? "Geschäftskunde  |  Unternehmer  |  deutsches Recht" : "Haushaltskunde  |  Haustür- und Fernabsatz  |  deutsches Recht",
     "",
-    "Muster / Vertragsurkunde. Preise, Lieferant, Handelsregister und Gläubiger-ID",
-    "sind Platzhalter, bis Tarif und Gesellschaftsangaben freigegeben sind.",
-    "Widerrufsbelehrung, SEPA, Datenschutz und Schlichtung sind enthalten.",
+    "Vertragsurkunde. Fehlende Preise, Lieferant und Handelsregister sind",
+    "Platzhalter und werden vor Unterschrift eingesetzt.",
     "",
     "§ 1 Vertragsparteien",
-    `Kunde: ${dash(d.first, "[Vorname]")} ${dash(d.last, "[Nachname]")}`,
-    `Anschrift der Lieferstelle: ${dash(d.street, "[Straße]")} ${dash(d.house, "[Nr.]")} ${dash(d.zip, "[PLZ]")} ${dash(d.city, "[Ort]")}`,
-    `Telefon: ${dash(d.phone, "[Telefon]")}   E-Mail: ${dash(d.email, "[E-Mail]")}`,
-    d.birth ? `Geburtsdatum: ${d.birth}` : "Geburtsdatum: [Platzhalter]",
+    `Kunde: ${kundeName}`,
+    gewerbe && d.ustId ? `USt-IdNr.: ${d.ustId}` : "",
+    `Lieferstelle: ${adresse}`,
+    `Telefon: ${dash(d.phone, "[Telefon]")}    E-Mail: ${dash(d.email, "[E-Mail]")}`,
+    !gewerbe ? (d.birth ? `Geburtsdatum: ${d.birth}` : "Geburtsdatum: [TT.MM.JJJJ]") : "",
     "",
-    "Vermittler / Vertrieb:",
-    "E1 Direktvertrieb, Geschäftsführung Orhan Salo und Luca Marco Marrancone",
-    "E-Mail: info@e1direktvertrieb.de",
-    "Anschrift der operativen Gesellschaft: [Straße, PLZ, Ort — Platzhalter § 5 DDG]",
+    "Vermittler:",
+    "E1 Direktvertrieb, Geschäftsführung Orhan Salo und Luca-Marco Marrancone",
+    "Anschrift: [Straße, PLZ, Ort]",
     "Registergericht / HRB: [Platzhalter]    USt-IdNr.: [Platzhalter]",
     "",
     `Lieferant: ${lieferant}`,
-    "E1 vermittelt den Abschluss und dokumentiert den Auftrag. Sobald eigene E1-Tarife",
-    "freigegeben sind, tritt E1 bzw. die dann benannte Liefergesellschaft als Lieferant ein.",
+    "E1 nimmt den Auftrag auf und leitet ihn an den Lieferanten weiter, solange",
+    "E1 nicht selbst als Lieferant genannt ist.",
     "",
     "§ 2 Gegenstand",
-    `Gegenstand ist die Belieferung der genannten Lieferstelle mit ${energie}`,
-    "für den eigenen Haushaltsbedarf im Niederspannungs- bzw. Niederdrucknetz.",
-    "Es gelten die gesetzlichen Regelungen des EnWG, der jeweiligen Netzzugangsverordnungen",
-    `sowie ergänzend ${gvv}, soweit nicht abweichend vereinbart.`,
-    `Produkt / Tarif: ${dash(d.product, "[Tarifname — Platzhalter]")}`,
-    `Zählernummer: ${dash(d.meter, "[wird nachgereicht / New Sales]")}`,
-    `Bisheriger Lieferant: ${dash(d.previous, "[falls bekannt]")}`,
-    `Voraussichtlicher Jahresverbrauch: ${dash(d.kwh, "[kWh]")} kWh`,
-    `Berater vor Ort: ${dash(d.advisor, "[Berater]")}`,
+    `Belieferung der Lieferstelle mit ${energie}.`,
+    gewerbe
+      ? "Nutzung für den Geschäftsbetrieb. Profil SLP, soweit nicht RLM vereinbart."
+      : "Nutzung für den eigenen Haushaltsbedarf in Niederspannung bzw. Niederdruck.",
+    `Es gelten EnWG, Netzzugangsverordnungen und ergänzend ${gvv}, soweit nicht abweichend vereinbart.`,
+    `Produkt: ${dash(d.product, "[Tarifname]")}`,
+    `Zählernummer: ${dash(d.meter, "[Zählernummer]")}`,
+    `Bisheriger Lieferant: ${dash(d.previous, "[unbekannt]")}`,
+    `Jahresverbrauch: ${dash(d.kwh, "[kWh]")} kWh`,
+    `Berater: ${dash(d.advisor, "[Berater]")}`,
     "",
     "§ 3 Lieferbeginn",
-    `Gewünschter Lieferbeginn: ${start}.`,
-    "Die Lieferung beginnt, sobald der Netzbetreiber den Wechsel bestätigt und die",
-    "Widerrufsfrist abgelaufen ist, sofern nicht ausdrücklich auf das Widerrufsrecht",
-    "verzichtet wurde (ein solcher Verzicht wird hier nicht vereinbart).",
+    `Gewünschter Beginn: ${start}.`,
+    "Lieferung startet, wenn der Netzbetreiber den Wechsel bestätigt.",
+    !gewerbe ? "Ein Verzicht auf das Widerrufsrecht wird nicht vereinbart." : "",
     "",
-    "§ 4 Preise (EnWG § 41 — Transparenz)",
-    `Arbeitspreis (netto): ${ap}`,
-    `Grundpreis (netto): ${gp}`,
-    "Hinzu kommen in gesetzlicher Höhe: Umsatzsteuer, Strom- bzw. Energiesteuer,",
-    "Netzentgelte, Messstellenbetrieb, Umlagen und Abgaben (u. a. KWKG, Offshore,",
-    "§ 19 StromNEV, Konzessionsabgabe — jeweils in der bei Lieferung geltenden Höhe).",
-    "Die konkreten Beträge werden bei Tariffreigabe in dieses Dokument eingesetzt",
-    "und dem Kunden vor Unterschrift vollständig genannt (Preisblatt Anlage 1).",
-    "Neukundenbonus / Sofortbonus: [Platzhalter — 0,00 €, sofern nicht ausgewiesen].",
+    "§ 4 Preise (EnWG § 41)",
+    gewerbe ? `Arbeitspreis netto: ${ap}` : `Arbeitspreis: ${ap}`,
+    gewerbe ? `Grundpreis netto: ${gp}` : `Grundpreis: ${gp}`,
+    "Hinzu kommen in gesetzlicher Höhe Umsatzsteuer, Strom- bzw. Energiesteuer,",
+    "Netzentgelte, Messstellenbetrieb, Umlagen und Konzessionsabgabe.",
+    "Die Beträge stehen vor Unterschrift im Preisblatt (Anlage 1).",
+    "Neukundenbonus: [0,00 EUR, soweit nicht ausgewiesen].",
     "",
     "§ 5 Preisänderungen",
-    "Preisänderungen sind nur nach den gesetzlichen Vorgaben zulässig und werden",
-    "mindestens einen Monat im Voraus in Textform mitgeteilt. Der Kunde kann bei",
-    "einer Änderung, die nicht ausschließlich Steuern, Umlagen oder Netzentgelte",
-    "betrifft, den Vertrag ohne Einhaltung einer Frist zum Zeitpunkt des Wirksamwerdens",
-    "der Änderung kündigen (Sonderkündigungsrecht).",
+    "Änderungen nur nach Gesetz, mindestens einen Monat vorher in Textform.",
+    "Betrifft die Änderung nicht nur Steuern, Umlagen oder Netzentgelte,",
+    "kann der Kunde zum Wirksamwerden ohne Frist kündigen.",
     "",
     "§ 6 Laufzeit und Kündigung",
     `Erstlaufzeit: ${laufzeit} Monate ab Lieferbeginn.`,
-    "Kündigungsfrist: ein Monat zum Ablauf der Erstlaufzeit. Wird nicht gekündigt,",
-    "verlängert sich der Vertrag auf unbestimmte Zeit und ist dann monatlich kündbar.",
+    "Kündigungsfrist: ein Monat zum Ende der Erstlaufzeit.",
+    "Ohne Kündigung verlängert sich der Vertrag auf unbestimmte Zeit und ist dann monatlich kündbar.",
     "Kündigung in Textform an info@e1direktvertrieb.de oder an den Lieferanten.",
-    "Ein Umzug ist unverzüglich anzuzeigen; es gelten die gesetzlichen Rechte.",
+    "Ein Umzug ist unverzüglich anzuzeigen.",
     "",
-    "§ 7 Abrechnung, Zählerstände, Messung",
-    "Abgerechnet wird in der Regel jährlich, zuzüglich gesetzlich zulässiger Abschläge.",
-    "Zählerstände teilt der Kunde auf Anforderung mit oder sie werden vom Messstellenbetreiber",
-    "übermittelt. Einwände gegen Rechnungen berechtigen nicht zur Zahlungsverweigerung,",
-    "soweit nicht offensichtlich Fehler vorliegen.",
+    "§ 7 Abrechnung und Messung",
+    "Abrechnung in der Regel jährlich, dazu gesetzlich zulässige Abschläge.",
+    "Zählerstände vom Kunden oder vom Messstellenbetreiber.",
+    "Einwände gegen Rechnungen berechtigen nicht zur Zahlungsverweigerung,",
+    "wenn der Fehler nicht offensichtlich ist.",
     "",
-    "§ 8 Zahlung, SEPA-Lastschrift",
-    "Rechnungsbeträge sind mit Zugang fällig. Bevorzugt: SEPA-Basislastschrift.",
+    "§ 8 Zahlung, SEPA",
+    "Fällig mit Zugang der Rechnung. Bevorzugt SEPA-Lastschrift.",
     `Kontoinhaber: ${inhaber}`,
     `IBAN: ${iban}`,
-    "Gläubiger-Identifikationsnummer: [Platzhalter — DE__ZZZ___________]",
-    "Mandatsreferenz: wird nach Vertragsnummer vergeben.",
-    "Der Kontoinhaber ermächtigt den Lieferanten, fällige Beträge einzuziehen, und",
-    "weist sein Kreditinstitut an, die Lastschriften einzulösen. Innerhalb von acht",
-    "Wochen, beginnend mit dem Belastungsdatum, kann die Erstattung des belasteten",
-    "Betrags verlangt werden. Es gelten die mit dem Kreditinstitut vereinbarten Bedingungen.",
+    "Gläubiger-ID: [DE__ZZZ___________]",
+    "Mandatsreferenz folgt der Vertragsnummer.",
+    "Erstattung einer Lastschrift innerhalb von acht Wochen ab Belastung möglich.",
     "",
     "§ 9 Pflichten des Kunden",
-    "Der Kunde stellt den Zugang zur Messeinrichtung sicher, teilt Änderungen der",
-    "Anschrift, Bankverbindung und des Verbrauchsverhaltens unverzüglich mit und",
-    "nutzt die Energie nicht unberechtigt weiter.",
+    "Zugang zur Messeinrichtung. Änderungen von Anschrift, Bank und Verbrauch unverzüglich mitteilen.",
+    "Keine unberechtigte Weitergabe der Energie.",
     "",
     "§ 10 Haftung",
-    "Bei Unterbrechung oder Unregelmäßigkeiten in der Energieversorgung gelten die",
-    "gesetzlichen Haftungsregeln (u. a. gegenüber dem Netzbetreiber). E1 und der",
-    "Lieferant haften unbeschränkt bei Vorsatz, grober Fahrlässigkeit und bei",
-    "Verletzung von Leben, Körper und Gesundheit. Bei leichter Fahrlässigkeit nur",
-    "für wesentliche Vertragspflichten, begrenzt auf den vorhersehbaren Schaden.",
+    "Bei Netzstörung gelten die gesetzlichen Regeln gegenüber dem Netzbetreiber.",
+    "Unbeschränkt bei Vorsatz, grober Fahrlässigkeit und bei Verletzung von Leben, Körper, Gesundheit.",
+    "Bei leichter Fahrlässigkeit nur für wesentliche Pflichten, begrenzt auf den vorhersehbaren Schaden.",
     "",
-    "§ 11 Widerrufsrecht (Haustür- und Fernabsatzgeschäft)",
-    "Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen",
-    "Vertrag zu widerrufen. Die Frist beginnt mit Vertragsschluss. Um Ihr",
-    "Widerrufsrecht auszuüben, müssen Sie uns mittels einer eindeutigen Erklärung",
-    "(Brief oder E-Mail an info@e1direktvertrieb.de) informieren. Die Muster-",
-    "Widerrufsformulierung am Ende dieses Dokuments können Sie verwenden.",
-    "Zur Wahrung der Frist genügt die rechtzeitige Absendung.",
-    "Folgen: Wir erstatten alle Zahlungen unverzüglich, spätestens binnen 14 Tagen.",
-    "Haben Sie verlangt, dass die Lieferung während der Widerrufsfrist beginnen soll,",
-    "zahlen Sie einen angemessenen Betrag für die bis zum Widerruf gelieferte Energie.",
-    "",
+  ].filter((line) => line !== "");
+
+  const widerruf = gewerbe
+    ? [
+        "§ 11 Widerruf",
+        "Der Kunde handelt als Unternehmer. Ein Widerrufsrecht nach §§ 312g, 355 BGB besteht nicht,",
+        "soweit kein Verbrauchergeschäft vorliegt.",
+        "",
+      ]
+    : [
+        "§ 11 Widerrufsrecht",
+        "Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.",
+        "Die Frist beginnt mit Vertragsschluss. Erklärung per Brief oder E-Mail an info@e1direktvertrieb.de.",
+        "Das Muster in Anlage 3 können Sie verwenden. Zur Frist reicht die rechtzeitige Absendung.",
+        "Wir erstatten Zahlungen spätestens binnen 14 Tagen.",
+        "War die Lieferung auf Wunsch schon in der Frist begonnen, zahlen Sie den Anteil bis zum Widerruf.",
+        "",
+      ];
+
+  const rest = [
     "§ 12 Datenschutz",
     "Verantwortlich: E1 Direktvertrieb, info@e1direktvertrieb.de.",
-    "Verarbeitet werden Stammdaten, Lieferstelle, Verbrauchs- und Vertragsdaten,",
-    "Bankdaten zur Lastschrift sowie Kommunikationsdaten, soweit für Anbahnung,",
-    "Durchführung und Abrechnung des Vertrags und für gesetzliche Pflichten nötig",
-    "(Art. 6 Abs. 1 lit. b und c DSGVO). Empfänger: Lieferant, Netzbetreiber,",
-    "Messstellenbetreiber, Zahlungsdienstleister, IT-Auftragsverarbeiter in der EU.",
-    "Speicherdauer: Vertragslaufzeit plus gesetzliche Aufbewahrung (i. d. R. 6–10 Jahre).",
-    "Rechte: Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch, Beschwerde",
-    "bei einer Aufsichtsbehörde. Einzelheiten: e1direktvertrieb.de/datenschutz",
+    "Verarbeitet werden Stammdaten, Lieferstelle, Verbrauch, Vertrag, Bank- und Kommunikationsdaten",
+    "für Anbahnung, Durchführung, Abrechnung und gesetzliche Pflichten (Art. 6 Abs. 1 lit. b und c DSGVO).",
+    "Empfänger: Lieferant, Netzbetreiber, Messstellenbetreiber, Zahlungsdienstleister, IT in der EU.",
+    "Speicher: Laufzeit plus gesetzliche Aufbewahrung, in der Regel 6 bis 10 Jahre.",
+    "Rechte: Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch, Beschwerde bei der Aufsicht.",
+    "Einzelheiten: e1direktvertrieb.de/datenschutz",
     "",
     "§ 13 Streitbeilegung",
-    "Für Verbraucher: Schlichtungsstelle Energie e. V., Friedrichstraße 133, 10117 Berlin,",
-    "www.schlichtungsstelle-energie.de. Zuständig ist zudem der Verbraucherservice",
-    "der Bundesnetzagentur. E1 ist zur Teilnahme an einem Schlichtungsverfahren verpflichtet,",
-    "soweit E1 oder der Lieferant Energielieferant im Sinne des EnWG ist.",
-    "Online-Streitbeilegung: https://ec.europa.eu/consumers/odr/",
+    gewerbe
+      ? "Für Unternehmer gilt die Schlichtungsstelle Energie nicht als Pflichtverfahren."
+      : "Verbraucher: Schlichtungsstelle Energie e. V., Friedrichstraße 133, 10117 Berlin, www.schlichtungsstelle-energie.de.",
+    gewerbe ? "Es gilt der Rechtsweg." : "Zudem Verbraucherservice der Bundesnetzagentur. ODR: https://ec.europa.eu/consumers/odr/",
     "",
     "§ 14 Schlussbestimmungen",
-    "Es gilt das Recht der Bundesrepublik Deutschland. Gerichtsstand für Kaufleute ist",
-    "der Sitz der Liefergesellschaft, sobald dieser im Impressum genannt ist.",
-    "Sollten einzelne Klauseln unwirksam sein, bleibt der Vertrag im Übrigen wirksam.",
+    "Recht der Bundesrepublik Deutschland.",
+    gewerbe
+      ? "Gerichtsstand ist der Sitz von E1 bzw. der Liefergesellschaft, soweit der Kunde Kaufmann ist."
+      : "Gerichtsstand nach den gesetzlichen Vorschriften.",
     "Mündliche Nebenabreden bestehen nicht. Änderungen in Textform.",
-    "Anlage 1 Preisblatt (Platzhalter) · Anlage 2 AGB · Anlage 3 Widerrufsformular.",
+    "Unwirksame Klauseln lassen den übrigen Vertrag bestehen.",
+    "Anlage 1 Preisblatt. Anlage 2 AGB. Anlage 3 Widerruf" + (gewerbe ? " (nur falls Verbraucher)." : "."),
     "",
     "Ort, Datum: ______________________________",
     "",
-    "Unterschrift Kunde (DocuSign-Anker):  /sign1/",
+    "Unterschrift Kunde:  /sign1/",
+    "Unterschrift Berater:  /sign2/",
     "",
-    "Unterschrift Berater (optional):  /sign2/",
+    ...agbBlock(gewerbe),
     "",
-    ...agbBlock(),
-    "",
-    ...widerrufFormular(d),
+    ...(gewerbe ? gewerbeHinweis() : widerrufFormular(d)),
+  ];
+
+  return [...kopf, ...widerruf, ...rest];
+}
+
+function gewerbeHinweis(): string[] {
+  return [
+    "ANLAGE 3  HINWEIS UNTERNEHMER",
+    "Dieser Vertrag wird als Geschäftskunde geschlossen.",
+    "Ein gesetzliches Widerrufsrecht für Verbraucher greift nicht.",
+    "Preise verstehen sich netto zuzüglich gesetzlicher USt, soweit ausgewiesen.",
   ];
 }
 
-export function agbBlock(): string[] {
+export function agbBlock(gewerbe = false): string[] {
   return [
     "ANLAGE 2 — ALLGEMEINE GESCHÄFTSBEDINGUNGEN",
     "E1 Direktvertrieb (Stand: Entwurf)",
     "",
     "1. Geltungsbereich",
-    "Diese AGB gelten für die Beratung und Vermittlung von Energieverträgen sowie,",
-    "nach Freigabe, für die Belieferung mit Strom und Gas durch E1 bzw. die benannte",
-    "Liefergesellschaft gegenüber Verbrauchern in Deutschland.",
+    gewerbe
+      ? "Diese AGB gelten für Energieverträge mit Unternehmern in Deutschland."
+      : "Diese AGB gelten für Beratung, Vermittlung und Belieferung gegenüber Verbrauchern in Deutschland.",
     "",
     "2. Kein Callcenter, persönliche Beratung",
     "E1 berät persönlich vor Ort oder nach Termin. Es besteht kein Kaufzwang.",

@@ -21,6 +21,8 @@ describe("vertrag", () => {
     }).join("\n");
     for (const c of requiredClauses()) assert.ok(lines.includes(c), c);
     assert.ok(lines.includes("Max Mustermann"));
+    assert.ok(lines.includes("STROMLIEFERVERTRAG"));
+    assert.ok(lines.includes("Haushaltskunde"));
     assert.ok(lines.includes("ALLGEMEINE GESCHÄFTSBEDINGUNGEN") || lines.includes("ALLGEMEINE GESCH"));
     assert.ok(lines.includes("Schlichtungsstelle"));
   });
