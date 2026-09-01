@@ -2102,8 +2102,8 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       payout_debtor_name: map.payout_debtor_name || "E1 Direktvertrieb Inh. Orhan Salo und Luca Marrancone",
       payout_debtor_iban: map.payout_debtor_iban || "",
       payout_debtor_bic: map.payout_debtor_bic || "",
-      public_phone: map.public_phone || process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "",
-      public_phone_label: map.public_phone_label || "Satellite-Festnetz",
+      public_phone: map.public_phone || process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "015678954406",
+      public_phone_label: map.public_phone_label || "Satellite · sipgate",
     };
   });
 

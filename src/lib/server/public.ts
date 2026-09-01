@@ -2,11 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { nid } from "@/lib/utils";
 import { sql } from "./helpers";
 import { MAIL_DOMAIN } from "@/lib/mail";
+import { PUBLIC_PHONE, PUBLIC_PHONE_LABEL } from "@/lib/contact";
 
 export const getPublicContact = createServerFn({ method: "GET" }).handler(async () => {
   const envPhone = (process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "").trim();
-  let phone = envPhone;
-  let label = "Satellite-Festnetz";
+  let phone = envPhone || PUBLIC_PHONE;
+  let label = PUBLIC_PHONE_LABEL;
   try {
     const db = await sql();
     const rows = await db<{ key: string; value: string }>`

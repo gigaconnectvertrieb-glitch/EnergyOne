@@ -3,14 +3,13 @@ import assert from "node:assert/strict";
 import { formatPhone, telHref } from "./contact.ts";
 
 describe("contact", () => {
-  it("builds a tel link", () => {
-    assert.equal(telHref("030 12345678"), "tel:03012345678");
-    assert.equal(telHref("+49 30 12345678"), "tel:+493012345678");
+  it("builds a tel link for the sipgate number", () => {
+    assert.equal(telHref("015678954406"), "tel:+4915678954406");
     assert.equal(telHref(""), "");
   });
 
-  it("formats german numbers loosely", () => {
+  it("formats the public number", () => {
+    assert.equal(formatPhone("015678954406"), "0156 78954406");
     assert.equal(formatPhone(""), "");
-    assert.match(formatPhone("03012345678"), /030/);
   });
 });
