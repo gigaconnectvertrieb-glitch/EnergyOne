@@ -53,7 +53,7 @@ function items(role: Role, flags: Record<string, boolean>) {
   const base = [
     { to: "/portal", label: "Dashboard", icon: LayoutDashboard, show: true },
     { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList, show: true },
-    { to: "/portal/planung", label: "Gebiete", icon: Map, show: flags.field_routing !== false && can(role, "team.view") },
+    { to: "/portal/gebiete", label: "Gebiete", icon: Map, show: flags.field_routing !== false && can(role, "team.view") },
     { to: "/portal/kunden", label: "Kunden", icon: Users, show: true },
     { to: "/portal/postfach", label: "Postfach", icon: Mail, show: true },
     { to: "/portal/provisionen", label: "Provisionen", icon: Wallet, show: true },
@@ -217,7 +217,7 @@ export function PortalShell() {
           { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList },
           { to: "/portal/auftraege/neu", label: "Neu", icon: Plus },
           can(me.profile.role, "team.view")
-            ? { to: "/portal/planung", label: "Gebiete", icon: Map }
+            ? { to: "/portal/gebiete", label: "Gebiete", icon: Map }
             : { to: "/app", label: "Feld", icon: Map },
           { to: "/portal/provisionen", label: "Provision", icon: Wallet },
         ].map((i) => (

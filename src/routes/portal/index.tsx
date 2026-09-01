@@ -72,7 +72,7 @@ function Dashboard() {
               Feld-App
             </Link>
             {can(data.me.role, "team.view") ? (
-              <Link to="/portal/planung" className="rounded-xl px-4 py-3 text-sm gold-hairline">
+              <Link to="/portal/gebiete" className="rounded-xl px-4 py-3 text-sm gold-hairline">
                 Gebiete aufspielen
               </Link>
             ) : null}
