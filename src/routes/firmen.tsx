@@ -11,13 +11,12 @@ function Page() {
         <p className="text-xs uppercase tracking-[0.28em] text-gold">Unternehmen</p>
         <h1 className="mt-2 font-display text-5xl">Energie für den Betrieb.</h1>
         <p className="mt-4 text-lg text-muted">
-          Praxis, Laden, Büro, Gastro, Filiale. Ein fester Ansprechpartner,
-          Anfragen an business@e1direktvertrieb.de.
+          Praxis, Laden, Büro, Gastro, Filiale. Ein fester Ansprechpartner.
+          Anfragen an info@e1direktvertrieb.de.
         </p>
         <ul className="mt-8 grid gap-3 text-sm text-muted">
           <li>Gewerbestrom und Gas</li>
           <li>Kein Callcenter, direkte Geschäftsführung</li>
-          <li>Später: Tarifwahl und Abschluss über die Website</li>
         </ul>
         <div className="mt-10 flex flex-wrap gap-3">
           <Link to="/rechner">
@@ -28,8 +27,8 @@ function Page() {
           </Link>
         </div>
         <p className="mt-6 text-sm text-muted">
-          <a className="text-gold" href="mailto:business@e1direktvertrieb.de">
-            business@e1direktvertrieb.de
+          <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
+            info@e1direktvertrieb.de
           </a>
         </p>
       </div>

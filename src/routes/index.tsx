@@ -129,7 +129,7 @@ function Audience() {
           <h3 className="mt-4 text-xl font-medium">Unternehmen</h3>
           <p className="mt-2 text-sm text-muted">
             Gewerbe, Praxis, Gastronomie, Büro, Filiale. Ein fester Draht,
-            keine Hotline. Anfragen auch an business@.
+            keine Hotline. Anfragen an info@.
           </p>
           <p className="mt-4 text-sm text-gold">Zum Firmenbereich</p>
         </Link>
@@ -336,7 +336,7 @@ function Faq() {
     },
     {
       q: "Beraten Sie auch Firmen?",
-      a: "Ja. Haushalt und Gewerbe. Geschäftskunden schreiben an business@e1direktvertrieb.de oder nutzen das Formular als Unternehmen.",
+      a: "Ja. Haushalt und Gewerbe. Anfragen landen bei info@e1direktvertrieb.de.",
     },
     {
       q: "Kann ich Strom und Gas gleichzeitig wechseln?",

@@ -84,9 +84,7 @@ export const submitLead = createServerFn({ method: "POST" })
       const text = `${who}\nName: ${data.name.trim()}\nTelefon: ${data.phone.trim()}\nPLZ: ${data.zip?.trim() || "—"}\n\n${data.message?.trim() || ""}`;
       await queuePortalMail(db, {
         from: `info@${MAIL_DOMAIN}`,
-        to: kind === "gewerbe"
-          ? `business@${MAIL_DOMAIN}, info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`
-          : `info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
+        to: `info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
         subject: `Neue Beratung · ${who} · ${data.name.trim()}`,
         text,
         purpose: "lead",
