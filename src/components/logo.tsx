@@ -36,7 +36,8 @@ export function Wordmark({
             compact ? "text-xl" : "text-2xl md:text-[1.65rem]",
           )}
         >
-        <span className="font-sans font-semibold text-gold">1</span>
+          E
+          <span className="font-sans">1</span>
         </span>
         <span
           className={cn(
