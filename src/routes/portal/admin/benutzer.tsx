@@ -1,7 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listRegions, listStaffFlags, listUsers, setStaffFlag, updateUser } from "@/lib/server/api";
-import { downloadHvContract } from "@/lib/server/hv-api";
 import { createStaff } from "@/lib/server/staff-auth";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/e1";
 import { STAFF_UNLOCKS } from "@/lib/features";
@@ -107,25 +106,17 @@ function Page() {
                   <p className="mt-1 font-mono text-sm text-gold">Schlüssel {u.invite_code} — noch nicht registriert</p>
                 ) : null}
                 {u.hv_contract_id ? (
-                  <button
-                    type="button"
-                    className="mt-1 text-xs text-gold underline"
-                    onClick={async () => {
-                      try {
-                        const file = await downloadHvContract({ data: { id: u.hv_contract_id! } });
-                        const a = document.createElement("a");
-                        a.href = `data:application/pdf;base64,${file.pdfBase64}`;
-                        a.download = file.filename;
-                        a.click();
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Vertrag fehlt");
-                      }
-                    }}
+                  <Link
+                    to="/portal/admin/vertraege"
+                    search={{ id: u.hv_contract_id }}
+                    className="mt-1 inline-block text-xs text-gold underline"
                   >
-                    HV-Vertrag in der Datenbank · PDF
-                  </button>
+                    HV-Vertrag lesen (Datenbank)
+                  </Link>
                 ) : u.role !== "super_admin" ? (
-                  <p className="mt-1 text-xs text-muted">Noch kein HV-Vertrag — unter Verträge anlegen</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Noch kein HV-Vertrag — links unter HV-Verträge anlegen und den Mitarbeiter auswählen.
+                  </p>
                 ) : null}
                 {u.role !== "super_admin" ? <StaffUnlocks userId={u.user_id} /> : (
                   <p className="mt-2 text-xs text-gold">Geschäftsführung: alle Module frei</p>

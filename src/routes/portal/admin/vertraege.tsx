@@ -1,31 +1,57 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { createHvContract, deleteHvContract, downloadHvContract, listHvContracts, previewMusterHv, saveHvTabletSign, sendHvProvisionMail, sendHvSignEmail } from "@/lib/server/hv-api";
+import {
+  createHvContract,
+  deleteHvContract,
+  downloadHvContract,
+  getHvContract,
+  listHvContracts,
+  previewMusterHv,
+  saveHvTabletSign,
+  sendHvProvisionMail,
+  sendHvSignEmail,
+} from "@/lib/server/hv-api";
 import { SignaturePad } from "@/components/signature-pad";
 import { listUsers } from "@/lib/server/api";
 import { previewMusterVertrag } from "@/lib/server/sign-api";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
+import { deDate } from "@/lib/utils";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/portal/admin/vertraege")({ component: Page });
+export const Route = createFileRoute("/portal/admin/vertraege")({
+  validateSearch: (raw: Record<string, unknown>) => ({
+    id: typeof raw.id === "string" ? raw.id : "",
+  }),
+  component: Page,
+});
+
+function pdfBlobUrl(b64: string) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+}
 
 function savePdf(filename: string, b64: string) {
+  const url = pdfBlobUrl(b64);
   const a = document.createElement("a");
-  a.href = "data:application/pdf;base64," + b64;
+  a.href = url;
   a.download = filename;
   a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function Page() {
+  const { id } = Route.useSearch();
   const [tab, setTab] = useState<"hv" | "kunde">("hv");
   return (
     <div className="mx-auto max-w-3xl pb-16">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Recht</p>
-      <h1 className="mt-1 font-display text-4xl">Verträge</h1>
+      <h1 className="mt-1 font-display text-4xl">HV-Verträge</h1>
       <p className="mt-2 text-sm text-muted">
-        Vollständige Vertragsurkunden nach HGB / EnWG / DSGVO. Erst Muster laden, dann mit Namen
-        ausfüllen. Vor dem ersten Live-Einsatz kurz den Anwalt gegenlesen lassen.
+        Jeder erzeugte Vertrag liegt in der Datenbank. Unten die gespeicherten Urkunden öffnen und lesen —
+        nicht nur herunterladen. Mitarbeiter auswählen, Name und Adresse, dann erzeugen.
       </p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <Button
@@ -63,14 +89,16 @@ function Page() {
           Kunden-Muster
         </Button>
       </div>
-      {tab === "hv" ? <HvPanel /> : <KundePanel />}
+      {tab === "hv" ? <HvPanel openId={id} /> : <KundePanel />}
     </div>
   );
 }
 
-function HvPanel() {
+function HvPanel({ openId }: { openId?: string }) {
   const [users, setUsers] = useState<Awaited<ReturnType<typeof listUsers>>>([]);
   const [list, setList] = useState<Awaited<ReturnType<typeof listHvContracts>>>([]);
+  const [listErr, setListErr] = useState<string | null>(null);
+  const [view, setView] = useState<Awaited<ReturnType<typeof getHvContract>> | null>(null);
   const [padFor, setPadFor] = useState<string | null>(null);
   const [sign, setSign] = useState("");
   const [mailFor, setMailFor] = useState<string | null>(null);
@@ -96,9 +124,32 @@ function HvPanel() {
 
   function load() {
     listUsers().then(setUsers).catch(() => setUsers([]));
-    listHvContracts().then(setList).catch(() => setList([]));
+    listHvContracts()
+      .then((rows) => {
+        setList(rows);
+        setListErr(null);
+      })
+      .catch((e: unknown) => {
+        setList([]);
+        setListErr(e instanceof Error ? e.message : "Verträge nicht geladen");
+      });
   }
   useEffect(load, []);
+  useEffect(() => {
+    if (!openId) return;
+    getHvContract({ data: { id: openId } })
+      .then(setView)
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Vertrag nicht gefunden"));
+  }, [openId]);
+
+  async function openContract(id: string) {
+    try {
+      setView(await getHvContract({ data: { id } }));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Vertrag nicht gefunden");
+    }
+  }
 
   function pick(userId: string) {
     const u = users.find((x) => x.user_id === userId);
@@ -114,8 +165,37 @@ function HvPanel() {
 
   return (
     <>
+      {view ? (
+        <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Gespeichert in der Datenbank</p>
+          <h2 className="mt-1 font-display text-3xl">
+            {view.first_name} {view.last_name}
+          </h2>
+          <p className="text-sm text-muted">
+            {view.staff_id || "ohne ID"} · Stufe {view.stufe} · {view.city || "—"} ·{" "}
+            {view.signed_at ? "unterschrieben" : "noch nicht unterschrieben"}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => savePdf(view.filename, view.pdfBase64)}
+            >
+              PDF herunterladen
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setView(null)}>
+              Schließen
+            </Button>
+          </div>
+          <pre className="mt-4 max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-2xl bg-elevated p-4 text-xs leading-relaxed">
+            {view.lines.join("\n")}
+          </pre>
+        </div>
+      ) : null}
+
       <form
-        className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline"
+        className="mt-8 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline"
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
@@ -123,9 +203,9 @@ function HvPanel() {
             const res = await createHvContract({
               data: { ...form, stufe: 1, userId: form.userId || undefined },
             });
-            savePdf(res.filename, res.pdfBase64);
-            toast.success("Vertrag erstellt · PDF gespeichert");
+            toast.success("Vertrag in der Datenbank gespeichert");
             load();
+            await openContract(res.id);
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "Erstellen fehlgeschlagen");
           } finally {
@@ -133,7 +213,7 @@ function HvPanel() {
           }
         }}
       >
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Automatisch erzeugen</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Neuen HV-Vertrag anlegen</p>
         <Field label="Bestehenden Mitarbeiter übernehmen (optional)">
           <Select value={form.userId} onChange={(e) => pick(e.target.value)}>
             <option value="">Neu / manuell</option>
@@ -228,11 +308,16 @@ function HvPanel() {
           Datenschutz, Vertragsstrafen und Freistellung.
         </p>
         <Button type="submit" disabled={busy}>
-          {busy ? "Erzeugt…" : "Vertrag als PDF erzeugen"}
+          {busy ? "Speichert…" : "Vertrag speichern und anzeigen"}
         </Button>
       </form>
 
-      <div className="mt-6 grid gap-2">
+      <h2 className="mt-10 font-display text-2xl">Gespeicherte HV-Verträge</h2>
+      {listErr ? <p className="mt-2 text-sm text-danger">{listErr}</p> : null}
+      {list.length === 0 && !listErr ? (
+        <p className="mt-2 text-sm text-muted">Noch keiner. Oben anlegen — dann erscheint er hier und bleibt in der Datenbank.</p>
+      ) : null}
+      <div className="mt-3 grid gap-2">
         {list.map((r) => (
           <div key={r.id} className="rounded-2xl bg-surface px-4 py-3 gold-hairline">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -241,11 +326,14 @@ function HvPanel() {
                   {r.first_name} {r.last_name}
                 </p>
                 <p className="text-xs text-muted">
-                  {r.staff_id || "ohne ID"} · Stufe {r.stufe} · {r.city || "—"} ·{" "}
+                  {r.staff_id || "ohne ID"} · Stufe {r.stufe} · {r.city || "—"} · {deDate(r.created_at)} ·{" "}
                   {r.signed_at ? `unterschrieben (${r.signed_channel === "tablet" ? "Tablet" : "DocuSign"})` : "noch offen"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => void openContract(r.id)}>
+                  Lesen
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

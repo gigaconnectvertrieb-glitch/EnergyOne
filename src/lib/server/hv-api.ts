@@ -27,35 +27,11 @@ export const createHvContract = createServerFn({ method: "POST" })
     if (!data.street?.trim() || !data.zip?.trim() || !data.city?.trim()) {
       throw new Error("Adresse fehlt.");
     }
-    const bands = await db<{
-      provider: string;
-      name: string;
-      type: string;
-      kwh_from: number;
-      kwh_to: number;
-      amount_eur: string | number;
-      amount_ct_kwh: string | number;
-    }>`
-      select t.provider, t.name, t.type, b.kwh_from, b.kwh_to, b.amount_eur, b.amount_ct_kwh
-      from tariff_bands b
-      join tariffs t on t.id = b.tariff_id
-      where b.stufe = 1 and t.active = true
-      order by t.provider, t.name, b.kwh_from
-    `;
     const input: HvInput = {
       ...data,
       first: data.first.trim(),
       last: data.last.trim(),
       stufe: 1,
-      bands: bands.map((b) => ({
-        provider: b.provider,
-        name: b.name,
-        type: b.type,
-        kwh_from: Number(b.kwh_from),
-        kwh_to: Number(b.kwh_to),
-        amount_eur: Number(b.amount_eur),
-        amount_ct_kwh: Number(b.amount_ct_kwh),
-      })),
     };
     const lines = fillHvVertrag(input);
     const id = nid();
@@ -122,6 +98,46 @@ export const listHvContracts = createServerFn({ method: "GET" })
       limit 80
     `;
     return rows;
+  });
+
+export const getHvContract = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage") && !can(me.role, "settings.manage")) {
+      throw new Error("Kein Zugriff");
+    }
+    const [row] = await db<Record<string, unknown>>`
+      select * from staff_contracts where id = ${data.id}
+    `;
+    if (!row) throw new Error("Vertrag nicht gefunden.");
+    const body = String(row.body || "");
+    const lines = body.split("\n");
+    const pdf = buildPagedPdf(lines, "Handelsvertretervertrag");
+    return {
+      id: String(row.id),
+      user_id: row.user_id ? String(row.user_id) : null,
+      staff_id: row.staff_id ? String(row.staff_id) : null,
+      first_name: String(row.first_name || ""),
+      last_name: String(row.last_name || ""),
+      street: String(row.street || ""),
+      house_number: String(row.house_number || ""),
+      zip: String(row.zip || ""),
+      city: String(row.city || ""),
+      email: row.email ? String(row.email) : null,
+      phone: row.phone ? String(row.phone) : null,
+      region: row.region ? String(row.region) : null,
+      start_date: row.start_date ? String(row.start_date) : null,
+      stufe: Number(row.stufe) || 1,
+      signed_at: row.signed_at ? String(row.signed_at) : null,
+      signed_channel: row.signed_channel ? String(row.signed_channel) : null,
+      created_at: String(row.created_at || ""),
+      lines,
+      filename: downloadName(String(row.last_name || "HV"), String(row.id)),
+      pdfBase64: pdf.toString("base64"),
+    };
   });
 
 export const deleteHvContract = createServerFn({ method: "POST" })

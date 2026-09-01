@@ -76,7 +76,7 @@ function items(role: Role, flags: Record<string, boolean>) {
     { to: "/portal/admin/audit", label: "Audit", icon: Shield, show: can(role, "audit.view") },
     { to: "/portal/admin/mail", label: "Workspace", icon: Mail, show: can(role, "settings.manage") },
     { to: "/portal/admin/signatur", label: "Signatur", icon: PenLine, show: can(role, "settings.manage") },
-    { to: "/portal/admin/vertraege", label: "Verträge", icon: ScrollText, show: can(role, "settings.manage") },
+    { to: "/portal/admin/vertraege", label: "HV-Verträge", icon: ScrollText, show: can(role, "settings.manage") },
     { to: "/portal/admin/einstellungen", label: "System", icon: Settings, show: can(role, "settings.manage") },
   ];
   return { base: base.filter((i) => i.show), admin: admin.filter((i) => i.show) };
