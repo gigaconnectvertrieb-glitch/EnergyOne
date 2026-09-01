@@ -48,7 +48,7 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
                 to={n.to}
                 className={cn(
                   "text-[13px] tracking-[0.14em] uppercase text-muted hover:text-ink",
-                  pathname === n.to && "text-gold",
+                  (n.to === "/firmen" ? pathname === "/firmen" : pathname.startsWith(n.to)) && "text-gold",
                 )}
               >
                 {n.label}

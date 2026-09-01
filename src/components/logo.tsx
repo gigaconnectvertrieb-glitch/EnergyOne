@@ -29,7 +29,7 @@ export function Wordmark({
         alt=""
         className={cn("shrink-0 object-contain", compact ? "h-10 w-auto" : "h-12 w-auto md:h-14")}
       />
-      <span className="flex items-center gap-1.5 leading-none whitespace-nowrap">
+      <span className="flex items-center leading-none whitespace-nowrap">
         <span
           className={cn(
             "font-display font-semibold text-gold",
@@ -40,21 +40,21 @@ export function Wordmark({
         </span>
         <span
           className={cn(
-            "font-semibold uppercase text-ink",
+            "ml-1.5 font-semibold uppercase text-ink",
             compact ? "text-[10px] tracking-[0.16em]" : "text-[11px] tracking-[0.18em] md:text-xs",
           )}
         >
           Direktvertrieb
         </span>
-        <span
-          className={cn(
-            "font-sans font-semibold text-gold",
-            compact ? "text-sm" : "text-base md:text-lg",
-          )}
-          title="Marke"
-        >
-          ®
-        </span>
+      </span>
+      <span
+        className={cn(
+          "ml-3 shrink-0 font-sans font-semibold text-gold",
+          compact ? "text-sm" : "text-base md:text-lg",
+        )}
+        title="Marke"
+      >
+        ®
       </span>
     </Link>
   );
