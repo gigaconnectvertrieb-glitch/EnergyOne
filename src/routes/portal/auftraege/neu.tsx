@@ -115,7 +115,7 @@ function Capture() {
       .catch(() => setQuote(null));
   }, [tariffId, kwh, forStaff, staff, stufe]);
 
-  async function save() {
+  async function save(parked: boolean) {
     if (!first.trim() || !last.trim()) {
       toast.error("Name fehlt.");
       return;
@@ -168,7 +168,7 @@ function Capture() {
           forStaffId: forStaff || undefined,
           inNewsales: !full,
           fullFlow: full,
-          parked: true,
+          parked,
           iban: iban || undefined,
           bankOwner: bankOwner || undefined,
           bic: bic || undefined,
@@ -193,9 +193,13 @@ function Capture() {
         },
       });
       toast.success(
-        res.margin
-          ? `Geparkt · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
-          : `Geparkt · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
+        parked
+          ? res.margin
+            ? `Geparkt · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
+            : `Geparkt · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`
+          : res.margin
+            ? `Gebucht · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
+            : `Gebucht · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
       );
       nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
@@ -208,9 +212,9 @@ function Capture() {
   return (
     <div className="mx-auto max-w-xl pb-16">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld · Aufnahme</p>
-      <h1 className="mt-1 font-display text-4xl">Auftrag parken</h1>
+      <h1 className="mt-1 font-display text-4xl">Auftrag aufnehmen</h1>
       <p className="mt-2 text-sm text-muted">
-        Wie in New Sales: speichern, später ergänzen. Kein Erfassen-Button — der Auftrag bleibt geparkt, bis ihr den Status weiterzieht.
+        Parken: speichern und später ergänzen. Buchen: Abschluss steht, Provision zählt.
         IBAN optional. Stufe {stufe}.
       </p>
 
@@ -492,9 +496,12 @@ function Capture() {
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
-        <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save()}>
-          {busy ? "Parkt…" : "Parken"}
+      <div className="mt-4 grid gap-2 rounded-3xl bg-surface p-5 gold-hairline sm:grid-cols-2">
+        <Button variant="outline" className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(true)}>
+          {busy ? "Speichert…" : "Parken"}
+        </Button>
+        <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(false)}>
+          {busy ? "Speichert…" : "Auftrag buchen"}
         </Button>
       </div>
     </div>
