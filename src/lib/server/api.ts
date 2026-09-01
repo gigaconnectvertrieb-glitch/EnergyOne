@@ -435,6 +435,35 @@ export const sendParkedContract = createServerFn({ method: "POST" })
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (${nid()}, ${data.id}, 'erfasst', 'uebermittelt', ${context.userId}, ${"Geparkt gesendet"})
     `;
+    const [cust] = await db<{ email: string | null; first_name: string; last_name: string }>`
+      select cu.email, cu.first_name, cu.last_name
+      from contracts c join customers cu on cu.id = c.customer_id
+      where c.id = ${data.id}
+    `;
+    const mail = (cust?.email || "").trim().toLowerCase();
+    if (mail.includes("@")) {
+      try {
+        const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+        if (gmailAppPasswordReady()) {
+          await sendViaAppPassword({
+            to: mail,
+            from: "info@e1direktvertrieb.de",
+            subject: "Ihre Anfrage bei E1 Direktvertrieb",
+            text: [
+              `Guten Tag ${cust?.first_name || ""} ${cust?.last_name || ""},`.trim() + ",",
+              "",
+              "wir haben Ihren Abschluss aufgenommen und weitergeleitet.",
+              "",
+              "Bei Fragen: info@e1direktvertrieb.de oder 015678954406.",
+              "",
+              "E1 Direktvertrieb",
+            ].join("\n"),
+          });
+        }
+      } catch {
+        /* optional */
+      }
+    }
     return { ok: true, id: data.id };
   });
 
@@ -626,6 +655,33 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     message: `${me.first_name} ${me.last_name} hat ${data.firstName} ${data.lastName} in die Datenbank gesetzt · ${asStr(tariff.name)} (${amount.toFixed(2)} €).`,
     link: `/portal/auftraege/${id}`
   });
+  const customerMail = (data.email || "").trim().toLowerCase();
+  if (!parked && customerMail.includes("@")) {
+    try {
+      const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+      if (gmailAppPasswordReady()) {
+        await sendViaAppPassword({
+          to: customerMail,
+          from: "info@e1direktvertrieb.de",
+          subject: "Ihre Anfrage bei E1 Direktvertrieb",
+          text: [
+            `Guten Tag ${data.firstName} ${data.lastName},`,
+            "",
+            "wir haben Ihren Abschluss aufgenommen.",
+            `Produkt: ${asStr(tariff.provider)} ${asStr(tariff.name)}`,
+            `Lieferstelle: ${data.street.trim()} ${data.houseNumber.trim()}, ${data.zip.trim()} ${data.city.trim()}`,
+            "",
+            "Der Vorgang läuft über unseren Partner. Bei Fragen erreichen Sie uns unter info@e1direktvertrieb.de oder 015678954406.",
+            "",
+            "E1 Direktvertrieb",
+            "Orhan Salo und Luca-Marco Marrancone",
+          ].join("\n"),
+        });
+      }
+    } catch {
+      /* Kundenmail optional, Auftrag bleibt */
+    }
+  }
   try {
     const { runGoalNudges } = await import("./goal-nudge.server");
     await runGoalNudges(db, ownerId);
