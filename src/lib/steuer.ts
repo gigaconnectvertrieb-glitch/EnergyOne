@@ -130,6 +130,43 @@ export function leftover(input: {
   return input.proviPaid - input.expensesCash - input.ustSetAside - input.estSetAside;
 }
 
+export type ExpenseCadence = "einmal" | "monat" | "jahr";
+
+export function annualizeExpense(amount: number, cadence: string) {
+  if (cadence === "monat") return round2(amount * 12);
+  return round2(amount);
+}
+
+export function payoutSetAside(input: {
+  payout: number;
+  paidYtd: number;
+  kleinunternehmer: boolean;
+  monthlyFix: number;
+  yearlyBa: number;
+}) {
+  const payout = round2(Math.max(0, input.payout));
+  const ytd = round2(Math.max(0, input.paidYtd) + payout);
+  const ust = input.kleinunternehmer ? 0 : round2(payout * UST_RATE);
+  const taxable = Math.max(0, ytd - Math.max(0, input.yearlyBa));
+  const estYear = estReserve(taxable);
+  const est = ytd > 0 ? round2(estYear * (payout / ytd)) : 0;
+  const fix = round2(Math.max(0, input.monthlyFix));
+  const setAside = round2(ust + est + fix);
+  const keep = round2(payout - setAside);
+  return { ust, est, fix, setAside, keep };
+}
+
+export function payoutHintText(sum: number, aside: ReturnType<typeof payoutSetAside>) {
+  const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  const parts = [
+    aside.ust > 0 ? `ca. ${eur(aside.ust)} USt` : null,
+    aside.est > 0 ? `ca. ${eur(aside.est)} ESt` : null,
+    aside.fix > 0 ? `${eur(aside.fix)} Fixkosten` : null,
+  ].filter(Boolean);
+  const lay = parts.length ? `Zur Seite legen: ${parts.join(", ")}.` : "Keine Steuerrücklage hinterlegt.";
+  return `Auszahlung ${eur(sum)}. ${lay} Ungefähr bleibt ${eur(Math.max(0, aside.keep))}. Genaues im Steuerbuch.`;
+}
+
 export type Reminder = {
   key: string;
   title: string;

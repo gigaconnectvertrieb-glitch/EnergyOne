@@ -170,6 +170,7 @@ function Page() {
                   <option value="1">Stufe 1</option>
                   <option value="2">Stufe 2</option>
                   <option value="3">Stufe 3</option>
+                  <option value="13">Stufe 13 · Agentur</option>
                 </Select>
                 <Select
                   value={u.status}

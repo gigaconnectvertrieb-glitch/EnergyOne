@@ -96,9 +96,17 @@ function Dashboard() {
         </div>
       ) : null}
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi label="Dein Umsatz" value={eur(data.myTurnover || 0)} hint="eigene Abschlüsse, nicht storniert" />
         <Kpi label="Abschlüsse Monat" value={String(data.monthWon)} hint={`Ziel ${data.target}`} />
         <Kpi label="Neue Aufträge" value={String(data.monthCount)} hint="diesen Monat" />
         <Kpi label="Provision offen" value={eur(data.commissionOpen)} hint={`Freigegeben ${eur(data.commissionApproved)}`} />
+        {data.me.role === "super_admin" || data.me.role === "buchhaltung" ? (
+          <>
+            <Kpi label="Agentur New Sales" value={eur(data.agencyGross || 0)} hint="Stufe 13 gesamt" />
+            <Kpi label="An Mitarbeiter" value={eur(data.agencyAdvisor || 0)} hint="deren Stufen" />
+            <Kpi label="E1-Marge" value={eur(data.agencyMargin || 0)} hint={`abzgl. Fix ${eur(data.agencyFix || 0)} → ${eur((data.agencyMargin || 0) - (data.agencyFix || 0))}`} />
+          </>
+        ) : null}
         <Kpi label="Stornos gesamt" value={String(data.storno)} hint={`${data.total} Aufträge`} />
         <Link to="/portal/postfach" className="block sm:col-span-2 xl:col-span-1">
           <Kpi
@@ -146,8 +154,8 @@ function Dashboard() {
         <Link to="/app" className="rounded-xl px-4 py-3 text-sm gold-hairline">
           Feld-App
         </Link>
-        <Link to="/portal/postfach" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-          Postfach
+        <Link to="/portal/steuern" className="rounded-xl px-4 py-3 text-sm gold-hairline">
+          Steuerbuch
         </Link>
       </div>
       <div className="mt-6 flex flex-wrap gap-2">

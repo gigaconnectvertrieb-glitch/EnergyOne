@@ -1,6 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { baAmount, elsterCsv, leftover, nextVatDeadline, splitMoney, ustVa, vatQuarter } from "./steuer.ts";
+import {
+  annualizeExpense,
+  baAmount,
+  elsterCsv,
+  leftover,
+  nextVatDeadline,
+  payoutHintText,
+  payoutSetAside,
+  splitMoney,
+  ustVa,
+  vatQuarter,
+} from "./steuer.ts";
 
 describe("steuer", () => {
   it("splits 19 percent vat", () => {
@@ -28,5 +39,23 @@ describe("steuer", () => {
     assert.equal(v.kz66, 19);
     assert.equal(v.kz83, 171);
     assert.match(elsterCsv({ name: "Max", quarter: q.label, kz81: v.kz81, kz66: v.kz66, kz83: v.kz83 }), /81/);
+  });
+  it("annualizes monthly fixkosten", () => {
+    assert.equal(annualizeExpense(200, "monat"), 2400);
+    assert.equal(annualizeExpense(900, "jahr"), 900);
+    assert.equal(annualizeExpense(50, "einmal"), 50);
+  });
+  it("tells staff how much to set aside on payout", () => {
+    const a = payoutSetAside({
+      payout: 160,
+      paidYtd: 0,
+      kleinunternehmer: false,
+      monthlyFix: 40,
+      yearlyBa: 480,
+    });
+    assert.equal(a.ust, 30.4);
+    assert.ok(a.fix === 40);
+    assert.match(payoutHintText(160, a), /Zur Seite legen/);
+    assert.match(payoutHintText(160, a), /USt/);
   });
 });

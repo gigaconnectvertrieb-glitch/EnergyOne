@@ -97,8 +97,14 @@ function Page() {
           {c.start_date ? <p>Lieferbeginn {deDate(c.start_date)}</p> : null}
         </Card>
         <Card title="Provision">
-          <p className="font-display text-2xl">{eur(c.commission_amount)}</p>
-          <p className="text-sm text-muted">Stufe {c.commission_stufe || 1}</p>
+          <p className="font-display text-2xl">{eur(c.advisor_amount ?? c.commission_amount)}</p>
+          <p className="text-sm text-muted">Berater Stufe {c.commission_stufe || 1}</p>
+          {c.show_split ? (
+            <>
+              <p className="mt-2 text-sm">Agentur (NS 13) {eur(c.agency_amount ?? c.commission_amount)}</p>
+              <p className="text-sm text-gold">E1-Marge {eur(c.margin_amount ?? 0)}</p>
+            </>
+          ) : null}
           {data.commissions.map((x) => (
             <p key={x.id} className="text-xs text-muted">
               {x.type} · {eur(x.amount)} · {x.status}

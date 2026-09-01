@@ -15,7 +15,7 @@ function today() {
 }
 
 function Page() {
-  const [tab, setTab] = useState<"buch" | "kompass">("buch");
+  const [tab, setTab] = useState<"buch" | "agentur" | "kompass">("buch");
   const [data, setData] = useState<Awaited<ReturnType<typeof getSteuer>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -26,6 +26,8 @@ function Page() {
     gross: true,
     km: "",
     note: "",
+    cadence: "einmal" as "einmal" | "monat" | "jahr",
+    scope: "user" as "user" | "agency",
   });
 
   function load() {
@@ -46,6 +48,8 @@ function Page() {
           gross: form.gross,
           km: form.category === "km" ? Number(String(form.km).replace(",", ".")) : undefined,
           note: form.note,
+          cadence: form.cadence,
+          scope: tab === "agentur" ? "agency" : form.scope,
         },
       });
       toast.success("Gebucht");
@@ -66,12 +70,17 @@ function Page() {
       <h1 className="mt-1 font-display text-4xl">Steuer</h1>
       <p className="mt-2 text-sm text-muted">
         Tanken, KV, IHK und den Rest eintragen — dann siehst du, was von der Provision wirklich bleibt.
-        19 % USt und ESt werden zurückgelegt, nicht ausgegeben.
+        19 % USt und ESt werden zurückgelegt, nicht ausgegeben. Fixkosten monatlich oder jährlich.
       </p>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button variant={tab === "buch" ? "default" : "outline"} onClick={() => setTab("buch")}>
           Mein Buch
         </Button>
+        {data.canAgency ? (
+          <Button variant={tab === "agentur" ? "default" : "outline"} onClick={() => setTab("agentur")}>
+            Agentur
+          </Button>
+        ) : null}
         <Button variant={tab === "kompass" ? "default" : "outline"} onClick={() => setTab("kompass")}>
           Steuerkompass
         </Button>
@@ -193,6 +202,23 @@ function Page() {
             <Field label="Notiz">
               <Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Tankstelle, Belegnr. …" />
             </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Rhythmus">
+                <Select value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value as typeof form.cadence })}>
+                  <option value="einmal">Einmal</option>
+                  <option value="monat">Monatlich (Fixkosten)</option>
+                  <option value="jahr">Jährlich</option>
+                </Select>
+              </Field>
+              {data.canAgency && tab === "buch" ? (
+                <Field label="Buch">
+                  <Select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value as "user" | "agency" })}>
+                    <option value="user">Privat / HV</option>
+                    <option value="agency">Agentur</option>
+                  </Select>
+                </Field>
+              ) : null}
+            </div>
             <Button type="submit" disabled={busy}>
               {busy ? "Speichert…" : "Buchen"}
             </Button>
@@ -205,6 +231,7 @@ function Page() {
                   <p className="font-medium">{e.label}</p>
                   <p className="text-xs text-muted">
                     {deDate(e.spent_on)}
+                    {e.cadence === "monat" ? " · monatlich" : e.cadence === "jahr" ? " · jährlich" : ""}
                     {e.km ? ` · ${e.km} km` : ""}
                     {e.note ? ` · ${e.note}` : ""}
                     {e.private ? " · Sonderausgabe" : ""}
@@ -290,6 +317,8 @@ function Page() {
             </Button>
           </form>
         </>
+      ) : tab === "agentur" ? (
+        <Agentur data={data} form={form} setForm={setForm} busy={busy} saveExp={saveExp} load={load} />
       ) : (
         <Kompass />
       )}
@@ -304,6 +333,111 @@ function Kpi({ t, v, h, gold }: { t: string; v: string; h: string; gold?: boolea
       <p className={`mt-2 font-display text-3xl ${gold ? "text-gold" : ""}`}>{v}</p>
       <p className="mt-1 text-xs text-muted">{h}</p>
     </div>
+  );
+}
+
+function Agentur({
+  data,
+  form,
+  setForm,
+  busy,
+  saveExp,
+  load,
+}: {
+  data: NonNullable<Awaited<ReturnType<typeof getSteuer>>>;
+  form: {
+    spentOn: string;
+    category: ExpenseCat;
+    amount: string;
+    vatRate: string;
+    gross: boolean;
+    km: string;
+    note: string;
+    cadence: "einmal" | "monat" | "jahr";
+    scope: "user" | "agency";
+  };
+  setForm: (next: typeof form | ((p: typeof form) => typeof form)) => void;
+  busy: boolean;
+  saveExp: (e: FormEvent) => Promise<void>;
+  load: () => void;
+}) {
+  const ag = data.agency;
+  if (!ag) {
+    return <p className="mt-6 text-sm text-muted">Agentur-Zahlen erscheinen, sobald Verträge mit Stufe-13-Split vorliegen.</p>;
+  }
+  return (
+    <>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <Kpi t="New Sales Stufe 13" v={eur(ag.gross)} h="was New Sales der Agentur zahlt" />
+        <Kpi t="An Mitarbeiter" v={eur(ag.advisor)} h="deren Stufen 1–3 plus eigene Abschlüsse" />
+        <Kpi t="E1-Marge" v={eur(ag.margin)} h={`Fixkosten ${eur(ag.fix)}`} />
+        <Kpi t="Übrig nach Steuer" v={eur(ag.leftover)} h={`USt ${eur(ag.ustSetAside)} · ESt ${eur(ag.estSetAside)}`} gold />
+      </div>
+      <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline" onSubmit={saveExp}>
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Agentur-Fixkosten</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Datum">
+            <Input type="date" value={form.spentOn} onChange={(e) => setForm({ ...form, spentOn: e.target.value })} required />
+          </Field>
+          <Field label="Art">
+            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ExpenseCat })}>
+              {(Object.keys(EXPENSE_CATS) as ExpenseCat[]).map((k) => (
+                <option key={k} value={k}>
+                  {EXPENSE_CATS[k].label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Betrag EUR">
+          <Input inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Rhythmus">
+            <Select value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value as typeof form.cadence })}>
+              <option value="einmal">Einmal</option>
+              <option value="monat">Monatlich</option>
+              <option value="jahr">Jährlich</option>
+            </Select>
+          </Field>
+          <Field label="Notiz">
+            <Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Miete, Software, Büro…" />
+          </Field>
+        </div>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Speichert…" : "Auf Agentur buchen"}
+        </Button>
+      </form>
+      <div className="mt-6 grid gap-2">
+        {ag.expenses.map((e) => (
+          <div key={e.id} className="flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 gold-hairline">
+            <div>
+              <p className="font-medium">{e.label}</p>
+              <p className="text-xs text-muted">
+                {deDate(e.spent_on)}
+                {e.cadence === "monat" ? " · monatlich" : e.cadence === "jahr" ? " · jährlich" : ""}
+                {e.note ? ` · ${e.note}` : ""}
+                {e.cadence === "monat" ? ` · Jahr ${eur(e.yearAmount)}` : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="tabular-nums text-gold">{eur(e.amount)}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-danger"
+                onClick={async () => {
+                  await deleteTaxExpense({ data: { id: e.id } });
+                  load();
+                }}
+              >
+                Weg
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

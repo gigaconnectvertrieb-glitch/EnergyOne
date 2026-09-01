@@ -125,6 +125,10 @@ export function can(role: Role, perm: Permission) {
   return MATRIX[role]?.includes(perm) ?? false;
 }
 
+export function canSeeAgency(role: Role) {
+  return role === "super_admin" || role === "buchhaltung";
+}
+
 export function canChangeStatus(role: Role, from: ContractStatus, to: ContractStatus) {
   if (!TRANSITIONS[from].includes(to)) return false;
   if (to === "storniert") return can(role, "contracts.cancel");
@@ -176,7 +180,7 @@ export type Profile = {
   phone: string | null;
   monthly_target: number;
   totp_enabled: boolean;
-  commission_stufe: 1 | 2 | 3;
+  commission_stufe: 1 | 2 | 3 | 13;
   onboarding_status: string;
   notes: string | null;
   is_demo: boolean;

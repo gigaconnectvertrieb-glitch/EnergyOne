@@ -35,6 +35,7 @@ function Capture() {
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({ providers: [], items: [] });
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
   const [stufe, setStufe] = useState(1);
+  const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
   const [forStaff, setForStaff] = useState("");
@@ -50,6 +51,7 @@ function Capture() {
     bootstrapMe()
       .then((m) => {
         setStufe(m.profile.commission_stufe || 1);
+        setRole(m.profile.role);
         setForStaff(m.profile.user_id);
         setCanFull(Boolean(m.flags.full_contract || m.flags.phase2_own_tariffs));
       })
@@ -79,10 +81,11 @@ function Capture() {
       setQuote(null);
       return;
     }
-    quoteCommission({ data: { tariffId, consumptionKwh: Number(kwh) } })
+    const staffStufe = staff.find((s) => s.user_id === forStaff)?.commission_stufe ?? stufe;
+    quoteCommission({ data: { tariffId, consumptionKwh: Number(kwh), stufe: staffStufe } })
       .then(setQuote)
       .catch(() => setQuote(null));
-  }, [tariffId, kwh]);
+  }, [tariffId, kwh, forStaff, staff, stufe]);
 
   async function save() {
     if (!first.trim() || !last.trim()) {
@@ -132,7 +135,11 @@ function Capture() {
           signatureData: full ? sign : undefined,
         },
       });
-      toast.success(`In der Datenbank · ${eur(res.amount)}`);
+      toast.success(
+        res.margin
+          ? `In der Datenbank · Berater ${eur(res.advisor)} · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}`
+          : `In der Datenbank · ${eur(res.amount)}`,
+      );
       nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
@@ -156,7 +163,7 @@ function Capture() {
             <Select value={forStaff} onChange={(e) => setForStaff(e.target.value)}>
               {staff.map((s) => (
                 <option key={s.user_id} value={s.user_id}>
-                  {s.staff_id ? `${s.staff_id} · ${s.name}` : s.name}
+                  {s.staff_id ? `${s.staff_id} · ${s.name}` : s.name} · Stufe {s.commission_stufe || 1}
                 </option>
               ))}
             </Select>
@@ -253,7 +260,18 @@ function Capture() {
         ) : (
           <p className="mt-2 text-sm text-muted">Tarif und Verbrauch wählen.</p>
         )}
-        {quote?.ok ? <p className="mt-3 font-display text-4xl text-gold">{eur(quote.amount)}</p> : null}
+        {quote?.ok ? (
+          <>
+            <p className="mt-3 font-display text-4xl text-gold">{eur(quote.advisor)}</p>
+            <p className="text-sm text-muted">Berater Stufe {quote.stufe}</p>
+            {quote.margin > 0 && (role === "super_admin" || role === "buchhaltung" || role === "gebietsleiter") ? (
+              <>
+                <p className="mt-2 text-sm">Agentur NS 13 {eur(quote.agency)}</p>
+                <p className="text-sm text-gold">E1-Marge {eur(quote.margin)}</p>
+              </>
+            ) : null}
+          </>
+        ) : null}
         {quote && !quote.ok ? <p className="mt-3 text-sm text-danger">{quote.reason}</p> : null}
       </div>
 

@@ -26,7 +26,7 @@ export function mapProfile(r: Record<string, unknown>): Profile {
     phone: r.phone ? asStr(r.phone) : null,
     monthly_target: num(r.monthly_target),
     totp_enabled: Boolean(r.totp_enabled),
-    commission_stufe: ([1, 2, 3].includes(Number(r.commission_stufe)) ? Number(r.commission_stufe) : 1) as 1 | 2 | 3,
+    commission_stufe: ([1, 2, 3, 13].includes(Number(r.commission_stufe)) ? Number(r.commission_stufe) : 1) as 1 | 2 | 3 | 13,
     onboarding_status: asStr(r.onboarding_status) || "neu",
     notes: r.notes ? asStr(r.notes) : null,
     is_demo: Boolean(r.is_demo),

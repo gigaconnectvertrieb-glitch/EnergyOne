@@ -81,7 +81,8 @@ function Page() {
     <div>
       <h1 className="font-display text-4xl">Provisionen</h1>
       <p className="text-sm text-muted">
-        Freigeben, Auszahlung auf einen Termin legen, am Stichtag durchführen. Summe dieser Ansicht: {eur(sum)}
+        Freigeben, Auszahlung auf einen Termin legen, am Stichtag durchführen. Summe dieser Ansicht: {eur(sum)}.
+        Bei der Auszahlung bekommt jeder einen Hinweis, wie viel für USt, ESt und Fixkosten zur Seite gelegt werden soll.
       </p>
 
       <h2 className="mt-8 font-display text-2xl">Auszahlungsläufe</h2>

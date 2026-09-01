@@ -137,11 +137,44 @@ export const executePayout = createServerFn({ method: "POST" })
     const users = [...new Set(items.map((i) => i.user_id))];
     for (const uid of users) {
       const sum = items.filter((i) => i.user_id === uid).reduce((a, i) => a + Number(i.amount), 0);
+      let message = `${asStr(run.title)}: ${sum.toFixed(2)} EUR`;
+      try {
+        const { annualizeExpense, payoutHintText, payoutSetAside } = await import("@/lib/steuer");
+        const [set] = await db<{ kleinunternehmer: boolean }>`
+          select kleinunternehmer from tax_settings where user_id = ${uid}
+        `;
+        const [ytd] = await db<{ paid: string }>`
+          select coalesce(sum(amount) filter (where status = 'ausgezahlt'), 0)::text as paid
+          from commissions
+          where user_id = ${uid}
+            and calculated_at >= ${`${new Date().getFullYear()}-01-01`}::date
+        `;
+        const exps = await db<{ amount: string; cadence: string | null; category: string }>`
+          select amount, cadence, category from tax_expenses
+          where user_id = ${uid} and coalesce(scope, 'user') = 'user'
+            and spent_on >= ${`${new Date().getFullYear()}-01-01`}::date
+        `;
+        const monthlyFix = exps
+          .filter((e) => asStr(e.cadence) === "monat")
+          .reduce((a, e) => a + Number(e.amount), 0);
+        const yearlyBa = exps.reduce((a, e) => a + annualizeExpense(Number(e.amount), asStr(e.cadence) || "einmal"), 0);
+        const paidYtd = Math.max(0, num(ytd?.paid) - sum);
+        const aside = payoutSetAside({
+          payout: sum,
+          paidYtd,
+          kleinunternehmer: set ? Boolean(set.kleinunternehmer) : true,
+          monthlyFix,
+          yearlyBa,
+        });
+        message = payoutHintText(sum, aside);
+      } catch {
+        message = `${asStr(run.title)}: ${sum.toFixed(2)} EUR. Steuerbuch prüfen, wie viel zur Seite gelegt wird.`;
+      }
       await notify(db, {
         userId: uid,
         type: "payout",
         title: "Auszahlung durchgeführt",
-        message: `${asStr(run.title)}: ${sum.toFixed(2)} EUR`,
+        message,
         link: "/portal/provisionen",
       });
     }

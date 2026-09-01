@@ -3,6 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import {
   can,
   canChangeStatus,
+  canSeeAgency,
   STATUS_LABELS,
   type ContractStatus,
   type Role,
@@ -267,7 +268,7 @@ export const quoteCommission = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const { clampStufe, commissionFromBand, matchBand } = await import("@/lib/tariffs");
+    const { clampStufe, splitDeal } = await import("@/lib/tariffs");
     const stufe = clampStufe(data.stufe ?? me.commission_stufe);
     const [tariff] = await db<Record<string, unknown>>`
       select * from tariffs where id = ${data.tariffId} and active = true
@@ -285,14 +286,17 @@ export const quoteCommission = createServerFn({ method: "POST" })
       amount_ct_kwh: num(b.amount_ct_kwh),
     }));
     const kwh = Number(data.consumptionKwh) || 0;
-    const band = matchBand(parsed, stufe, kwh);
-    if (!band) {
+    const split = splitDeal(parsed, stufe, kwh);
+    if (!split.ok) {
       return {
         ok: false as const,
         tariff: { id: asStr(tariff.id), provider: asStr(tariff.provider), name: asStr(tariff.name), type: asStr(tariff.type), external_id: asStr(tariff.external_id) },
         stufe,
         kwh,
         amount: 0,
+        agency: 0,
+        advisor: 0,
+        margin: 0,
         reason: "Verbrauch liegt in keinem Band dieses Tarifs für Ihre Stufe.",
         bands: parsed,
       };
@@ -302,8 +306,11 @@ export const quoteCommission = createServerFn({ method: "POST" })
       tariff: { id: asStr(tariff.id), provider: asStr(tariff.provider), name: asStr(tariff.name), type: asStr(tariff.type), external_id: asStr(tariff.external_id) },
       stufe,
       kwh,
-      amount: commissionFromBand(band, kwh),
-      band,
+      amount: split.advisor,
+      agency: split.agency,
+      advisor: split.advisor,
+      margin: split.margin,
+      band: parsed.find((b) => b.stufe === stufe),
       bands: parsed,
     };
   });
@@ -364,7 +371,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     ownerId = asStr(owner.user_id);
     stufeOwner = mapProfile(owner);
   }
-  const { clampStufe, commissionFromBand, matchBand } = await import("@/lib/tariffs");
+  const { clampStufe, splitDeal } = await import("@/lib/tariffs");
   const stufe = clampStufe(stufeOwner.commission_stufe);
   const [tariff] = await db<Record<string, unknown>>`
       select * from tariffs where id = ${data.tariffId} and active = true
@@ -380,9 +387,9 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     amount_eur: num(b.amount_eur),
     amount_ct_kwh: num(b.amount_ct_kwh),
   }));
-  const band = matchBand(bands, stufe, kwh);
-  if (!band) throw new Error("Verbrauch liegt in keinem Band dieses Tarifs für Ihre Stufe.");
-  const amount = commissionFromBand(band, kwh);
+  const split = splitDeal(bands, stufe, kwh);
+  if (!split.ok) throw new Error("Verbrauch liegt in keinem Band dieses Tarifs für Ihre Stufe.");
+  const amount = split.advisor;
   const type = asStr(tariff.type);
   const customerId = nid();
   await db`
@@ -421,12 +428,14 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh, meter_number,
         previous_provider, start_date, commission_rate, commission_amount, commission_stufe,
+        agency_amount, advisor_amount, margin_amount,
         sepa_confirmed, privacy_confirmed, signature_confirmed, notes, newsales_ref, source,
         bank_iban, bank_owner
       ) values (
         ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, ${full ? "erfasst" : "uebermittelt"},
         ${kwh}, ${data.meterNumber?.trim() || null}, ${data.previousProvider?.trim() || null},
         ${data.startDate || null}, ${amount}, ${amount}, ${stufe},
+        ${split.agency}, ${split.advisor}, ${split.margin},
         ${Boolean(data.sepaConfirmed)}, ${Boolean(data.privacyConfirmed)}, ${Boolean(data.signatureData)},
         ${data.notes?.trim() || null}, ${ref}, ${full ? "e1_direct" : "newsales_manual"},
         ${data.iban?.trim() || null}, ${data.bankOwner?.trim() || null}
@@ -436,7 +445,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (
         ${nid()}, ${id}, null, ${full ? "erfasst" : "uebermittelt"}, ${context.userId},
-        ${`In New Sales · gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · ${amount} €${ref ? ` · NS ${ref}` : ""}`}
+        ${`In New Sales · gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · Berater ${split.advisor} € · Agentur ${split.agency} € · Marge ${split.margin} €${ref ? ` · NS ${ref}` : ""}`}
       )
     `;
   await audit(db, {
@@ -469,7 +478,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     message: `${me.first_name} ${me.last_name} hat ${data.firstName} ${data.lastName} in die Datenbank gesetzt · ${asStr(tariff.name)} (${amount.toFixed(2)} €).`,
     link: `/portal/auftraege/${id}`
   });
-  return { id, amount, stufe };
+  return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin };
 });
 export const listContracts = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d = {}) => d).handler(async ({ context, data }) => {
   const db = await sql();
@@ -596,6 +605,10 @@ export const getContract = createServerFn({ method: "GET" }).middleware([authMid
       bank_iban: asStr(row.bank_iban),
       bank_owner: asStr(row.bank_owner),
       commission_amount: num(row.commission_amount),
+      agency_amount: canSeeAgency(me.role) ? num(row.agency_amount) || num(row.commission_amount) : num(row.advisor_amount) || num(row.commission_amount),
+      advisor_amount: num(row.advisor_amount) || num(row.commission_amount),
+      margin_amount: canSeeAgency(me.role) ? num(row.margin_amount) : 0,
+      show_split: canSeeAgency(me.role),
       sepa_confirmed: Boolean(row.sepa_confirmed),
       privacy_confirmed: Boolean(row.privacy_confirmed),
       signature_confirmed: Boolean(row.signature_confirmed),
@@ -882,6 +895,49 @@ export const getDashboard = createServerFn({ method: "GET" }).middleware([authMi
        limit 8`, [monthStart()]);
   const k = kpis[0] || {};
   const cm = comm[0] || {};
+  let agencyGross = 0;
+  let agencyMargin = 0;
+  let agencyAdvisor = 0;
+  let agencyFix = 0;
+  try {
+    const [ag] = await db<{ g: string; m: string; a: string }>`
+      select
+        coalesce(sum(coalesce(agency_amount, commission_amount)) filter (where status <> 'storniert'),0)::text as g,
+        coalesce(sum(coalesce(margin_amount,0)) filter (where status <> 'storniert'),0)::text as m,
+        coalesce(sum(coalesce(advisor_amount, commission_amount)) filter (where status <> 'storniert'),0)::text as a
+      from contracts
+    `;
+    agencyGross = num(ag?.g);
+    agencyMargin = num(ag?.m);
+    agencyAdvisor = num(ag?.a);
+    const [fx] = await db<{ v: string }>`
+      select coalesce(sum(
+        case
+          when cadence = 'monat' then amount * 12
+          when cadence = 'jahr' then amount
+          else amount
+        end
+      ),0)::text as v
+      from tax_expenses
+      where scope = 'agency'
+        and spent_on >= ${`${new Date().getFullYear()}-01-01`}::date
+    `;
+    agencyFix = num(fx?.v);
+  } catch {
+    agencyGross = 0;
+  }
+  let myTurnover = 0;
+  try {
+    const [mine] = await db<{ v: string }>`
+      select coalesce(sum(coalesce(advisor_amount, commission_amount)) filter (where status <> 'storniert'),0)::text as v
+      from contracts
+      where user_id = ${me.user_id}
+        and created_at >= ${`${new Date().getFullYear()}-01-01`}::date
+    `;
+    myTurnover = num(mine?.v);
+  } catch {
+    myTurnover = 0;
+  }
   return {
     monthCount: num(k.month_count),
     monthWon: num(k.month_won),
@@ -899,6 +955,11 @@ export const getDashboard = createServerFn({ method: "GET" }).middleware([authMi
     commissionOpen: num(cm.offen),
     commissionApproved: num(cm.frei),
     commissionPaid: num(cm.paid),
+    myTurnover,
+    agencyGross,
+    agencyMargin,
+    agencyAdvisor,
+    agencyFix,
     target: me.monthly_target,
     ranking: ranking.map((r) => ({
       user_id: asStr(r.user_id),
@@ -1060,17 +1121,17 @@ export const listBookableStaff = createServerFn({ method: "GET" }).middleware([a
   const db = await sql();
   const me = await requireProfile(db, context.userId);
   if (!can(me.role, "team.view") && !can(me.role, "users.manage") && me.role !== "vertrieb") {
-    return [{ user_id: me.user_id, staff_id: null as string | null, name: `${me.first_name} ${me.last_name}` }];
+    return [{ user_id: me.user_id, staff_id: null as string | null, name: `${me.first_name} ${me.last_name}`, commission_stufe: me.commission_stufe || 1 }];
   }
   const ids = can(me.role, "users.manage") ? null : await visibleUserIds(db, me);
   const rows = ids
-    ? await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string }>`
-        select user_id, staff_id, first_name, last_name from profiles
+    ? await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string; commission_stufe: number }>`
+        select user_id, staff_id, first_name, last_name, commission_stufe from profiles
         where status = 'active' and is_demo = false and user_id = any(${ids})
         order by last_name, first_name
       `
-    : await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string }>`
-        select user_id, staff_id, first_name, last_name from profiles
+    : await db<{ user_id: string; staff_id: string | null; first_name: string; last_name: string; commission_stufe: number }>`
+        select user_id, staff_id, first_name, last_name, commission_stufe from profiles
         where status = 'active' and is_demo = false
         order by last_name, first_name
       `;
@@ -1078,6 +1139,7 @@ export const listBookableStaff = createServerFn({ method: "GET" }).middleware([a
     user_id: r.user_id,
     staff_id: r.staff_id,
     name: `${r.first_name} ${r.last_name}`.trim(),
+    commission_stufe: Number(r.commission_stufe) || 1,
   }));
 });
 export const listStaffFlags = createServerFn({ method: "POST" })

@@ -26,7 +26,7 @@ function Page() {
     <div>
       <h1 className="font-display text-4xl">Provisionsliste</h1>
       <p className="text-sm text-muted">
-        316 Tarife, 3 Stufen. Verträge gehen in New Sales, hier die Provisionsliste.
+        316 Tarife. Mitarbeiter Stufe 1–3, Agentur Stufe 13 (Luca / Orhan, Liste 01.09.2026).
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Field label="Suche">
@@ -73,7 +73,10 @@ function Page() {
                     <span className="text-gold">{eur(b.amount_eur)}</span>
                   </li>
                 ))}
-                <li className="text-xs text-muted">Anzeige Stufe 1 bei 3.500 kWh: {quote.ok ? eur(quote.amount) : "kein Band"}</li>
+                <li className="text-xs text-muted">
+                  Stufe 1 bei 3.500 kWh: {quote.ok ? eur(quote.advisor) : "kein Band"}
+                  {quote.ok && quote.margin > 0 ? ` · Agentur ${eur(quote.agency)} · Marge ${eur(quote.margin)}` : ""}
+                </li>
               </ul>
             ) : null}
           </button>
