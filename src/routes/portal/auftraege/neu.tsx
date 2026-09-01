@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { NettoBrutto } from "@/components/netto-brutto";
 import { vatOn } from "@/lib/steuer";
 import { eur } from "@/lib/utils";
+import { deBankFromIban } from "@/lib/iban";
 
 export const Route = createFileRoute("/portal/auftraege/neu")({
   validateSearch: (raw: Record<string, unknown>) => {
@@ -27,7 +28,10 @@ function Capture() {
   const pre = Route.useSearch();
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
-  const [phone, setPhone] = useState("");
+  const [salutation, setSalutation] = useState("Herr");
+  const [birth, setBirth] = useState("");
+  const [landline, setLandline] = useState("");
+  const [mobile, setMobile] = useState("");
   const [street, setStreet] = useState(pre.street || "");
   const [house, setHouse] = useState(pre.house || "");
   const [zip, setZip] = useState(pre.zip || "");
@@ -53,6 +57,23 @@ function Capture() {
   const [sign, setSign] = useState("");
   const [email, setEmail] = useState("");
   const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
+  const [meter, setMeter] = useState("");
+  const [providerOld, setProviderOld] = useState("");
+  const [deliveryKind, setDeliveryKind] = useState<"wechsel" | "neueinzug">("wechsel");
+  const [startDate, setStartDate] = useState("");
+  const [signedAt, setSignedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [oldEnd, setOldEnd] = useState("");
+  const [prevNo, setPrevNo] = useState("");
+  const [melo, setMelo] = useState("");
+  const [malo, setMalo] = useState("");
+  const [grid, setGrid] = useState("");
+  const [bic, setBic] = useState("");
+  const [blz, setBlz] = useState("");
+  const [account, setAccount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [early, setEarly] = useState(false);
+  const [postInvoice, setPostInvoice] = useState(false);
+  const [digitalSign, setDigitalSign] = useState(false);
 
   useEffect(() => {
     bootstrapMe()
@@ -99,8 +120,8 @@ function Capture() {
       toast.error("Name fehlt.");
       return;
     }
-    if (!phone.trim()) {
-      toast.error("Telefon fehlt.");
+    if (!mobile.trim() && !landline.trim()) {
+      toast.error("Telefon oder Mobilnummer angeben.");
       return;
     }
     if (!street.trim() || !house.trim() || !zip.trim() || !city.trim()) {
@@ -129,7 +150,11 @@ function Capture() {
         data: {
           firstName: first,
           lastName: last,
-          phone,
+          salutation,
+          birthDate: birth || undefined,
+          phone: mobile || landline,
+          landline: landline || undefined,
+          mobile: mobile || undefined,
           email: email || undefined,
           street,
           houseNumber: house,
@@ -137,11 +162,29 @@ function Capture() {
           city,
           tariffId,
           consumptionKwh: Number(kwh),
+          meterNumber: meter || undefined,
+          previousProvider: providerOld || undefined,
+          startDate: startDate || undefined,
           forStaffId: forStaff || undefined,
           inNewsales: !full,
           fullFlow: full,
+          parked: true,
           iban: iban || undefined,
           bankOwner: bankOwner || undefined,
+          bic: bic || undefined,
+          bankName: bankName || undefined,
+          blz: blz || undefined,
+          accountNo: account || undefined,
+          deliveryKind,
+          meloId: melo || undefined,
+          maloId: malo || undefined,
+          gridOperator: grid || undefined,
+          previousCustomerNo: prevNo || undefined,
+          oldContractEnd: oldEnd || undefined,
+          signedAt: signedAt || undefined,
+          digitalSignWanted: digitalSign,
+          earlyDelivery: early,
+          invoiceByPost: postInvoice,
           sepaConfirmed: sepa,
           privacyConfirmed: full ? privacy : undefined,
           signatureData: full ? sign : undefined,
@@ -151,8 +194,8 @@ function Capture() {
       });
       toast.success(
         res.margin
-          ? `Gespeichert · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}${res.ibanMissing ? " · ohne IBAN" : ""}`
-          : `Gespeichert · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto${res.ibanMissing ? " · ohne IBAN" : ""}`,
+          ? `Geparkt · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
+          : `Geparkt · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
       );
       nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
@@ -164,11 +207,11 @@ function Capture() {
 
   return (
     <div className="mx-auto max-w-xl pb-16">
-      <p className="text-xs uppercase tracking-[0.2em] text-gold">Schnell erfassen</p>
-      <h1 className="mt-1 font-display text-4xl">Name, Adresse, Tarif</h1>
+      <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld · Aufnahme</p>
+      <h1 className="mt-1 font-display text-4xl">Auftrag parken</h1>
       <p className="mt-2 text-sm text-muted">
-        Name, Adresse, Tarif, Telefon. IBAN und Vertragsscan sind optional — ohne IBAN geht der Auftrag trotzdem raus.
-        Stufe {stufe}.
+        Wie in New Sales: speichern, später ergänzen. Kein Erfassen-Button — der Auftrag bleibt geparkt, bis ihr den Status weiterzieht.
+        IBAN optional. Stufe {stufe}.
       </p>
 
       {staff.length > 1 ? (
@@ -186,6 +229,14 @@ function Capture() {
       ) : null}
 
       <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Lieferadresse & Vertragspartner</p>
+        <Field label="Anrede">
+          <Select value={salutation} onChange={(e) => setSalutation(e.target.value)}>
+            <option>Herr</option>
+            <option>Frau</option>
+            <option>Divers</option>
+          </Select>
+        </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Vorname">
             <Input value={first} onChange={(e) => setFirst(e.target.value)} autoComplete="given-name" />
@@ -194,12 +245,6 @@ function Capture() {
             <Input value={last} onChange={(e) => setLast(e.target.value)} autoComplete="family-name" />
           </Field>
         </div>
-        <Field label="Telefon">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
-        </Field>
-        <Field label="E-Mail (optional)">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
-        </Field>
         <div className="grid grid-cols-[1fr_5.5rem] gap-3">
           <Field label="Straße">
             <Input value={street} onChange={(e) => setStreet(e.target.value)} autoComplete="address-line1" />
@@ -216,6 +261,23 @@ function Capture() {
             <Input value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
           </Field>
         </div>
+        <Field label="Geburtstag">
+          <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Kontaktdaten</p>
+        <Field label="Festnetz">
+          <Input value={landline} onChange={(e) => setLandline(e.target.value)} inputMode="tel" />
+        </Field>
+        <Field label="Mobilfunknummer">
+          <Input value={mobile} onChange={(e) => setMobile(e.target.value)} inputMode="tel" autoComplete="tel" />
+        </Field>
+        <p className="text-xs text-muted">Mindestens eine Nummer.</p>
+        <Field label="E-Mail">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
+        </Field>
       </div>
 
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
@@ -299,20 +361,107 @@ function Capture() {
       </div>
 
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Bank & Vertrag — optional</p>
-        <p className="text-sm text-muted">Ohne IBAN speichern und abschicken. Später nachtragen oder Scan hochladen.</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Bankverbindung — optional</p>
+        <p className="text-sm text-muted">Leer lassen geht. Prüfen füllt BLZ und Konto aus der IBAN.</p>
         <Field label="IBAN">
-          <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" placeholder="leer lassen geht" />
+          <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" />
         </Field>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              try {
+                const p = deBankFromIban(iban);
+                if (!p.blz) {
+                  toast.error("IBAN unvollständig");
+                  return;
+                }
+                setBlz(p.blz);
+                setAccount(p.account);
+                if (!bankOwner.trim()) setBankOwner(`${first} ${last}`.trim());
+                toast.success("BLZ und Konto aus IBAN");
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "IBAN ungültig");
+              }
+            }}
+          >
+            prüfen
+          </Button>
+        </div>
         <Field label="Kontoinhaber">
           <Input value={bankOwner} onChange={(e) => setBankOwner(e.target.value)} />
         </Field>
+        <Field label="BIC">
+          <Input value={bic} onChange={(e) => setBic(e.target.value.toUpperCase())} />
+        </Field>
+        <Field label="Name der Bank">
+          <Input value={bankName} onChange={(e) => setBankName(e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="BLZ">
+            <Input value={blz} onChange={(e) => setBlz(e.target.value)} />
+          </Field>
+          <Field label="Konto">
+            <Input value={account} onChange={(e) => setAccount(e.target.value)} />
+          </Field>
+        </div>
         {iban.trim() ? (
           <CheckboxRow checked={sepa} onChange={setSepa}>
             SEPA-Lastschriftmandat erteilt
           </CheckboxRow>
         ) : null}
-        <Field label="Vertrag / Rechnung / Scan">
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Liefertermin & Vorversorger</p>
+        <Field label="Art">
+          <Select value={deliveryKind} onChange={(e) => setDeliveryKind(e.target.value as "wechsel" | "neueinzug")}>
+            <option value="wechsel">Lieferantenwechsel</option>
+            <option value="neueinzug">Neueinzug</option>
+          </Select>
+        </Field>
+        <Field label="gew. Lieferdatum">
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </Field>
+        <Field label="Zählernummer">
+          <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
+        </Field>
+        <Field label="MeLo-ID">
+          <Input value={melo} onChange={(e) => setMelo(e.target.value)} />
+        </Field>
+        <Field label="MaLo-ID">
+          <Input value={malo} onChange={(e) => setMalo(e.target.value)} />
+        </Field>
+        <Field label="abw. Messstellennetzbetreiber">
+          <Input value={grid} onChange={(e) => setGrid(e.target.value)} />
+        </Field>
+        <Field label="Bish. Kundennummer">
+          <Input value={prevNo} onChange={(e) => setPrevNo(e.target.value)} />
+        </Field>
+        <Field label="Vorversorger">
+          <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} />
+        </Field>
+        <Field label="Altvertrag gekündigt zum">
+          <Input type="date" value={oldEnd} onChange={(e) => setOldEnd(e.target.value)} />
+        </Field>
+        <Field label="Datum der Unterschrift">
+          <Input type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <CheckboxRow checked={digitalSign} onChange={setDigitalSign}>
+          Kunde wünscht die digitale Unterschrift
+        </CheckboxRow>
+        <CheckboxRow checked={early} onChange={setEarly}>
+          Lieferung vor Ablauf der Widerrufsfrist möglich — Widerrufsrecht bleibt
+        </CheckboxRow>
+        <CheckboxRow checked={postInvoice} onChange={setPostInvoice}>
+          Rechnung per Post (kann Kosten verursachen)
+        </CheckboxRow>
+        <Field label="Vertrag / Scan">
           <input
             type="file"
             accept="image/*,.pdf,application/pdf"
@@ -324,10 +473,7 @@ function Capture() {
                 return;
               }
               const reader = new FileReader();
-              reader.onload = () => {
-                const base64 = String(reader.result || "");
-                setScan({ name: f.name, base64 });
-              };
+              reader.onload = () => setScan({ name: f.name, base64: String(reader.result || "") });
               reader.readAsDataURL(f);
             }}
           />
@@ -348,7 +494,7 @@ function Capture() {
 
       <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
         <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save()}>
-          {busy ? "Speichert…" : "Abschicken"}
+          {busy ? "Parkt…" : "Parken"}
         </Button>
       </div>
     </div>

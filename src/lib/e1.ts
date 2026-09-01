@@ -12,7 +12,7 @@ export const STATUSES = [
 export type ContractStatus = (typeof STATUSES)[number];
 
 export const STATUS_LABELS: Record<ContractStatus, string> = {
-  erfasst: "Erfasst",
+  erfasst: "Geparkt",
   in_pruefung: "In Prüfung",
   korrektur_noetig: "Korrektur nötig",
   uebermittelt: "In New Sales",

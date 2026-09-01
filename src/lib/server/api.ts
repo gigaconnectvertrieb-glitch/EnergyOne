@@ -73,6 +73,25 @@ export type ContractDraft = {
   fullFlow?: boolean;
   scanBase64?: string;
   scanName?: string;
+  parked?: boolean;
+  title?: string;
+  landline?: string;
+  mobile?: string;
+  bic?: string;
+  bankName?: string;
+  blz?: string;
+  accountNo?: string;
+  deliveryKind?: "wechsel" | "neueinzug";
+  meloId?: string;
+  maloId?: string;
+  gridOperator?: string;
+  previousCustomerNo?: string;
+  oldContractEnd?: string;
+  signedAt?: string;
+  digitalSignWanted?: boolean;
+  earlyDelivery?: boolean;
+  invoiceByPost?: boolean;
+  differentBilling?: boolean;
 };
 
 function monthStart() {
@@ -344,7 +363,8 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   const me = await requireProfile(db, context.userId);
   if (me.status !== "active") throw new Error("Ihr Zugang ist noch nicht freigeschaltet.");
   if (!data.firstName?.trim() || !data.lastName?.trim()) throw new Error("Name ist Pflicht.");
-  if (!data.phone?.trim()) throw new Error("Telefon ist Pflicht.");
+  const phoneOrMobile = (data.mobile || data.landline || data.phone || "").trim();
+  if (!phoneOrMobile) throw new Error("Telefon oder Mobilnummer ist Pflicht.");
   if (!data.street?.trim() || !data.houseNumber?.trim() || !data.zip?.trim() || !data.city?.trim()) {
     throw new Error("Adresse ist Pflicht — so füllen wir die Kundendatenbank.");
   }
@@ -406,7 +426,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
         ${data.lastName.trim()},
         ${data.birthDate || null},
         ${data.email?.trim() || null},
-        ${data.phone.trim()},
+        ${phoneOrMobile},
         ${data.street.trim()},
         ${data.houseNumber.trim()},
         ${data.zip.trim()},
@@ -420,6 +440,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   const id = nid();
   const ref = data.newsalesRef?.trim() || null;
   const full = Boolean(data.fullFlow);
+  const parked = data.parked !== false;
   const { optionalIban } = await import("@/lib/iban");
   const iban = optionalIban(data.iban);
   if (full && !data.privacyConfirmed) {
@@ -428,28 +449,50 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   if (iban && full && !data.sepaConfirmed) {
     throw new Error("SEPA muss bestätigt sein, wenn eine IBAN angegeben ist.");
   }
+  const status = parked || full ? "erfasst" : "uebermittelt";
+  const intake = {
+    title: data.title || "",
+    landline: data.landline || "",
+    mobile: data.mobile || "",
+    bic: data.bic || "",
+    bankName: data.bankName || "",
+    blz: data.blz || "",
+    accountNo: data.accountNo || "",
+    meloId: data.meloId || "",
+    maloId: data.maloId || "",
+    gridOperator: data.gridOperator || "",
+    previousCustomerNo: data.previousCustomerNo || "",
+    oldContractEnd: data.oldContractEnd || "",
+    digitalSignWanted: Boolean(data.digitalSignWanted),
+    earlyDelivery: Boolean(data.earlyDelivery),
+    invoiceByPost: Boolean(data.invoiceByPost),
+    differentBilling: Boolean(data.differentBilling),
+    parked: true,
+  };
   await db`
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh, meter_number,
         previous_provider, start_date, commission_rate, commission_amount, commission_stufe,
         agency_amount, advisor_amount, margin_amount,
         sepa_confirmed, privacy_confirmed, signature_confirmed, notes, newsales_ref, source,
-        bank_iban, bank_owner
+        bank_iban, bank_owner, intake, bank_bic, signed_at, delivery_kind
       ) values (
-        ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, ${full ? "erfasst" : "uebermittelt"},
+        ${id}, ${customerId}, ${ownerId}, ${type}, ${data.tariffId}, ${status},
         ${kwh}, ${data.meterNumber?.trim() || null}, ${data.previousProvider?.trim() || null},
         ${data.startDate || null}, ${amount}, ${amount}, ${stufe},
         ${split.agency}, ${split.advisor}, ${split.margin},
         ${Boolean(data.sepaConfirmed)}, ${Boolean(data.privacyConfirmed)}, ${Boolean(data.signatureData)},
-        ${data.notes?.trim() || null}, ${ref}, ${full ? "e1_direct" : "newsales_manual"},
-        ${iban || null}, ${data.bankOwner?.trim() || null}
+        ${data.notes?.trim() || null}, ${ref}, ${full ? "e1_direct" : parked ? "geparkt" : "newsales_manual"},
+        ${iban || null}, ${data.bankOwner?.trim() || null},
+        ${JSON.stringify(intake)}::jsonb, ${data.bic?.trim() || null}, ${data.signedAt || null},
+        ${data.deliveryKind || "wechsel"}
       )
     `;
   await db`
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (
-        ${nid()}, ${id}, null, ${full ? "erfasst" : "uebermittelt"}, ${context.userId},
-        ${`Gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · Berater ${split.advisor} € · Agentur ${split.agency} € · Marge ${split.margin} €${iban ? "" : " · ohne IBAN"}${ref ? ` · NS ${ref}` : ""}`}
+        ${nid()}, ${id}, null, ${status}, ${context.userId},
+        ${`${parked ? "Geparkt" : "Gebucht"} auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · Berater ${split.advisor} € · Agentur ${split.agency} € · Marge ${split.margin} €${iban ? "" : " · ohne IBAN"}`}
       )
     `;
   await audit(db, {
@@ -488,7 +531,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   } catch {
     /* Ziel-Push optional */
   }
-  if (!full) {
+  if (!full && !parked) {
     try {
       const { newsalesConfigured, submitNewsalesOrder } = await import("./newsales.server");
       if (newsalesConfigured()) {
@@ -499,7 +542,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
           customer: {
             firstName: data.firstName.trim(),
             lastName: data.lastName.trim(),
-            phone: data.phone.trim(),
+            phone: phoneOrMobile,
             email: data.email?.trim(),
             street: data.street.trim(),
             houseNumber: data.houseNumber.trim(),
@@ -532,7 +575,7 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   }
   try {
     const { createHandover, putFile } = await import("./ops.server");
-    if (!full) await createHandover(db, id, context.userId);
+    if (!full && !parked) await createHandover(db, id, context.userId);
     if (data.scanBase64) {
       const stored = await putFile(data.scanBase64, data.scanName || "vertrag.pdf");
       await db`

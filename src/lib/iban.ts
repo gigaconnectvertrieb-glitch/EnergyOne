@@ -13,3 +13,11 @@ export function optionalIban(raw?: string | null) {
   if (!ibanLooksValid(iban)) throw new Error("IBAN ist ungültig.");
   return iban;
 }
+
+export function deBankFromIban(raw?: string | null) {
+  const iban = cleanIban(raw);
+  if (!iban.startsWith("DE") || iban.length < 22) {
+    return { blz: "", account: "", bic: "" };
+  }
+  return { blz: iban.slice(4, 12), account: iban.slice(12), bic: "" };
+}
