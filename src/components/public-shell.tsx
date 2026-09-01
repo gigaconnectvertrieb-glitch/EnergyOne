@@ -38,15 +38,18 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
 
   return (
     <div className="min-h-dvh bg-bg text-ink gold-wash">
-      <header className="sticky top-0 z-40 border-b border-line/80 bg-bg/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+      <header className="site-header sticky top-0 z-40 bg-bg/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-[4.25rem] max-w-6xl items-center justify-between gap-4 px-4 md:h-20">
           <Wordmark to={firmen ? "/firmen" : "/"} />
           <nav className="hidden items-center gap-6 lg:flex">
             {NAV.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
-                className={cn("text-sm text-muted hover:text-ink", pathname === n.to && "text-gold")}
+                className={cn(
+                  "text-[13px] tracking-[0.14em] uppercase text-muted hover:text-ink",
+                  pathname === n.to && "text-gold",
+                )}
               >
                 {n.label}
               </Link>
@@ -100,8 +103,9 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
         ) : null}
       </header>
       <main>{children}</main>
-      <footer className="mt-16 border-t border-line">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-3">
+      <footer className="mt-24 border-t border-line/80">
+        <div className="gold-rule" />
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 md:grid-cols-3">
           <div>
             <Wordmark />
             <p className="mt-3 max-w-xs text-sm text-muted">

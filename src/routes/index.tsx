@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Building2, Check, Shield, User } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
@@ -33,53 +33,38 @@ function Hero() {
       .catch(() => setPhone(""));
   }, []);
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative min-h-[88dvh] overflow-hidden">
       <img
-        src="/hero-germany.jpg"
+        src="/brand-hero.jpg"
         alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-50"
+        className="absolute inset-0 h-full w-full object-cover opacity-55 ken-img"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/80 to-bg/30" />
-      <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 md:grid-cols-2 md:py-24">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-gold">
-            Privat & Gewerbe · Deutschland
-          </p>
-          <h1 className="mt-4 font-display text-4xl leading-[1.1] md:text-6xl">
-            Energieberatung für Zuhause und Betrieb.{" "}
-            <span className="text-gold">Kein Callcenter.</span>
-          </h1>
-          <p className="mt-5 max-w-lg text-base text-muted md:text-lg">
-            Haushalt, Praxis, Laden, Büro oder Betrieb: Wir erklären Tarif, Verbrauch
-            und Wechsel persönlich. Fair, ohne Druck, mit einem festen Ansprechpartner.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/beratung">
-              <Button size="lg">
-                Beratung anfordern <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-            <Link to="/energie">
-              <Button size="lg" variant="outline">
-                Strom & Gas
-              </Button>
-            </Link>
-          </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-bg/75 to-bg" />
+      <div className="relative mx-auto flex min-h-[88dvh] max-w-6xl flex-col justify-end px-4 pb-16 pt-28 md:pb-24">
+        <p className="reveal text-[11px] uppercase tracking-[0.42em] text-gold">
+          E1 Direktvertrieb · Deutschland
+        </p>
+        <h1 className="reveal reveal-d1 mt-6 max-w-4xl font-display text-5xl leading-[0.95] md:text-7xl">
+          Energie, die zu Ihnen passt.
+        </h1>
+        <p className="reveal reveal-d2 mt-6 max-w-xl text-base leading-relaxed text-muted md:text-lg">
+          Privathaushalt und Unternehmen. Persönliche Beratung statt Callcenter.
+          Ein Gesicht, ein Name, eine Nummer.
+        </p>
+        <div className="reveal reveal-d3 mt-10 flex flex-wrap items-center gap-4">
+          <Link to="/privat">
+            <Button size="lg">Privathaushalt</Button>
+          </Link>
+          <Link to="/firmen">
+            <Button size="lg" variant="outline">
+              Unternehmen
+            </Button>
+          </Link>
           {phone ? (
-            <p className="mt-4 text-sm text-muted">
-              Anrufen:{" "}
-              <a className="text-gold" href={telHref(phone)}>
-                {formatPhone(phone) || phone}
-              </a>
-            </p>
+            <a className="text-sm tracking-wide text-gold" href={telHref(phone)}>
+              {formatPhone(phone) || phone}
+            </a>
           ) : null}
-        </div>
-        <div className="flex items-center justify-center">
-          <img
-            src="/logo-full.jpg"
-            alt="E1 Direktvertrieb – Energie, die zu Ihnen passt."
-            className="w-full max-w-md rounded-3xl object-contain bg-bg gold-hairline"
-          />
         </div>
       </div>
     </section>
@@ -93,15 +78,12 @@ function TrustStrip() {
     { icon: Shield, title: "Ohne Druck", text: "Sie entscheiden. Wir erklären." },
   ];
   return (
-    <section className="border-y border-line bg-surface">
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-3">
+    <section className="border-y border-line/60">
+      <div className="mx-auto grid max-w-6xl gap-px bg-line/60 md:grid-cols-3">
         {items.map((it) => (
-          <div key={it.title} className="flex gap-4">
-            <it.icon className="mt-0.5 size-6 text-gold" />
-            <div>
-              <p className="font-medium">{it.title}</p>
-              <p className="text-sm text-muted">{it.text}</p>
-            </div>
+          <div key={it.title} className="bg-bg px-6 py-10">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-gold">{it.title}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted">{it.text}</p>
           </div>
         ))}
       </div>
@@ -112,26 +94,26 @@ function TrustStrip() {
 function Audience() {
   return (
     <section className="mx-auto max-w-6xl px-4 py-14">
-      <p className="text-xs uppercase tracking-[0.28em] text-gold">Für wen</p>
-      <h2 className="mt-2 font-display text-4xl">Privatkunden und Unternehmen.</h2>
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Link to="/privat" className="rounded-3xl bg-surface p-6 gold-hairline">
-          <User className="size-6 text-gold" />
-          <h3 className="mt-4 text-xl font-medium">Privathaushalt</h3>
-          <p className="mt-2 text-sm text-muted">
-            Strom und Gas für die Wohnung oder das Haus. Vergleich, Wechsel,
-            Widerruf – in Ruhe erklärt.
-          </p>
-          <p className="mt-4 text-sm text-gold">Zum Privatbereich</p>
+      <p className="text-[11px] uppercase tracking-[0.32em] text-gold">Zwei Welten</p>
+      <h2 className="mt-3 font-display text-4xl md:text-5xl">Privat. Unternehmen.</h2>
+      <div className="mt-10 grid gap-6 md:grid-cols-2">
+        <Link to="/privat" className="group relative min-h-72 overflow-hidden rounded-[1.75rem]">
+          <img src="/brand-home.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-50 transition duration-700 group-hover:scale-[1.04] group-hover:opacity-70" />
+          <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/50 to-transparent" />
+          <div className="relative flex h-full flex-col justify-end p-8">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-gold">Privathaushalt</p>
+            <h3 className="mt-2 font-display text-3xl">Zuhause.</h3>
+            <p className="mt-2 max-w-sm text-sm text-muted">Wohnung oder Haus. Tarif, Wechsel, Widerruf — in Ruhe erklärt.</p>
+          </div>
         </Link>
-        <Link to="/firmen" className="rounded-3xl bg-surface p-6 gold-hairline">
-          <Building2 className="size-6 text-gold" />
-          <h3 className="mt-4 text-xl font-medium">Unternehmen</h3>
-          <p className="mt-2 text-sm text-muted">
-            Gewerbe, Praxis, Gastronomie, Büro, Filiale. Ein fester Draht,
-            keine Hotline. Anfragen an info@.
-          </p>
-          <p className="mt-4 text-sm text-gold">Zum Firmenbereich</p>
+        <Link to="/firmen" className="group relative min-h-72 overflow-hidden rounded-[1.75rem]">
+          <img src="/brand-business.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-50 transition duration-700 group-hover:scale-[1.04] group-hover:opacity-70" />
+          <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/50 to-transparent" />
+          <div className="relative flex h-full flex-col justify-end p-8">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-gold">Geschäftskunden</p>
+            <h3 className="mt-2 font-display text-3xl">Betrieb.</h3>
+            <p className="mt-2 max-w-sm text-sm text-muted">Praxis, Handel, Gastro, Filiale. Gespräch mit der Geschäftsführung.</p>
+          </div>
         </Link>
       </div>
     </section>

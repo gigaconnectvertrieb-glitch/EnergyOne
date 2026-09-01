@@ -84,13 +84,57 @@
 }
 
 .gold-hairline {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-gold) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-gold) 22%, transparent);
+}
+
+.gold-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-gold) 55%, transparent), transparent);
 }
 
 .gold-wash {
   background:
-    radial-gradient(1200px 500px at 80% -10%, color-mix(in oklab, var(--color-gold) 18%, transparent), transparent 60%),
+    radial-gradient(900px 420px at 88% -8%, color-mix(in oklab, var(--color-gold) 14%, transparent), transparent 58%),
+    radial-gradient(700px 380px at 8% 110%, color-mix(in oklab, var(--color-gold) 7%, transparent), transparent 55%),
     var(--color-bg);
+}
+
+.site-header {
+  border-bottom: 1px solid color-mix(in oklab, var(--color-gold) 16%, transparent);
+}
+
+@keyframes e1-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes e1-ken {
+  from { transform: scale(1.08); }
+  to { transform: scale(1); }
+}
+@keyframes e1-gold-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+.reveal {
+  animation: e1-fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.reveal-d1 { animation-delay: 0.12s; }
+.reveal-d2 { animation-delay: 0.24s; }
+.reveal-d3 { animation-delay: 0.36s; }
+
+.ken-img {
+  animation: e1-ken 14s ease-out both;
+}
+
+.gold-glow {
+  animation: e1-gold-pulse 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-d1, .reveal-d2, .reveal-d3, .ken-img, .gold-glow {
+    animation: none !important;
+  }
 }
 
 .noise-overlay {

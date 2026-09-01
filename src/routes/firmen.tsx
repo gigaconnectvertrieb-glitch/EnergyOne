@@ -9,18 +9,18 @@ function Page() {
   return (
     <PublicShell variant="firmen">
       <section className="relative overflow-hidden">
-        <img src="/office-night.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />
+        <img src="/brand-business.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-45 ken-img" />
         <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/85 to-bg/40" />
         <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
-          <p className="text-xs uppercase tracking-[0.32em] text-gold">Geschäftskunden</p>
-          <h1 className="mt-4 max-w-3xl font-display text-4xl leading-[1.1] md:text-6xl">
+          <p className="reveal text-[11px] uppercase tracking-[0.36em] text-gold">Geschäftskunden</p>
+          <h1 className="reveal reveal-d1 mt-4 max-w-3xl font-display text-4xl leading-[1.05] md:text-6xl">
             Energieversorgung auf Augenhöhe mit der Geschäftsführung.
           </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted">
+          <p className="reveal reveal-d2 mt-6 max-w-xl text-lg text-muted">
             Strom und Gas für Praxis, Handel, Büro, Gastronomie und Filialen.
             Ein Vertragspartner, ein Ansprechpartner, keine anonyme Hotline.
           </p>
-          <div className="mt-10 flex flex-wrap gap-3">
+          <div className="reveal reveal-d3 mt-10 flex flex-wrap gap-3">
             <Link to="/firmen/anfrage">
               <Button size="lg">
                 Gespräch vereinbaren <ArrowRight className="size-4" />
