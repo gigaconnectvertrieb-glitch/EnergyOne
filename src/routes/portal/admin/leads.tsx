@@ -23,9 +23,15 @@ function Page() {
           <div key={l.id} className="rounded-2xl bg-surface p-4 gold-hairline">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-medium">{l.name}</p>
+                <p className="font-medium">
+                  {l.name}
+                  <span className="ml-2 text-xs text-gold">
+                    {l.kind === "gewerbe" ? "Gewerbe" : "Privat"}
+                  </span>
+                </p>
                 <p className="text-sm text-muted">
                   {l.phone} · PLZ {l.zip || "—"}
+                  {l.company ? ` · ${l.company}` : ""}
                 </p>
                 <p className="mt-1 text-sm">{l.message}</p>
                 <p className="text-xs text-muted">{deDateTime(l.created_at)}</p>

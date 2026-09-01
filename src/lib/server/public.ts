@@ -28,23 +28,33 @@ export const getPublicContact = createServerFn({ method: "GET" }).handler(async 
 });
 
 export const submitLead = createServerFn({ method: "POST" })
-  .validator((d: { name: string; phone: string; zip?: string; message?: string; consent: boolean }) => d)
+  .validator((d: { name: string; phone: string; zip?: string; message?: string; consent: boolean; kind?: string; company?: string }) => d)
   .handler(async ({ data }) => {
     if (!data.name?.trim() || !data.phone?.trim()) throw new Error("Name und Telefon sind Pflicht.");
     if (!data.consent) throw new Error("Bitte der Datenverarbeitung zustimmen.");
+    const kind = data.kind === "gewerbe" ? "gewerbe" : "privat";
+    const company = data.company?.trim() || null;
     const db = await sql();
     await db`
-      insert into leads (id, name, phone, zip, message)
-      values (${nid()}, ${data.name.trim()}, ${data.phone.trim()}, ${data.zip?.trim() || null}, ${data.message?.trim() || null})
+      insert into leads (id, name, phone, zip, message, kind, company)
+      values (
+        ${nid()}, ${data.name.trim()}, ${data.phone.trim()}, ${data.zip?.trim() || null},
+        ${data.message?.trim() || null}, ${kind}, ${company}
+      )
     `;
+    const who = kind === "gewerbe" ? `Gewerbe${company ? ` · ${company}` : ""}` : "Privat";
     try {
       const { queuePortalMail } = await import("./workspace.server");
-      const text = `Name: ${data.name.trim()}\nTelefon: ${data.phone.trim()}\nPLZ: ${data.zip?.trim() || "—"}\n\n${data.message?.trim() || ""}`;
+      const text = `${who}\nName: ${data.name.trim()}\nTelefon: ${data.phone.trim()}\nPLZ: ${data.zip?.trim() || "—"}\n\n${data.message?.trim() || ""}`;
       await queuePortalMail(db, {
         from: `info@${MAIL_DOMAIN}`,
-        to: `info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
-        subject: `Neue Beratung · ${data.name.trim()}`,
+        to: kind === "gewerbe"
+          ? `business@${MAIL_DOMAIN}, info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`
+          : `info@${MAIL_DOMAIN}, orhan.salo@${MAIL_DOMAIN}, luca.marrancone@${MAIL_DOMAIN}`,
+        subject: `Neue Beratung · ${who} · ${data.name.trim()}`,
         text,
+        purpose: "lead",
+      });
         purpose: "lead",
       });
     } catch {
@@ -58,7 +68,7 @@ export const submitLead = createServerFn({ method: "POST" })
           userId: a.user_id,
           type: "lead",
           title: "Neue Beratungsanfrage",
-          message: `${data.name.trim()} · ${data.phone.trim()}`,
+          message: `${who} · ${data.name.trim()} · ${data.phone.trim()}`,
           link: "/portal/admin/leads",
         });
       }

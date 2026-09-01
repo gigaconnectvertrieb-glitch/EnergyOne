@@ -108,7 +108,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </div>
           <div className="text-sm text-muted">
             <p className="mb-2 text-xs uppercase tracking-[0.2em] text-gold">Kontakt</p>
-            <p>Persönlich und ohne Callcenter. Festnetz über Satellite.</p>
+            <p>Privat und Gewerbe. Persönlich, ohne Callcenter.</p>
             {phone ? (
               <p className="mt-2">
                 <a className="text-gold" href={telHref(phone)}>

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
-import { CheckboxRow, Field, Input, Textarea } from "@/components/ui/field";
+import { CheckboxRow, Field, Input, Select, Textarea } from "@/components/ui/field";
 import { getPublicContact, submitLead } from "@/lib/server/public";
 import { formatPhone, telHref } from "@/lib/contact";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ function Page() {
   const [zip, setZip] = useState("");
   const [message, setMessage] = useState("");
   const [consent, setConsent] = useState(false);
+  const [kind, setKind] = useState<"privat" | "gewerbe">("privat");
+  const [company, setCompany] = useState("");
   const [busy, setBusy] = useState(false);
   const [office, setOffice] = useState("");
   useEffect(() => {
@@ -29,7 +31,7 @@ function Page() {
         <p className="text-xs uppercase tracking-[0.28em] text-gold">Unverbindlich</p>
         <h1 className="mt-2 font-display text-5xl">Beratung anfordern</h1>
         <p className="mt-3 text-muted">
-          Wir kommen zu Ihnen. Kein Skript, keine Hotline.
+          Privat oder Gewerbe. Kein Skript, keine Hotline.
           {office ? " Oder Sie rufen uns direkt an." : ""}
         </p>
         {office ? (
@@ -46,7 +48,7 @@ function Page() {
             e.preventDefault();
             setBusy(true);
             try {
-              await submitLead({ data: { name, phone, zip, message, consent } });
+              await submitLead({ data: { name, phone, zip, message, consent, kind, company } });
               toast.success("Danke. Wir rufen persönlich zurück.");
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Fehler");
@@ -55,6 +57,17 @@ function Page() {
             }
           }}
         >
+          <Field label="Ich bin">
+            <Select value={kind} onChange={(e) => setKind(e.target.value === "gewerbe" ? "gewerbe" : "privat")}>
+              <option value="privat">Privatkunde</option>
+              <option value="gewerbe">Unternehmen / Gewerbe</option>
+            </Select>
+          </Field>
+          {kind === "gewerbe" ? (
+            <Field label="Firma">
+              <Input value={company} onChange={(e) => setCompany(e.target.value)} />
+            </Field>
+          ) : null}
           <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>

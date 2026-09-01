@@ -1532,6 +1532,8 @@ export const listLeads = createServerFn({ method: "GET" }).middleware([authMiddl
     phone: asStr(r.phone),
     zip: asStr(r.zip),
     message: asStr(r.message),
+    kind: asStr(r.kind) || "privat",
+    company: r.company ? asStr(r.company) : "",
     status: asStr(r.status),
     created_at: asStr(r.created_at)
   }));

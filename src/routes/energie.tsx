@@ -8,11 +8,20 @@ function Page() {
     <PublicShell>
       <div className="mx-auto max-w-3xl px-4 py-16">
         <p className="text-xs uppercase tracking-[0.28em] text-gold">Energie-Lösungen</p>
-        <h1 className="mt-2 font-display text-5xl">Strom und Gas, verständlich erklärt.</h1>
+        <h1 className="mt-2 font-display text-5xl">Strom und Gas für Haushalt und Betrieb.</h1>
         <div className="mt-8 space-y-6 text-muted">
           <p>
-            Der Markt ist liberalisiert. Sie dürfen den Lieferanten frei wählen.
-            Der Netzbetreiber bleibt, die Belieferung wechselt.
+            Der Markt ist liberalisiert. Privathaushalt und Gewerbe dürfen den
+            Lieferanten frei wählen. Der Netzbetreiber bleibt, die Belieferung wechselt.
+          </p>
+          <p>
+            <strong className="text-ink">Privat:</strong> Wohnung oder Haus, Strom und
+            Gas, Wechsel ohne Versorgungslücke, Widerruf in 14 Tagen.
+          </p>
+          <p>
+            <strong className="text-ink">Gewerbe:</strong> Praxis, Laden, Büro, Filiale,
+            Gastronomie. Ein Ansprechpartner statt Hotline – Anfragen an
+            business@e1direktvertrieb.de.
           </p>
           <p>
             <strong className="text-ink">Grundversorgung</strong> ist das Auffangnetz,

@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Check, Leaf, Shield, User } from "lucide-react";
+import { ArrowRight, Building2, Check, Shield, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea, CheckboxRow } from "@/components/ui/field";
+import { Field, Input, Textarea, CheckboxRow, Select } from "@/components/ui/field";
 import { getPublicContact, submitLead } from "@/lib/server/public";
 import { formatPhone, telHref } from "@/lib/contact";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ function Home() {
     <PublicShell>
       <Hero />
       <TrustStrip />
+      <Audience />
       <BeratungBand />
       <Steps />
       <Founders />
@@ -42,26 +43,25 @@ function Hero() {
       <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 md:grid-cols-2 md:py-24">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-gold">
-            Persönliche Energieberatung · Deutschland
+            Privat & Gewerbe · Deutschland
           </p>
           <h1 className="mt-4 font-display text-4xl leading-[1.1] md:text-6xl">
-            Ein Gesicht für Ihre Energieberatung.{" "}
+            Energieberatung für Zuhause und Betrieb.{" "}
             <span className="text-gold">Kein Callcenter.</span>
           </h1>
           <p className="mt-5 max-w-lg text-base text-muted md:text-lg">
-            Steigende Preise, verwirrende Tarife, anonyme Hotlines. E1 kommt
-            persönlich vorbei, hört zu und findet gemeinsam den passenden Tarif.
-            Fair, transparent und ohne Druck.
+            Haushalt, Praxis, Laden, Büro oder Betrieb: Wir erklären Tarif, Verbrauch
+            und Wechsel persönlich. Fair, ohne Druck, mit einem festen Ansprechpartner.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/beratung">
               <Button size="lg">
-                Persönliche Beratung anfordern <ArrowRight className="size-4" />
+                Beratung anfordern <ArrowRight className="size-4" />
               </Button>
             </Link>
-            <Link to="/ueber-uns">
+            <Link to="/energie">
               <Button size="lg" variant="outline">
-                Die Köpfe hinter E1
+                Strom & Gas
               </Button>
             </Link>
           </div>
@@ -88,9 +88,9 @@ function Hero() {
 
 function TrustStrip() {
   const items = [
-    { icon: User, title: "Persönlich", text: "Direkt von Mensch zu Mensch." },
-    { icon: Shield, title: "Transparent", text: "Klare Informationen. Echte Antworten." },
-    { icon: Leaf, title: "Ohne Druck", text: "Beratung, die Ihre Entscheidung respektiert." },
+    { icon: User, title: "Privat", text: "Haushalt, Strom und Gas – verständlich an der Tür." },
+    { icon: Building2, title: "Gewerbe", text: "Praxis, Laden, Büro, Betrieb – ein Ansprechpartner." },
+    { icon: Shield, title: "Ohne Druck", text: "Sie entscheiden. Wir erklären." },
   ];
   return (
     <section className="border-y border-line bg-surface">
@@ -109,11 +109,42 @@ function TrustStrip() {
   );
 }
 
+function Audience() {
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-14">
+      <p className="text-xs uppercase tracking-[0.28em] text-gold">Für wen</p>
+      <h2 className="mt-2 font-display text-4xl">Privatkunden und Unternehmen.</h2>
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <Link to="/beratung" className="rounded-3xl bg-surface p-6 gold-hairline">
+          <User className="size-6 text-gold" />
+          <h3 className="mt-4 text-xl font-medium">Privathaushalt</h3>
+          <p className="mt-2 text-sm text-muted">
+            Strom und Gas für die Wohnung oder das Haus. Vergleich, Wechsel,
+            Widerruf – in Ruhe erklärt.
+          </p>
+          <p className="mt-4 text-sm text-gold">Beratung anfordern</p>
+        </Link>
+        <Link to="/beratung" className="rounded-3xl bg-surface p-6 gold-hairline">
+          <Building2 className="size-6 text-gold" />
+          <h3 className="mt-4 text-xl font-medium">Unternehmen</h3>
+          <p className="mt-2 text-sm text-muted">
+            Gewerbe, Praxis, Gastronomie, Büro, Filiale. Ein fester Draht,
+            keine Hotline. Anfragen auch an business@.
+          </p>
+          <p className="mt-4 text-sm text-gold">Geschäftskunden-Anfrage</p>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function BeratungBand() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [zip, setZip] = useState("");
   const [message, setMessage] = useState("");
+  const [kind, setKind] = useState<"privat" | "gewerbe">("privat");
+  const [company, setCompany] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -121,12 +152,14 @@ function BeratungBand() {
     e.preventDefault();
     setBusy(true);
     try {
-      await submitLead({ data: { name, phone, zip, message, consent } });
+      await submitLead({ data: { name, phone, zip, message, consent, kind, company } });
       toast.success("Anfrage gesendet. Wir melden uns persönlich.");
       setName("");
       setPhone("");
       setZip("");
       setMessage("");
+      setCompany("");
+      setKind("privat");
       setConsent(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Senden fehlgeschlagen");
@@ -140,10 +173,9 @@ function BeratungBand() {
       <div className="grid gap-10 lg:grid-cols-2">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-gold">Beratung anfordern</p>
-          <h2 className="mt-3 font-display text-4xl">Persönliche Beratung anfordern</h2>
+          <h2 className="mt-3 font-display text-4xl">Beratung anfordern</h2>
           <p className="mt-4 text-muted">
-            Keine Callcenter. Keine Wartezeiten. Wir kommen zu Ihnen. Persönlich.
-            Kompetent. Nah.
+            Privat oder Gewerbe – dieselbe Nummer, derselbe Draht. Kein Callcenter.
           </p>
         </div>
         <form onSubmit={onSubmit} className="rounded-3xl bg-surface p-5 gold-hairline md:p-6">
@@ -151,6 +183,17 @@ function BeratungBand() {
             Bitte teilen Sie uns Ihre Daten mit. Unser Berater kontaktiert Sie zeitnah.
           </p>
           <div className="grid gap-3">
+            <Field label="Ich bin">
+              <Select value={kind} onChange={(e) => setKind(e.target.value === "gewerbe" ? "gewerbe" : "privat")}>
+                <option value="privat">Privatkunde</option>
+                <option value="gewerbe">Unternehmen / Gewerbe</option>
+              </Select>
+            </Field>
+            {kind === "gewerbe" ? (
+              <Field label="Firma">
+                <Input value={company} onChange={(e) => setCompany(e.target.value)} />
+              </Field>
+            ) : null}
             <Field label="Name">
               <Input value={name} onChange={(e) => setName(e.target.value)} required />
             </Field>
@@ -290,6 +333,10 @@ function Faq() {
     {
       q: "Was kostet die Beratung?",
       a: "Die Erstberatung ist für Sie unverbindlich. Provisionen laufen über den Energievertrag, nicht über eine Beratungsgebühr an der Tür.",
+    },
+    {
+      q: "Beraten Sie auch Firmen?",
+      a: "Ja. Haushalt und Gewerbe. Geschäftskunden schreiben an business@e1direktvertrieb.de oder nutzen das Formular als Unternehmen.",
     },
     {
       q: "Kann ich Strom und Gas gleichzeitig wechseln?",
