@@ -40,9 +40,7 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
     <div className="min-h-dvh bg-bg text-ink gold-wash">
       <header className="sticky top-0 z-40 border-b border-line/80 bg-bg/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-          <Link to={firmen ? "/firmen" : "/"} aria-label="E1 Direktvertrieb">
-            <Wordmark />
-          </Link>
+          <Wordmark to={firmen ? "/firmen" : "/"} />
           <nav className="hidden items-center gap-6 lg:flex">
             {NAV.map((n) => (
               <Link
