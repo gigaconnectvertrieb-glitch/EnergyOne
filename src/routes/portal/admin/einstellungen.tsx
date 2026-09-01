@@ -109,6 +109,7 @@ function Page() {
               inputMode="tel"
             />
           </Field>
+          <Field label="Firmenkonto · Name">
             <Input
               value={ops.payout_debtor_name || ""}
               onChange={(e) => setOps({ ...ops, payout_debtor_name: e.target.value })}
@@ -127,6 +128,7 @@ function Page() {
               onChange={(e) => setOps({ ...ops, payout_debtor_bic: e.target.value.toUpperCase() })}
             />
           </Field>
+          <Button type="submit">Speichern</Button>
         </form>
       ) : null}
       <div className="mt-6 grid gap-2">
