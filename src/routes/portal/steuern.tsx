@@ -98,6 +98,50 @@ function Page() {
             </ul>
           </div>
 
+          <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+            <p className="text-xs uppercase tracking-[0.16em] text-gold">ELSTER · USt-VA {data.elster.quarter}</p>
+            <p className="mt-2 text-sm text-muted">
+              Keine direkte Anbindung an das Finanzamt. ELSTER nimmt nur zertifizierte Steuersoftware (ERiC).
+              Hier die Kennzahlen zum Eintragen in{" "}
+              <a href={data.elster.url} className="text-gold" target="_blank" rel="noreferrer">
+                mein.elster.de
+              </a>
+              .
+            </p>
+            {data.kleinunternehmer ? (
+              <p className="mt-3 text-sm">Kleinunternehmer: keine USt-VA, solange die Grenzen gehalten werden.</p>
+            ) : (
+              <ul className="mt-3 grid gap-1 text-sm">
+                <li>Kz 81 Bemessungsgrundlage 19 % · {eur(data.elster.kz81)}</li>
+                <li>Kz 66 Vorsteuer · {eur(data.elster.kz66)}</li>
+                <li>Kz 83 Zahllast · {eur(data.elster.kz83)}</li>
+                <li className="text-muted">
+                  Zeitraum {deDate(data.elster.from)} – {deDate(data.elster.to)}
+                </li>
+              </ul>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const blob = new Blob(["\uFEFF" + data.elster.csv], { type: "text/csv;charset=utf-8" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `E1-ELSTER-${data.elster.quarter.replace(/\s+/g, "-")}.csv`;
+                  a.click();
+                }}
+              >
+                ELSTER-CSV
+              </Button>
+              <a href={data.elster.url} target="_blank" rel="noreferrer">
+                <Button type="button" size="sm">
+                  Zu ElsterOnline
+                </Button>
+              </a>
+            </div>
+          </div>
+
           <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline" onSubmit={saveExp}>
             <p className="text-xs uppercase tracking-[0.16em] text-gold">Ausgabe buchen</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -194,6 +238,7 @@ function Page() {
                     kleinunternehmer: data.kleinunternehmer,
                     dauerfrist: data.dauerfrist,
                     steuerberater: data.steuerberater,
+                    steuernummer: data.steuernummer,
                     notes: data.notes,
                   },
                 });
@@ -223,6 +268,13 @@ function Page() {
               />
               Dauerfristverlängerung USt
             </label>
+            <Field label="Steuernummer">
+              <Input
+                value={data.steuernummer}
+                onChange={(e) => setData({ ...data, steuernummer: e.target.value })}
+                placeholder="für ELSTER-CSV"
+              />
+            </Field>
             <Field label="Steuerberater">
               <Input
                 value={data.steuerberater}

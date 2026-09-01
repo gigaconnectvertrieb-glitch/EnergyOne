@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { baAmount, leftover, nextVatDeadline, splitMoney } from "./steuer.ts";
+import { baAmount, elsterCsv, leftover, nextVatDeadline, splitMoney, ustVa, vatQuarter } from "./steuer.ts";
 
 describe("steuer", () => {
   it("splits 19 percent vat", () => {
@@ -19,5 +19,14 @@ describe("steuer", () => {
     const d = nextVatDeadline(new Date("2026-05-02T12:00:00"), false);
     assert.equal(d.getMonth(), 6);
     assert.equal(d.getDate(), 10);
+  });
+  it("builds elster kennziffern", () => {
+    const q = vatQuarter(new Date("2026-05-02T12:00:00"));
+    assert.equal(q.label, "Q2 2026");
+    const v = ustVa(1000, 19);
+    assert.equal(v.kz81, 1000);
+    assert.equal(v.kz66, 19);
+    assert.equal(v.kz83, 171);
+    assert.match(elsterCsv({ name: "Max", quarter: q.label, kz81: v.kz81, kz66: v.kz66, kz83: v.kz83 }), /81/);
   });
 });

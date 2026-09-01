@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import {
   baAmount,
+  elsterCsv,
+  ELSTER_URL,
   EST_FREE,
   estReserve,
   EXPENSE_CATS,
@@ -10,7 +12,9 @@ import {
   reminders,
   splitMoney,
   STEUER_YEAR,
+  ustVa,
   UST_RATE,
+  vatQuarter,
   type ExpenseCat,
 } from "@/lib/steuer";
 import { asStr, nid, num } from "@/lib/utils";
@@ -72,11 +76,32 @@ export const getSteuer = createServerFn({ method: "GET" })
     const ustSetAside = Math.max(0, ustOnProvi - vorsteuer);
     const taxable = Math.max(0, paid - ba);
     const estSetAside = estReserve(taxable);
+    const q = vatQuarter(new Date());
+    const qEnd = new Date(q.to + "T12:00:00");
+    qEnd.setDate(qEnd.getDate() + 1);
+    const qEndIso = qEnd.toISOString().slice(0, 10);
+    const [cmQ] = await db<{ paid: string }>`
+      select coalesce(sum(amount) filter (where status = 'ausgezahlt'), 0)::text as paid
+      from commissions
+      where user_id = ${me.user_id}
+        and calculated_at >= ${q.from}::date
+        and calculated_at < ${qEndIso}::date
+    `;
+    const qPaid = num(cmQ?.paid);
+    const qVor = kleinunternehmer
+      ? 0
+      : expenses
+          .filter((e) => e.spent_on >= q.from && e.spent_on <= q.to && EXPENSE_CATS[e.category].ba)
+          .reduce((a, e) => a + e.vat, 0);
+    const va = kleinunternehmer ? ustVa(0, 0) : ustVa(qPaid, qVor);
+    const name = `${me.first_name} ${me.last_name}`.trim();
+    const steuernummer = set ? asStr(set.steuernummer) : "";
     return {
       year,
       kleinunternehmer,
       dauerfrist,
       steuerberater: set ? asStr(set.steuerberater) : "",
+      steuernummer,
       notes: set ? asStr(set.notes) : "",
       paid,
       offen,
@@ -91,25 +116,35 @@ export const getSteuer = createServerFn({ method: "GET" })
       leftover: leftover({ proviPaid: paid, expensesCash: cash, ustSetAside, estSetAside }),
       reminders: reminders(new Date(), { kleinunternehmer, dauerfrist, year }),
       expenses,
+      elster: {
+        connected: false,
+        url: ELSTER_URL,
+        quarter: q.label,
+        from: q.from,
+        to: q.to,
+        ...va,
+        csv: elsterCsv({ name, steuernummer, quarter: q.label, kz81: va.kz81, kz66: va.kz66, kz83: va.kz83 }),
+      },
     };
   });
 
 export const saveSteuerSettings = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { kleinunternehmer: boolean; dauerfrist: boolean; steuerberater?: string; notes?: string }) => d)
+  .validator((d: { kleinunternehmer: boolean; dauerfrist: boolean; steuerberater?: string; notes?: string; steuernummer?: string }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     await db`
-      insert into tax_settings (user_id, kleinunternehmer, dauerfrist, steuerberater, notes, updated_at)
+      insert into tax_settings (user_id, kleinunternehmer, dauerfrist, steuerberater, steuernummer, notes, updated_at)
       values (
         ${me.user_id}, ${Boolean(data.kleinunternehmer)}, ${Boolean(data.dauerfrist)},
-        ${data.steuerberater?.trim() || null}, ${data.notes?.trim() || null}, now()
+        ${data.steuerberater?.trim() || null}, ${data.steuernummer?.trim() || null}, ${data.notes?.trim() || null}, now()
       )
       on conflict (user_id) do update set
         kleinunternehmer = excluded.kleinunternehmer,
         dauerfrist = excluded.dauerfrist,
         steuerberater = excluded.steuerberater,
+        steuernummer = excluded.steuernummer,
         notes = excluded.notes,
         updated_at = now()
     `;

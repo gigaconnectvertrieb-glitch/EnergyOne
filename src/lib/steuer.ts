@@ -60,6 +60,67 @@ export function estReserve(taxable: number) {
   return over * 0.42;
 }
 
+export function round2(n: number) {
+  return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+}
+
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function vatQuarter(d: Date) {
+  const y = d.getFullYear();
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  const fromMonth = (q - 1) * 3;
+  const from = new Date(y, fromMonth, 1);
+  const to = new Date(y, fromMonth + 3, 0);
+  return {
+    q,
+    y,
+    from: ymd(from),
+    to: ymd(to),
+    label: `Q${q} ${y}`,
+  };
+}
+
+/** USt-VA Kennziffern — nur Vorbereitung, keine Übermittlung an das FA. */
+export function ustVa(kz81Net: number, kz66: number) {
+  const tax = round2(kz81Net * UST_RATE);
+  const vor = round2(kz66);
+  return {
+    kz81: round2(kz81Net),
+    kz66: vor,
+    ust: tax,
+    kz83: round2(tax - vor),
+  };
+}
+
+export function elsterCsv(input: {
+  name: string;
+  steuernummer?: string;
+  quarter: string;
+  kz81: number;
+  kz66: number;
+  kz83: number;
+}) {
+  const rows = [
+    ["Feld", "Kennziffer", "Betrag EUR"],
+    ["Lieferungen/Leistungen 19 % (Bemessungsgrundlage)", "81", input.kz81.toFixed(2).replace(".", ",")],
+    ["Abziehbare Vorsteuer", "66", input.kz66.toFixed(2).replace(".", ",")],
+    ["Verbleibende USt-Vorauszahlung (Zahllast)", "83", input.kz83.toFixed(2).replace(".", ",")],
+  ];
+  const head = [
+    `ELSTER-Vorbereitung E1;${input.quarter}`,
+    `Name;${input.name}`,
+    `Steuernummer;${input.steuernummer || ""}`,
+    "Hinweis;Keine Übermittlung an das Finanzamt. Zahlen in mein.elster.de eintragen.",
+    "",
+  ].join("\n");
+  return head + rows.map((r) => r.join(";")).join("\n") + "\n";
+}
+
+export const ELSTER_URL = "https://www.elster.de/eportal/login/softpse";
+
 export function leftover(input: {
   proviPaid: number;
   expensesCash: number;
