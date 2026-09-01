@@ -29,12 +29,17 @@ function Page() {
       {err ? <p className="mt-4 text-danger">{err}</p> : null}
       {goals.some((g) => g.target > 0) ? (
         <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
-          <h2 className="text-sm font-medium">Ziele diesen Monat</h2>
+          <h2 className="text-sm font-medium">Ziele</h2>
           <div className="mt-3 grid gap-3">
             {goals.map((g) => (
               <div key={g.user_id}>
                 <div className="flex items-center justify-between text-sm">
-                  <span>{g.name}</span>
+                  <span>
+                    {g.name}
+                    <span className="ml-2 text-xs text-muted">
+                      {g.period === "total" ? "Gesamt" : g.period === "year" ? "Jahr" : g.period === "week" ? "Woche" : "Monat"}
+                    </span>
+                  </span>
                   <span className="tabular-nums text-muted">
                     {g.target > 0 ? `${eur(g.earned)} / ${eur(g.target)}` : "kein Ziel"}
                   </span>

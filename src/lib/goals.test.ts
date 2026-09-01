@@ -16,6 +16,8 @@ describe("goals", () => {
     assert.equal(clampGoal(8000.4), 8000);
     assert.equal(clampGoal(2e9), 1_000_000);
     assert.equal(asPeriod("week"), "week");
+    assert.equal(asPeriod("year"), "year");
+    assert.equal(asPeriod("total"), "total");
     assert.equal(asPeriod("x"), "month");
   });
 
@@ -72,5 +74,22 @@ describe("goals", () => {
     assert.equal(b.start, "2026-08-31");
     assert.equal(b.endExclusive, "2026-09-07");
     assert.equal(b.daysTotal, 7);
+  });
+
+  it("year and overall goals", () => {
+    const y = periodBounds("year", new Date("2026-09-10T10:00:00+02:00"));
+    assert.equal(y.start, "2026-01-01");
+    assert.equal(y.endExclusive, "2027-01-01");
+    assert.equal(y.label, "Jahr 2026");
+    const t = goalProgress({
+      target: 50000,
+      earned: 12500,
+      period: "total",
+      now: new Date("2026-09-10T10:00:00+02:00"),
+    });
+    assert.equal(t.periodLabel, "Gesamt");
+    assert.equal(t.pct, 25);
+    assert.equal(t.remaining, 37500);
+    assert.equal(t.start, "2000-01-01");
   });
 });

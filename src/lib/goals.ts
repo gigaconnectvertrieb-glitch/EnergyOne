@@ -1,4 +1,4 @@
-export type GoalPeriod = "week" | "month";
+export type GoalPeriod = "week" | "month" | "year" | "total";
 
 export type NudgeKind =
   | "morning"
@@ -40,7 +40,7 @@ export type GoalProgress = {
   hour: number;
 };
 
-export const GOAL_PRESETS = [3000, 5000, 8000, 10000, 12000, 15000, 17000] as const;
+export const GOAL_PRESETS = [3000, 5000, 8000, 10000, 12000, 15000, 17000, 25000, 50000] as const;
 
 const MONTHS = [
   "Januar",
@@ -104,6 +104,35 @@ function ymd(year: number, month: number, day: number) {
 
 export function periodBounds(period: GoalPeriod, now = new Date()) {
   const p = berlinParts(now);
+  if (period === "total") {
+    return {
+      key: "total",
+      label: "Gesamt",
+      start: "2000-01-01",
+      endExclusive: "2100-01-01",
+      daysTotal: 1,
+      dayIndex: 1,
+      daysLeft: 0,
+      hour: p.hour,
+    };
+  }
+  if (period === "year") {
+    const leap = (p.year % 4 === 0 && p.year % 100 !== 0) || p.year % 400 === 0;
+    const last = leap ? 366 : 365;
+    const startUtc = Date.UTC(p.year, 0, 1);
+    const todayUtc = Date.UTC(p.year, p.month - 1, p.day);
+    const dayIndex = Math.floor((todayUtc - startUtc) / 86400000) + 1;
+    return {
+      key: String(p.year),
+      label: `Jahr ${p.year}`,
+      start: ymd(p.year, 1, 1),
+      endExclusive: ymd(p.year + 1, 1, 1),
+      daysTotal: last,
+      dayIndex,
+      daysLeft: Math.max(0, last - dayIndex),
+      hour: p.hour,
+    };
+  }
   if (period === "month") {
     const last = new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
     const next = p.month === 12 ? { year: p.year + 1, month: 1 } : { year: p.year, month: p.month + 1 };
@@ -141,7 +170,8 @@ export function clampGoal(n: unknown) {
 }
 
 export function asPeriod(v: unknown): GoalPeriod {
-  return v === "week" ? "week" : "month";
+  if (v === "week" || v === "year" || v === "total") return v;
+  return "month";
 }
 
 function round2(n: number) {
@@ -160,8 +190,8 @@ export function goalProgress(input: {
   const remaining = Math.max(0, round2(target - earned));
   const pct = target > 0 ? Math.min(999, Math.round((earned / target) * 1000) / 10) : 0;
   const elapsed = b.daysTotal > 0 ? Math.min(1, Math.max(0, (b.dayIndex - 1 + Math.min(b.hour, 23) / 24) / b.daysTotal)) : 0;
-  const expected = round2(target * elapsed);
-  const expectedPct = target > 0 ? Math.round((expected / target) * 1000) / 10 : 0;
+  const expected = input.period === "total" ? 0 : round2(target * elapsed);
+  const expectedPct = input.period === "total" ? 0 : target > 0 ? Math.round((expected / target) * 1000) / 10 : 0;
   const dayTarget = b.daysLeft > 0 && remaining > 0 ? round2(remaining / Math.max(1, b.daysLeft)) : 0;
   return {
     period: input.period,
@@ -196,7 +226,7 @@ export function pickNudgeKinds(p: GoalProgress, opts?: { nudge?: boolean }) {
     if (p.hour >= 6 && p.hour <= 11) kinds.push("morning");
     if (p.hour >= 12 && p.hour <= 16) kinds.push(p.ahead >= 0 ? "midday_ahead" : "midday_behind");
     if (p.hour >= 17 && p.hour <= 21) kinds.push("evening");
-    if (p.dayIndex >= 10 && p.pct + 15 < p.expectedPct) kinds.push("behind");
+    if (p.period !== "total" && p.dayIndex >= 10 && p.pct + 15 < p.expectedPct) kinds.push("behind");
   }
   return kinds;
 }

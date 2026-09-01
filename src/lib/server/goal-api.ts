@@ -22,7 +22,7 @@ export const getMyGoal = createServerFn({ method: "GET" })
 
 export const setMyGoal = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((d: { targetEur: number; period?: "week" | "month"; nudge?: boolean }) => d)
+  .validator((d: { targetEur: number; period?: "week" | "month" | "year" | "total"; nudge?: boolean }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
     await requireProfile(db, context.userId);
@@ -69,16 +69,27 @@ export const getTeamGoals = createServerFn({ method: "GET" })
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     if (!can(me.role, "team.view") && !can(me.role, "users.manage")) {
-      return [] as Array<{ user_id: string; name: string; period: "week" | "month"; target: number; earned: number; pct: number }>;
+      return [] as Array<{ user_id: string; name: string; period: string; target: number; earned: number; pct: number }>;
     }
     const ids = can(me.role, "users.manage") ? null : await visibleUserIds(db, me);
     const month = goalProgress({ target: 1, earned: 0, period: "month" });
+    const week = goalProgress({ target: 1, earned: 0, period: "week" });
+    const year = goalProgress({ target: 1, earned: 0, period: "year" });
     const rows = ids
       ? await db<Record<string, unknown>>`
           select p.user_id, p.first_name, p.last_name, p.revenue_goal_eur, p.revenue_goal_period,
             coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert'
+            ), 0)::text as earned_all,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert' and c.created_at >= ${year.start}::date and c.created_at < ${year.endExclusive}::date
+            ), 0)::text as earned_year,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
               where c.status <> 'storniert' and c.created_at >= ${month.start}::date and c.created_at < ${month.endExclusive}::date
-            ), 0)::text as earned
+            ), 0)::text as earned_month,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert' and c.created_at >= ${week.start}::date and c.created_at < ${week.endExclusive}::date
+            ), 0)::text as earned_week
           from profiles p
           left join contracts c on c.user_id = p.user_id
           where p.status = 'active' and coalesce(p.is_demo, false) = false and p.user_id = any(${ids})
@@ -88,8 +99,17 @@ export const getTeamGoals = createServerFn({ method: "GET" })
       : await db<Record<string, unknown>>`
           select p.user_id, p.first_name, p.last_name, p.revenue_goal_eur, p.revenue_goal_period,
             coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert'
+            ), 0)::text as earned_all,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert' and c.created_at >= ${year.start}::date and c.created_at < ${year.endExclusive}::date
+            ), 0)::text as earned_year,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
               where c.status <> 'storniert' and c.created_at >= ${month.start}::date and c.created_at < ${month.endExclusive}::date
-            ), 0)::text as earned
+            ), 0)::text as earned_month,
+            coalesce(sum(coalesce(c.advisor_amount, c.commission_amount)) filter (
+              where c.status <> 'storniert' and c.created_at >= ${week.start}::date and c.created_at < ${week.endExclusive}::date
+            ), 0)::text as earned_week
           from profiles p
           left join contracts c on c.user_id = p.user_id
           where p.status = 'active' and coalesce(p.is_demo, false) = false
@@ -99,7 +119,15 @@ export const getTeamGoals = createServerFn({ method: "GET" })
         `;
     return rows.map((r) => {
       const target = clampGoal(r.revenue_goal_eur);
-      const earned = num(r.earned);
+      const period = asPeriod(r.revenue_goal_period);
+      const earned =
+        period === "week"
+          ? num(r.earned_week)
+          : period === "year"
+            ? num(r.earned_year)
+            : period === "total"
+              ? num(r.earned_all)
+              : num(r.earned_month);
       const pct = target > 0 ? Math.min(999, Math.round((earned / target) * 1000) / 10) : 0;
       return {
         user_id: asStr(r.user_id),

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bell, BellOff, Target } from "lucide-react";
 import { disablePush, getMyGoal, savePush, setMyGoal } from "@/lib/server/goal-api";
-import { GOAL_PRESETS } from "@/lib/goals";
+import { GOAL_PRESETS, type GoalPeriod } from "@/lib/goals";
 import { cn, eur } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -91,7 +91,7 @@ export function GoalCard({ compact = false }: { compact?: boolean }) {
       .catch(() => setG(null));
   }, []);
 
-  async function save(next?: Partial<{ targetEur: number; period: "week" | "month"; nudge: boolean }>) {
+  async function save(next?: Partial<{ targetEur: number; period: GoalPeriod; nudge: boolean }>) {
     if (!g) return;
     setBusy(true);
     try {
@@ -167,11 +167,13 @@ export function GoalCard({ compact = false }: { compact?: boolean }) {
       ? "Eigenes Euro-Ziel setzen. Push erinnert morgens, mittags und abends."
       : g.pct >= 100
         ? "Ziel steht."
-        : g.earned === 0 && g.dayIndex <= 2
-          ? `${g.daysLeft} Tage · Tagessoll ${eur(g.dayTarget)}.`
-          : g.ahead >= 0
-            ? `${eur(g.ahead)} vor dem Plan · ${g.daysLeft} Tage`
-            : `${eur(Math.abs(g.ahead))} hinter dem Plan · noch ${eur(g.dayTarget)} / Tag`;
+        : g.period === "total"
+          ? `Noch ${eur(g.remaining)} bis zum Gesamtziel.`
+          : g.earned === 0 && g.dayIndex <= 2
+            ? `${g.daysLeft} Tage · Tagessoll ${eur(g.dayTarget)}.`
+            : g.ahead >= 0
+              ? `${eur(g.ahead)} vor dem Plan · ${g.daysLeft} Tage`
+              : `${eur(Math.abs(g.ahead))} hinter dem Plan · noch ${eur(g.dayTarget)} / Tag`;
 
   return (
     <div className="rounded-3xl bg-surface p-5 gold-hairline">
@@ -206,26 +208,26 @@ export function GoalCard({ compact = false }: { compact?: boolean }) {
       {compact ? null : (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs gold-hairline",
-                g.period === "month" && "bg-gold text-bg",
-              )}
-              onClick={() => void save({ period: "month" })}
-            >
-              Monat
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs gold-hairline",
-                g.period === "week" && "bg-gold text-bg",
-              )}
-              onClick={() => void save({ period: "week" })}
-            >
-              Woche
-            </button>
+            {(
+              [
+                ["total", "Gesamt"],
+                ["year", "Jahr"],
+                ["month", "Monat"],
+                ["week", "Woche"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-xs gold-hairline",
+                  g.period === id && "bg-gold text-bg",
+                )}
+                onClick={() => void save({ period: id })}
+              >
+                {label}
+              </button>
+            ))}
             {GOAL_PRESETS.map((n) => (
               <button
                 key={n}
