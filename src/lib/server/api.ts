@@ -485,6 +485,46 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   } catch {
     /* Ziel-Push optional */
   }
+  if (!full) {
+    try {
+      const { newsalesConfigured, submitNewsalesOrder } = await import("./newsales.server");
+      if (newsalesConfigured()) {
+        const pushed = await submitNewsalesOrder({
+          portalId: id,
+          advisorId: ownerId,
+          advisorName: `${stufeOwner.first_name} ${stufeOwner.last_name}`.trim(),
+          customer: {
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+            phone: data.phone.trim(),
+            email: data.email?.trim(),
+            street: data.street.trim(),
+            houseNumber: data.houseNumber.trim(),
+            zip: data.zip.trim(),
+            city: data.city.trim(),
+            birthDate: data.birthDate,
+          },
+          productName: asStr(tariff.name),
+          provider: asStr(tariff.provider),
+          type,
+          consumptionKwh: kwh,
+          meterNumber: data.meterNumber?.trim(),
+          previousProvider: data.previousProvider?.trim(),
+          startDate: data.startDate,
+          notes: data.notes?.trim(),
+        });
+        if (pushed.ok && pushed.ref) {
+          await db`
+            update contracts
+            set newsales_ref = ${pushed.ref}, source = 'newsales_api', updated_at = now()
+            where id = ${id}
+          `;
+        }
+      }
+    } catch {
+      /* New Sales API optional — Portal-Eintrag bleibt */
+    }
+  }
   return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin };
 });
 export const listContracts = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d = {}) => d).handler(async ({ context, data }) => {
@@ -1960,6 +2000,7 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       quality_warn_rate: map.quality_warn_rate || "0.25",
       quality_block_rate: map.quality_block_rate || "0.40",
       storno_window_days: map.storno_window_days || "14",
+      newsales_api: (await import("@/lib/newsales")).newsalesConfigured(),
     };
   });
 

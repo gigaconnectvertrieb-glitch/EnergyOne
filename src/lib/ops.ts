@@ -63,7 +63,7 @@ export function newsalesPackage(input: HandoverInput) {
   const c = input.customer;
   return [
     "E1 DIREKTVERTRIEB — Übergabepaket New Sales",
-    "Kanal: E-Mail / Datei. New Sales hat keine API.",
+    "Kanal: API sobald NEWSALES_API_URL gesetzt ist, sonst E-Mail/Datei.",
     `Auftrag: ${input.id}`,
     `Sparte: ${input.type}`,
     `Produkt: ${input.product_name} (${input.provider || "NewSales"})`,

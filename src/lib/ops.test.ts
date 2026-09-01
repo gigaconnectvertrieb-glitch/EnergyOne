@@ -46,7 +46,7 @@ describe("ops", () => {
         birth_date: "1978-04-12",
       },
     });
-    assert.match(text, /keine API/);
+    assert.match(text, /API sobald/);
     assert.match(text, /ctr-1/);
     assert.match(text, /Hans Müller/);
   });

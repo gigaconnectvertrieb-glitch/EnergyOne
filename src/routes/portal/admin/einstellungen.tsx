@@ -73,8 +73,15 @@ function Page() {
               <option value="all">alle Rollen</option>
             </Select>
           </Field>
-          <Field label="New Sales" hint="Kein Versand. Verträge entstehen dort, Teamleiter prüft dort.">
-            <Input value="Verträge in New Sales · Portal nur Kurz-Eintrag" readOnly />
+          <Field
+            label="New Sales"
+            hint={
+              ops.newsales_api
+                ? "API aktiv. Abschlüsse gehen aus dem VP an New Sales, Status kommt per Webhook zurück."
+                : "Noch keine API-Keys. Mitarbeiter tragen kurz ein, Vertrag entsteht in New Sales. Sobald URL+Key in Render stehen, läuft es über das VP."
+            }
+          >
+            <Input value={ops.newsales_api ? "API angebunden" : "Portal-Eintrag · Vertrag in New Sales"} readOnly />
           </Field>
           <Field label="Widerruf / Storno-Rückrechnung">
             <Input value={`${ops.storno_window_days || "14"} Tage`} readOnly />
