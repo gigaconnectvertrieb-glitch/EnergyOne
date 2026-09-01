@@ -2105,7 +2105,7 @@ export const getOpsSettings = createServerFn({ method: "GET" })
       payout_debtor_iban: map.payout_debtor_iban || "",
       payout_debtor_bic: map.payout_debtor_bic || "",
       public_phone: map.public_phone || process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "015678954406",
-      public_phone_label: map.public_phone_label || "Satellite · sipgate",
+      public_phone_label: map.public_phone_label || "Telefon",
       calc_privat_strom_ct: map.calc_privat_strom_ct || "",
       calc_privat_strom_grund: map.calc_privat_strom_grund || "",
       calc_gewerbe_strom_ct: map.calc_gewerbe_strom_ct || "",

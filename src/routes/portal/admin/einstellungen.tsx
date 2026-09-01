@@ -99,7 +99,7 @@ function Page() {
             />
           </Field>
           <Field
-            label="Satellite-Festnetz"
+            label="Telefon (Website)"
             hint="Steht auf der Website, Impressum und Beratungsseite. Anrufbar."
           >
             <Input

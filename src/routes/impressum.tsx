@@ -27,7 +27,7 @@ function Page() {
               <a className="text-gold" href={telHref(phone)}>
                 {formatPhone(phone) || phone}
               </a>
-              <span> · Satellite-Festnetz</span>
+              <span> · Telefon</span>
             </p>
           ) : null}
           <p>

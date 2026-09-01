@@ -39,7 +39,7 @@ function Page() {
             <a className="text-gold" href={telHref(office)}>
               Anrufen · {formatPhone(office) || office}
             </a>
-            <span className="ml-2 text-sm text-muted">Satellite-Festnetz</span>
+            <span className="ml-2 text-sm text-muted">Telefon</span>
           </p>
         ) : null}
         <form

@@ -1,7 +1,7 @@
 export const PUBLIC_EMAIL = "info@e1direktvertrieb.de";
 /** Satellite / sipgate, öffentlich anrufbar. */
 export const PUBLIC_PHONE = "015678954406";
-export const PUBLIC_PHONE_LABEL = "Satellite · sipgate";
+export const PUBLIC_PHONE_LABEL = "Telefon";
 
 export function formatPhone(raw?: string | null) {
   const digits = (raw || "").replace(/[^\d+]/g, "");
