@@ -46,6 +46,9 @@ function Page() {
         >
           Gebiet herunterladen
         </Button>
+        <Link to="/portal/steuern" className="rounded-xl px-4 py-3 text-center text-sm gold-hairline">
+          Steuer / Ausgaben
+        </Link>
         <Link to="/portal" className="rounded-xl px-4 py-3 text-center text-sm gold-hairline">
           Zum Portal
         </Link>

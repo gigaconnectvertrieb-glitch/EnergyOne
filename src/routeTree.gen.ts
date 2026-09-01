@@ -26,11 +26,13 @@ import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppKarteRouteImport } from './routes/app/karte'
 import { Route as AppListeRouteImport } from './routes/app/liste'
 import { Route as AppMehrRouteImport } from './routes/app/mehr'
+import { Route as AppSucheRouteImport } from './routes/app/suche'
 import { Route as PortalIndexRouteImport } from './routes/portal/index'
 import { Route as PortalBenachrichtigungenRouteImport } from './routes/portal/benachrichtigungen'
 import { Route as PortalPlanungRouteImport } from './routes/portal/planung'
 import { Route as PortalProfilRouteImport } from './routes/portal/profil'
 import { Route as PortalProvisionenRouteImport } from './routes/portal/provisionen'
+import { Route as PortalSteuernRouteImport } from './routes/portal/steuern'
 import { Route as PortalTeamRouteImport } from './routes/portal/team'
 import { Route as PortalWissenRouteImport } from './routes/portal/wissen'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -145,6 +147,11 @@ const AppMehrRoute = AppMehrRouteImport.update({
   path: '/mehr',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSucheRoute = AppSucheRouteImport.update({
+  id: '/suche',
+  path: '/suche',
+  getParentRoute: () => AppRoute,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -169,6 +176,11 @@ const PortalProfilRoute = PortalProfilRouteImport.update({
 const PortalProvisionenRoute = PortalProvisionenRouteImport.update({
   id: '/provisionen',
   path: '/provisionen',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalSteuernRoute = PortalSteuernRouteImport.update({
+  id: '/steuern',
+  path: '/steuern',
   getParentRoute: () => PortalRoute,
 } as any)
 const PortalTeamRoute = PortalTeamRouteImport.update({
@@ -330,10 +342,12 @@ export interface FileRoutesByFullPath {
   '/app/karte': typeof AppKarteRoute
   '/app/liste': typeof AppListeRoute
   '/app/mehr': typeof AppMehrRoute
+  '/app/suche': typeof AppSucheRoute
   '/portal/benachrichtigungen': typeof PortalBenachrichtigungenRoute
   '/portal/planung': typeof PortalPlanungRoute
   '/portal/profil': typeof PortalProfilRoute
   '/portal/provisionen': typeof PortalProvisionenRoute
+  '/portal/steuern': typeof PortalSteuernRoute
   '/portal/team': typeof PortalTeamRoute
   '/portal/wissen': typeof PortalWissenRoute
   '/app/': typeof AppIndexRoute
@@ -380,10 +394,12 @@ export interface FileRoutesByTo {
   '/app/karte': typeof AppKarteRoute
   '/app/liste': typeof AppListeRoute
   '/app/mehr': typeof AppMehrRoute
+  '/app/suche': typeof AppSucheRoute
   '/portal/benachrichtigungen': typeof PortalBenachrichtigungenRoute
   '/portal/planung': typeof PortalPlanungRoute
   '/portal/profil': typeof PortalProfilRoute
   '/portal/provisionen': typeof PortalProvisionenRoute
+  '/portal/steuern': typeof PortalSteuernRoute
   '/portal/team': typeof PortalTeamRoute
   '/portal/wissen': typeof PortalWissenRoute
   '/app': typeof AppIndexRoute
@@ -433,10 +449,12 @@ export interface FileRoutesById {
   '/app/karte': typeof AppKarteRoute
   '/app/liste': typeof AppListeRoute
   '/app/mehr': typeof AppMehrRoute
+  '/app/suche': typeof AppSucheRoute
   '/portal/benachrichtigungen': typeof PortalBenachrichtigungenRoute
   '/portal/planung': typeof PortalPlanungRoute
   '/portal/profil': typeof PortalProfilRoute
   '/portal/provisionen': typeof PortalProvisionenRoute
+  '/portal/steuern': typeof PortalSteuernRoute
   '/portal/team': typeof PortalTeamRoute
   '/portal/wissen': typeof PortalWissenRoute
   '/app/': typeof AppIndexRoute
@@ -487,10 +505,12 @@ export interface FileRouteTypes {
     | '/app/karte'
     | '/app/liste'
     | '/app/mehr'
+    | '/app/suche'
     | '/portal/benachrichtigungen'
     | '/portal/planung'
     | '/portal/profil'
     | '/portal/provisionen'
+    | '/portal/steuern'
     | '/portal/team'
     | '/portal/wissen'
     | '/app/'
@@ -537,10 +557,12 @@ export interface FileRouteTypes {
     | '/app/karte'
     | '/app/liste'
     | '/app/mehr'
+    | '/app/suche'
     | '/portal/benachrichtigungen'
     | '/portal/planung'
     | '/portal/profil'
     | '/portal/provisionen'
+    | '/portal/steuern'
     | '/portal/team'
     | '/portal/wissen'
     | '/app'
@@ -589,10 +611,12 @@ export interface FileRouteTypes {
     | '/app/karte'
     | '/app/liste'
     | '/app/mehr'
+    | '/app/suche'
     | '/portal/benachrichtigungen'
     | '/portal/planung'
     | '/portal/profil'
     | '/portal/provisionen'
+    | '/portal/steuern'
     | '/portal/team'
     | '/portal/wissen'
     | '/app/'
@@ -764,6 +788,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMehrRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/suche': {
+      id: '/app/suche'
+      path: '/suche'
+      fullPath: '/app/suche'
+      preLoaderRoute: typeof AppSucheRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/portal/': {
       id: '/portal/'
       path: '/'
@@ -797,6 +828,13 @@ declare module '@tanstack/react-router' {
       path: '/provisionen'
       fullPath: '/portal/provisionen'
       preLoaderRoute: typeof PortalProvisionenRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/steuern': {
+      id: '/portal/steuern'
+      path: '/steuern'
+      fullPath: '/portal/steuern'
+      preLoaderRoute: typeof PortalSteuernRouteImport
       parentRoute: typeof PortalRoute
     }
     '/portal/team': {
@@ -1002,6 +1040,7 @@ interface AppRouteChildren {
   AppKarteRoute: typeof AppKarteRoute
   AppListeRoute: typeof AppListeRoute
   AppMehrRoute: typeof AppMehrRoute
+  AppSucheRoute: typeof AppSucheRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -1009,6 +1048,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppKarteRoute: AppKarteRoute,
   AppListeRoute: AppListeRoute,
   AppMehrRoute: AppMehrRoute,
+  AppSucheRoute: AppSucheRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
@@ -1019,6 +1059,7 @@ interface PortalRouteChildren {
   PortalPlanungRoute: typeof PortalPlanungRoute
   PortalProfilRoute: typeof PortalProfilRoute
   PortalProvisionenRoute: typeof PortalProvisionenRoute
+  PortalSteuernRoute: typeof PortalSteuernRoute
   PortalTeamRoute: typeof PortalTeamRoute
   PortalWissenRoute: typeof PortalWissenRoute
   PortalIndexRoute: typeof PortalIndexRoute
@@ -1053,6 +1094,7 @@ const PortalRouteChildren: PortalRouteChildren = {
   PortalPlanungRoute: PortalPlanungRoute,
   PortalProfilRoute: PortalProfilRoute,
   PortalProvisionenRoute: PortalProvisionenRoute,
+  PortalSteuernRoute: PortalSteuernRoute,
   PortalTeamRoute: PortalTeamRoute,
   PortalWissenRoute: PortalWissenRoute,
   PortalIndexRoute: PortalIndexRoute,
