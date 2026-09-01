@@ -17,8 +17,8 @@ function Page() {
         </p>
         <img
           src="/hero-founders.jpg"
-          alt="Orhan Salo und Luca-Marco Marrancone"
-          className="mt-10 h-64 w-full rounded-3xl object-cover object-[50%_18%] gold-hairline md:h-96"
+          alt="E1-Team mit Orhan Salo und Luca-Marco Marrancone"
+          className="mt-10 h-64 w-full rounded-3xl object-cover object-[50%_35%] gold-hairline md:h-96"
         />
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <article className="rounded-3xl bg-surface p-6 gold-hairline">

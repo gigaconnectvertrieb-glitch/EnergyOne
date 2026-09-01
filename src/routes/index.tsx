@@ -75,17 +75,13 @@ function Hero() {
             </p>
           ) : null}
         </div>
-        <figure className="relative overflow-hidden rounded-3xl gold-hairline">
+        <div className="flex items-center justify-center">
           <img
-            src="/hero-founders.jpg"
-            alt="Orhan Salo und Luca-Marco Marrancone, Gründer E1 Direktvertrieb"
-            className="h-full min-h-72 w-full object-cover object-[50%_20%]"
+            src="/logo-full.jpg"
+            alt="E1 Direktvertrieb – Energie, die zu Ihnen passt."
+            className="w-full max-w-md rounded-3xl object-contain bg-bg gold-hairline"
           />
-          <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg via-bg/70 to-transparent px-5 pb-4 pt-16">
-            <p className="font-medium">Orhan Salo · Luca-Marco Marrancone</p>
-            <p className="text-sm text-muted">Geschäftsführer · persönlich vor Ort</p>
-          </figcaption>
-        </figure>
+        </div>
       </div>
     </section>
   );
@@ -243,7 +239,7 @@ function Founders() {
       <img
         src="/hero-founders.jpg"
         alt="Das E1-Team mit den Gründern Orhan Salo und Luca-Marco Marrancone"
-        className="mt-8 h-56 w-full rounded-3xl object-cover object-[50%_18%] gold-hairline md:h-80"
+        className="mt-8 h-56 w-full rounded-3xl object-cover object-[50%_35%] gold-hairline md:h-80"
       />
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {people.map((p) => (
@@ -287,7 +283,7 @@ function CareerTeaser() {
     <section className="mx-auto max-w-6xl px-4 py-16">
       <div className="overflow-hidden rounded-3xl bg-elevated gold-hairline">
         <div className="grid md:grid-cols-2">
-          <img src="/hero-karriere.jpg" alt="E1 Team" className="h-56 w-full object-cover object-[50%_20%] md:h-full" />
+          <img src="/hero-karriere.jpg" alt="E1-Team" className="h-56 w-full object-cover object-[50%_40%] md:h-full" />
           <div className="p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-gold">Karriere</p>
             <h2 className="mt-2 font-display text-4xl">Verkaufen, ohne sich zu verbiegen.</h2>
