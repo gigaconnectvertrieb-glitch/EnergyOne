@@ -73,9 +73,9 @@ function Hero() {
 
 function TrustStrip() {
   const items = [
-    { icon: User, title: "Privat", text: "Haushalt, Strom und Gas – verständlich an der Tür." },
-    { icon: Building2, title: "Gewerbe", text: "Praxis, Laden, Büro, Betrieb – ein Ansprechpartner." },
-    { icon: Shield, title: "Ohne Druck", text: "Sie entscheiden. Wir erklären." },
+    { title: "Privat", text: "Haushalt, Strom und Gas – verständlich an der Tür." },
+    { title: "Gewerbe", text: "Praxis, Laden, Büro, Betrieb – ein Ansprechpartner." },
+    { title: "Ohne Druck", text: "Sie entscheiden. Wir erklären." },
   ];
   return (
     <section className="border-y border-line/60">
