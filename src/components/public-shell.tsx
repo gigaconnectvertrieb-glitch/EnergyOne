@@ -10,8 +10,9 @@ import { formatPhone, telHref } from "@/lib/contact";
 
 const NAV = [
   { to: "/", label: "Start" },
-  { to: "/ueber-uns", label: "Über uns" },
-  { to: "/energie", label: "Energie" },
+  { to: "/privat", label: "Privat" },
+  { to: "/firmen", label: "Unternehmen" },
+  { to: "/rechner", label: "Rechner" },
   { to: "/karriere", label: "Karriere" },
 ];
 

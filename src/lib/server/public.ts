@@ -27,6 +27,42 @@ export const getPublicContact = createServerFn({ method: "GET" }).handler(async 
   };
 });
 
+export const getPublicCalc = createServerFn({ method: "GET" }).handler(async () => {
+  const { PLACEHOLDER_COMPARE } = await import("@/lib/rechner");
+  const out = {
+    privat_strom_ct: String(PLACEHOLDER_COMPARE.privat.strom.arbeitCt),
+    privat_strom_grund: String(PLACEHOLDER_COMPARE.privat.strom.grundEurYear),
+    privat_gas_ct: String(PLACEHOLDER_COMPARE.privat.gas.arbeitCt),
+    privat_gas_grund: String(PLACEHOLDER_COMPARE.privat.gas.grundEurYear),
+    gewerbe_strom_ct: String(PLACEHOLDER_COMPARE.gewerbe.strom.arbeitCt),
+    gewerbe_strom_grund: String(PLACEHOLDER_COMPARE.gewerbe.strom.grundEurYear),
+    gewerbe_gas_ct: String(PLACEHOLDER_COMPARE.gewerbe.gas.arbeitCt),
+    gewerbe_gas_grund: String(PLACEHOLDER_COMPARE.gewerbe.gas.grundEurYear),
+    live: false,
+  };
+  try {
+    const db = await sql();
+    const rows = await db<{ key: string; value: string }>`
+      select key, value from settings where key like 'calc_%'
+    `;
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    const take = (k: string, fallback: string) => (map[k] && Number(map[k]) > 0 ? map[k] : fallback);
+    out.privat_strom_ct = take("calc_privat_strom_ct", out.privat_strom_ct);
+    out.privat_strom_grund = take("calc_privat_strom_grund", out.privat_strom_grund);
+    out.privat_gas_ct = take("calc_privat_gas_ct", out.privat_gas_ct);
+    out.privat_gas_grund = take("calc_privat_gas_grund", out.privat_gas_grund);
+    out.gewerbe_strom_ct = take("calc_gewerbe_strom_ct", out.gewerbe_strom_ct);
+    out.gewerbe_strom_grund = take("calc_gewerbe_strom_grund", out.gewerbe_strom_grund);
+    out.gewerbe_gas_ct = take("calc_gewerbe_gas_ct", out.gewerbe_gas_ct);
+    out.gewerbe_gas_grund = take("calc_gewerbe_gas_grund", out.gewerbe_gas_grund);
+    out.live = Boolean(map.calc_live === "1" || map.calc_live === "true");
+  } catch {
+    /* defaults */
+  }
+  return out;
+});
+
 export const submitLead = createServerFn({ method: "POST" })
   .validator((d: { name: string; phone: string; zip?: string; message?: string; consent: boolean; kind?: string; company?: string }) => d)
   .handler(async ({ data }) => {

@@ -115,23 +115,23 @@ function Audience() {
       <p className="text-xs uppercase tracking-[0.28em] text-gold">Für wen</p>
       <h2 className="mt-2 font-display text-4xl">Privatkunden und Unternehmen.</h2>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Link to="/beratung" className="rounded-3xl bg-surface p-6 gold-hairline">
+        <Link to="/privat" className="rounded-3xl bg-surface p-6 gold-hairline">
           <User className="size-6 text-gold" />
           <h3 className="mt-4 text-xl font-medium">Privathaushalt</h3>
           <p className="mt-2 text-sm text-muted">
             Strom und Gas für die Wohnung oder das Haus. Vergleich, Wechsel,
             Widerruf – in Ruhe erklärt.
           </p>
-          <p className="mt-4 text-sm text-gold">Beratung anfordern</p>
+          <p className="mt-4 text-sm text-gold">Zum Privatbereich</p>
         </Link>
-        <Link to="/beratung" className="rounded-3xl bg-surface p-6 gold-hairline">
+        <Link to="/firmen" className="rounded-3xl bg-surface p-6 gold-hairline">
           <Building2 className="size-6 text-gold" />
           <h3 className="mt-4 text-xl font-medium">Unternehmen</h3>
           <p className="mt-2 text-sm text-muted">
             Gewerbe, Praxis, Gastronomie, Büro, Filiale. Ein fester Draht,
             keine Hotline. Anfragen auch an business@.
           </p>
-          <p className="mt-4 text-sm text-gold">Geschäftskunden-Anfrage</p>
+          <p className="mt-4 text-sm text-gold">Zum Firmenbereich</p>
         </Link>
       </div>
     </section>
