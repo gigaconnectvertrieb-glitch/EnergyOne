@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { beginTotp, bootstrapMe, confirmTotp, updateMyProfile } from "@/lib/server/api";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { GoalCard } from "@/components/goal-card";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/profil")({ component: Page });
@@ -27,6 +28,9 @@ function Page() {
   return (
     <div className="mx-auto max-w-lg">
       <h1 className="font-display text-4xl">Profil & 2FA</h1>
+      <div className="mt-6">
+        <GoalCard />
+      </div>
       <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <Field label="Vorname">
           <Input value={first} onChange={(e) => setFirst(e.target.value)} />

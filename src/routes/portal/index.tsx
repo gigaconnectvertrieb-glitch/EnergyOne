@@ -6,6 +6,7 @@ import { STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { eur } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { AuthChip } from "@/components/mail-status";
+import { GoalCard } from "@/components/goal-card";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
@@ -95,6 +96,9 @@ function Dashboard() {
           </div>
         </div>
       ) : null}
+      <div className="mt-6">
+        <GoalCard />
+      </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Dein Umsatz" value={eur(data.myTurnover || 0)} hint="eigene Abschlüsse, nicht storniert" />
         <Kpi label="Abschlüsse Monat" value={String(data.monthWon)} hint={`Ziel ${data.target}`} />

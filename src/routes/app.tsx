@@ -3,6 +3,7 @@ import { CalendarDays, ListChecks, Map, MoreHorizontal } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
+import { GoalStrip } from "@/components/goal-card";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -41,6 +42,7 @@ function AppShell() {
         <BrandMark className="h-7 w-auto" />
         <p className="font-display text-base tracking-wide text-gold">Feld</p>
       </header>
+      {pathname.startsWith("/app/mehr") ? null : <GoalStrip />}
       <main className="px-4 pb-24 pt-3">
         <Outlet />
       </main>

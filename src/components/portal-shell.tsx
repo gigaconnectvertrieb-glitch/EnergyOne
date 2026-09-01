@@ -27,6 +27,7 @@ import { bootstrapMe } from "@/lib/server/api";
 import type { Profile } from "@/lib/e1";
 import { can, type Role } from "@/lib/e1";
 import { Wordmark } from "./logo";
+import { usePushWorker } from "./goal-card";
 import { cn } from "@/lib/utils";
 
 type MeState = {
@@ -86,6 +87,7 @@ export function PortalShell() {
   const { me, error } = usePortalMe();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [more, setMore] = useState(false);
+  usePushWorker();
 
   if (isPending) {
     return (

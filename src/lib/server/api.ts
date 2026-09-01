@@ -478,6 +478,12 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     message: `${me.first_name} ${me.last_name} hat ${data.firstName} ${data.lastName} in die Datenbank gesetzt · ${asStr(tariff.name)} (${amount.toFixed(2)} €).`,
     link: `/portal/auftraege/${id}`
   });
+  try {
+    const { runGoalNudges } = await import("./goal-nudge.server");
+    await runGoalNudges(db, ownerId);
+  } catch {
+    /* Ziel-Push optional */
+  }
   return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin };
 });
 export const listContracts = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d = {}) => d).handler(async ({ context, data }) => {
@@ -862,6 +868,12 @@ export const gdprEraseCustomer = createServerFn({ method: "POST" }).middleware([
 export const getDashboard = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
   const db = await sql();
   const me = await requireProfile(db, context.userId);
+  try {
+    const { runGoalNudges } = await import("./goal-nudge.server");
+    await runGoalNudges(db, context.userId);
+  } catch {
+    /* Ziel-Push optional */
+  }
   const ids = await visibleUserIds(db, me);
   const datePh = ids ? "$2" : "$1";
   const filter = ids ? " and user_id = any($1)" : "";

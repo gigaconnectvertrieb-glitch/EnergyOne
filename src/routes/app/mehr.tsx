@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { GoalCard } from "@/components/goal-card";
 import { downloadMyTerritory } from "@/lib/server/field-api";
 import { signOut } from "@/lib/auth/client";
 import { toast } from "sonner";
@@ -29,6 +30,9 @@ function Page() {
           </p>
         </div>
       ) : null}
+      <div className="mt-6">
+        <GoalCard />
+      </div>
       <div className="mt-6 grid gap-2">
         <Button
           variant="outline"
