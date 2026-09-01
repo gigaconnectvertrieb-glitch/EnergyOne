@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { CARTO_ATTR, CARTO_VOYAGER } from "@/lib/map-tiles";
+import { SATELLITE, SATELLITE_ATTR, SATELLITE_LABELS } from "@/lib/map-tiles";
 
 export type WalkStop = {
   id: string;
@@ -56,9 +56,15 @@ export function FieldMap({ center, corners = [], stops = [], draw, onTap, onStop
       }) as unknown as LeafletMap;
       map.setView([center.lat, center.lng], 16);
       mapRef.current = map;
-      L.tileLayer(CARTO_VOYAGER, {
-        attribution: CARTO_ATTR,
+      L.tileLayer(SATELLITE, {
+        attribution: SATELLITE_ATTR,
         maxZoom: 20,
+        maxNativeZoom: 19,
+      }).addTo(map as never);
+      L.tileLayer(SATELLITE_LABELS, {
+        maxZoom: 20,
+        maxNativeZoom: 19,
+        opacity: 0.9,
       }).addTo(map as never);
       map.on("click", (e) => {
         tapRef.current?.({ lat: e.latlng.lat, lng: e.latlng.lng });

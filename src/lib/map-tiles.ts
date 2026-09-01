@@ -1,4 +1,7 @@
-export const CARTO_VOYAGER =
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_2oc0_1_7430cf90de8ec9bcee8df044";
+export const SATELLITE =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
-export const CARTO_ATTR = "CARTO · OSM";
+export const SATELLITE_LABELS =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
+
+export const SATELLITE_ATTR = "Esri · Maxar · Earthstar";

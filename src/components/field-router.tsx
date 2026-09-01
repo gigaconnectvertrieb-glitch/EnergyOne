@@ -5,7 +5,7 @@ import { getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CARTO_ATTR, CARTO_VOYAGER } from "@/lib/map-tiles";
+import { SATELLITE, SATELLITE_ATTR, SATELLITE_LABELS } from "@/lib/map-tiles";
 
 type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
@@ -37,9 +37,15 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       const L = (window as unknown as { L: LeafletNS }).L;
       const map = L.map(ref.current, { zoomControl: false, preferCanvas: true });
       map.setView([center.lat, center.lng], 12);
-      L.tileLayer(CARTO_VOYAGER, {
-        attribution: CARTO_ATTR,
+      L.tileLayer(SATELLITE, {
+        attribution: SATELLITE_ATTR,
         maxZoom: 19,
+        maxNativeZoom: 19,
+      }).addTo(map);
+      L.tileLayer(SATELLITE_LABELS, {
+        maxZoom: 19,
+        maxNativeZoom: 19,
+        opacity: 0.9,
       }).addTo(map);
       mapRef.current = map;
       map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
