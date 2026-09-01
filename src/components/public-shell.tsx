@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { getPublicContact } from "@/lib/server/public";
 import { formatPhone, telHref } from "@/lib/contact";
 
-const NAV = [
+const NAV_PRIVAT = [
   { to: "/", label: "Start" },
   { to: "/privat", label: "Privat" },
   { to: "/firmen", label: "Unternehmen" },
@@ -16,10 +16,20 @@ const NAV = [
   { to: "/karriere", label: "Karriere" },
 ];
 
-export function PublicShell({ children }: { children: ReactNode }) {
+const NAV_FIRMEN = [
+  { to: "/firmen", label: "Geschäftskunden" },
+  { to: "/firmen/leistungen", label: "Leistungen" },
+  { to: "/rechner", label: "Kostenrechner" },
+  { to: "/firmen/anfrage", label: "Gespräch" },
+  { to: "/privat", label: "Privatkunden" },
+];
+
+export function PublicShell({ children, variant }: { children: ReactNode; variant?: "firmen" }) {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const firmen = variant === "firmen" || pathname.startsWith("/firmen");
+  const NAV = firmen ? NAV_FIRMEN : NAV_PRIVAT;
   useEffect(() => {
     getPublicContact()
       .then((c) => setPhone(c.phone || ""))
@@ -30,8 +40,10 @@ export function PublicShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh bg-bg text-ink gold-wash">
       <header className="sticky top-0 z-40 border-b border-line/80 bg-bg/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-          <Wordmark />
-          <nav className="hidden items-center gap-6 md:flex">
+          <Link to={firmen ? "/firmen" : "/"} aria-label="E1 Direktvertrieb">
+            <Wordmark />
+          </Link>
+          <nav className="hidden items-center gap-6 lg:flex">
             {NAV.map((n) => (
               <Link
                 key={n.to}
@@ -42,7 +54,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <SignedOut>
               <Link to="/login" className="px-3 py-2 text-sm text-muted hover:text-ink">
                 Login
@@ -53,13 +65,13 @@ export function PublicShell({ children }: { children: ReactNode }) {
                 Portal
               </Link>
             </SignedIn>
-            <Link to="/beratung">
-              <Button size="sm">Beratung anfordern</Button>
+            <Link to={firmen ? "/firmen/anfrage" : "/beratung"}>
+              <Button size="sm">{firmen ? "Gespräch vereinbaren" : "Beratung anfordern"}</Button>
             </Link>
           </div>
           <button
             type="button"
-            className="grid size-11 place-items-center md:hidden"
+            className="grid size-11 place-items-center lg:hidden"
             aria-label="Menü"
             onClick={() => setOpen((v) => !v)}
           >
@@ -67,7 +79,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </button>
         </div>
         {open ? (
-          <div className="border-t border-line px-4 py-4 md:hidden">
+          <div className="border-t border-line px-4 py-4 lg:hidden">
             <div className="flex flex-col gap-1">
               {NAV.map((n) => (
                 <Link
@@ -82,8 +94,8 @@ export function PublicShell({ children }: { children: ReactNode }) {
               <Link to="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm">
                 Mitarbeiter-Login
               </Link>
-              <Link to="/beratung" onClick={() => setOpen(false)}>
-                <Button className="mt-2 w-full">Persönliche Beratung anfordern</Button>
+              <Link to={firmen ? "/firmen/anfrage" : "/beratung"} onClick={() => setOpen(false)}>
+                <Button className="mt-2 w-full">{firmen ? "Gespräch vereinbaren" : "Beratung anfordern"}</Button>
               </Link>
             </div>
           </div>
@@ -95,7 +107,9 @@ export function PublicShell({ children }: { children: ReactNode }) {
           <div>
             <Wordmark />
             <p className="mt-3 max-w-xs text-sm text-muted">
-              Unabhängige Energieberatung. Direkt. Persönlich. Für Sie.
+              {firmen
+                ? "Geschäftskundenbetreuung für Strom und Gas. Direkter Draht zur Geschäftsführung."
+                : "Energieberatung für Privathaushalte. Persönlich, vor Ort."}
             </p>
           </div>
           <div className="text-sm">
@@ -104,24 +118,21 @@ export function PublicShell({ children }: { children: ReactNode }) {
               <Link to="/impressum">Impressum</Link>
               <Link to="/datenschutz">Datenschutz</Link>
               <Link to="/agb">AGB</Link>
+              <Link to={firmen ? "/privat" : "/firmen"}>{firmen ? "Zum Privatbereich" : "Zum Firmenbereich"}</Link>
               <Link to="/login">Mitarbeiter-Portal</Link>
             </div>
           </div>
           <div className="text-sm text-muted">
             <p className="mb-2 text-xs uppercase tracking-[0.2em] text-gold">Kontakt</p>
-            <p>Privat und Gewerbe. Persönlich, ohne Callcenter.</p>
+            <p>{firmen ? "Geschäftskunden · info@e1direktvertrieb.de" : "Privatkunden · info@e1direktvertrieb.de"}</p>
             {phone ? (
               <p className="mt-2">
+                Telefon{" "}
                 <a className="text-gold" href={telHref(phone)}>
                   {formatPhone(phone) || phone}
                 </a>
               </p>
             ) : null}
-            <p className="mt-2">
-              <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
-                info@e1direktvertrieb.de
-              </a>
-            </p>
           </div>
         </div>
       </footer>
