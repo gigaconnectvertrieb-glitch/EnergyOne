@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, CheckboxRow } from "@/components/ui/field";
 import { SignaturePad } from "@/components/signature-pad";
-import { bootstrapMe, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
+import { bootstrapMe, compareTariffs, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
 import { toast } from "sonner";
 import { NettoBrutto } from "@/components/netto-brutto";
 import { vatOn } from "@/lib/steuer";
@@ -37,12 +37,13 @@ function Capture() {
   const [zip, setZip] = useState(pre.zip || "");
   const [city, setCity] = useState(pre.city || "");
   const [provider, setProvider] = useState("");
-  const [type, setType] = useState("");
+  const [type, setType] = useState("strom");
   const [q, setQ] = useState("");
   const [tariffId, setTariffId] = useState("");
   const [kwh, setKwh] = useState("");
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({ providers: [], items: [] });
-  const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
+  const [compare, setCompare] = useState<Awaited<ReturnType<typeof compareTariffs>> | null>(null);
+  const [comparing, setComparing] = useState(false);
   const [stufe, setStufe] = useState(1);
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
@@ -285,37 +286,87 @@ function Capture() {
       </div>
 
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Vergleich</p>
+        <Field label="Bisheriger Anbieter">
+          <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} placeholder="Steht auf der Rechnung" />
+        </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Anbieter">
-            <Select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value);
-                setTariffId("");
-              }}
-            >
-              <option value="">Alle</option>
-              {catalog.providers.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
-          </Field>
           <Field label="Sparte">
-            <Select
-              value={type}
-              onChange={(e) => {
-                setType(e.target.value);
-                setTariffId("");
-              }}
-            >
-              <option value="">Strom / Gas</option>
+            <Select value={type} onChange={(e) => setType(e.target.value === "gas" ? "gas" : "strom")}>
               <option value="strom">Strom</option>
               <option value="gas">Gas</option>
             </Select>
           </Field>
+          <Field label="Jahresverbrauch kWh">
+            <Input value={kwh} onChange={(e) => setKwh(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" />
+          </Field>
         </div>
+        <Button
+          type="button"
+          disabled={comparing}
+          onClick={async () => {
+            if (zip.replace(/\D/g, "").length !== 5) {
+              toast.error("Zuerst PLZ und Adresse.");
+              return;
+            }
+            if (!Number(kwh)) {
+              toast.error("Verbrauch in kWh angeben.");
+              return;
+            }
+            setComparing(true);
+            try {
+              const res = await compareTariffs({
+                data: {
+                  zip,
+                  kwh: Number(kwh),
+                  type: type === "gas" ? "gas" : "strom",
+                  stufe: staff.length ? staff.find((s) => s.user_id === forStaff)?.commission_stufe || stufe : stufe,
+                  previousProvider: providerOld,
+                },
+              });
+              setCompare(res);
+              if (res.winner) {
+                setTariffId(res.winner.tariffId);
+                setType(res.winner.type);
+                setProvider(res.winner.provider);
+              } else {
+                toast.error("Kein Tarif im Katalog für diesen Verbrauch.");
+              }
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Vergleich fehlgeschlagen");
+            } finally {
+              setComparing(false);
+            }
+          }}
+        >
+          {comparing ? "Prüft…" : "Vergleich starten"}
+        </Button>
+        {compare?.winner ? (
+          <article className="rounded-2xl bg-elevated p-4 gold-hairline">
+            <p className="text-xs uppercase tracking-[0.18em] text-gold">Preis-Leistung</p>
+            <p className="mt-2 text-lg font-medium">
+              {compare.winner.provider} · {compare.winner.name}
+            </p>
+            <p className="mt-3 font-display text-3xl tabular-nums">{eur(compare.winner.advisor)}</p>
+            <p className="mt-1 text-sm text-muted">
+              netto · + {eur(compare.winner.advisorGross - compare.winner.advisor)} USt 19% = {eur(compare.winner.advisorGross)} brutto
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Berater Stufe {compare.winner.stufe} · Liste netto, zzgl. 19% USt
+            </p>
+            <p className="mt-3 text-sm">
+              Kundenseite ca. {eur(compare.winner.yearEur)} / Jahr · {String(compare.winner.arbeitCt).replace(".", ",")} ct/kWh
+            </p>
+            {!compare.live ? (
+              <p className="mt-2 text-xs text-muted">
+                Vergleich aus dem Katalog. Sobald TARIFRECHNER_API_URL steht, kommen die echten PLZ-Preise.
+              </p>
+            ) : null}
+          </article>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <Field label="Tarif suchen">
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name oder Nummer" />
         </Field>

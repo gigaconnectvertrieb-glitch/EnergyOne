@@ -337,6 +337,89 @@ export const quoteCommission = createServerFn({ method: "POST" })
     };
   });
 
+export const compareTariffs = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { zip: string; kwh: number; type: string; stufe?: number; previousProvider?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const { clampStufe } = await import("@/lib/tariffs");
+    const { rankOffers } = await import("@/lib/tarif-vergleich");
+    const zip = data.zip.replace(/\D+/g, "").slice(0, 5);
+    const kwh = Number(data.kwh) || 0;
+    const type = data.type === "gas" ? "gas" : "strom";
+    if (zip.length !== 5) throw new Error("PLZ mit 5 Stellen.");
+    if (kwh <= 0) throw new Error("Jahresverbrauch in kWh angeben.");
+    const stufe = clampStufe(data.stufe ?? me.commission_stufe);
+    const api = (process.env.TARIFRECHNER_API_URL || "").trim();
+    const tariffs = await db<Record<string, unknown>>`
+      select id, provider, name, type from tariffs where active = true and type = ${type}
+    `;
+    const ids = tariffs.map((t) => asStr(t.id));
+    const bands = ids.length
+      ? await db<Record<string, unknown>>`
+          select tariff_id, stufe, kwh_from, kwh_to, amount_eur, amount_ct_kwh
+          from tariff_bands where tariff_id = any(${ids})
+        `
+      : [];
+    const byId = new Map<string, typeof bands>();
+    for (const b of bands) {
+      const id = asStr(b.tariff_id);
+      const list = byId.get(id) || [];
+      list.push(b);
+      byId.set(id, list);
+    }
+    const ranked = rankOffers(
+      tariffs.map((t) => ({
+        id: asStr(t.id),
+        provider: asStr(t.provider),
+        name: asStr(t.name),
+        type: asStr(t.type),
+        bands: (byId.get(asStr(t.id)) || []).map((b) => ({
+          stufe: num(b.stufe),
+          kwh_from: num(b.kwh_from),
+          kwh_to: num(b.kwh_to),
+          amount_eur: num(b.amount_eur),
+          amount_ct_kwh: num(b.amount_ct_kwh),
+        })),
+      })),
+      { zip, kwh, type, stufe },
+    );
+    return {
+      ok: ranked.length > 0,
+      live: Boolean(api),
+      zip,
+      kwh,
+      type,
+      previousProvider: data.previousProvider || "",
+      winner: ranked[0] || null,
+      offers: ranked.slice(0, 8),
+    };
+  });
+
+export const sendParkedContract = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [row] = await db<{ id: string; status: string; source: string | null }>`
+      select id, status, source from contracts where id = ${data.id}
+    `;
+    if (!row) throw new Error("Auftrag nicht gefunden.");
+    if (row.status !== "erfasst") throw new Error("Nur geparkte Aufträge lassen sich so senden.");
+    await db`
+      update contracts
+      set status = 'uebermittelt', source = 'newsales_manual', updated_at = now()
+      where id = ${data.id}
+    `;
+    await db`
+      insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
+      values (${nid()}, ${data.id}, 'erfasst', 'uebermittelt', ${context.userId}, ${"Geparkt gesendet"})
+    `;
+    return { ok: true, id: data.id };
+  });
+
 export const findDuplicates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ data }) => {
   const last = String(data.lastName || "").trim().toLowerCase();
   if (!last) return [];
@@ -634,6 +717,7 @@ export const listContracts = createServerFn({ method: "POST" }).middleware([auth
     product_id: asStr(r.product_id),
     product_name: asStr(r.product_name),
     status: asStr(r.status),
+    source: r.source ? asStr(r.source) : "",
     consumption_kwh: num(r.consumption_kwh),
     meter_number: r.meter_number ? asStr(r.meter_number) : "",
     start_date: r.start_date ? asStr(r.start_date) : null,

@@ -34,7 +34,7 @@ export const STATUS_TONE: Record<ContractStatus, "gold" | "warn" | "info" | "suc
 };
 
 export const TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
-  erfasst: ["in_pruefung", "storniert"],
+  erfasst: ["in_pruefung", "uebermittelt", "storniert"],
   in_pruefung: ["korrektur_noetig", "uebermittelt", "storniert"],
   korrektur_noetig: ["erfasst", "in_pruefung", "storniert"],
   uebermittelt: ["bestaetigt", "storniert"],

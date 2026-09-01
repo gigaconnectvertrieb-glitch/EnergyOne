@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listContracts, exportOpsCsv } from "@/lib/server/api";
+import { listContracts, exportOpsCsv, sendParkedContract } from "@/lib/server/api";
 import { STATUSES, STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { deDate } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,11 +17,17 @@ function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listContracts>>>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     listContracts({ data: { status: status || undefined, type: type || undefined, q } })
       .then(setRows)
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Fehler"));
+  }
+
+  useEffect(() => {
+    load();
   }, [status, type, q]);
+
+  const parked = rows.filter((r) => r.status === "erfasst" || r.source === "geparkt");
 
   return (
     <div>
@@ -70,7 +76,46 @@ function Page() {
           <option value="gas">Gas</option>
         </Select>
       </div>
-      {err ? <p className="mt-4 text-danger">{err}</p> : null}
+      {parked.length ? (
+        <div className="mt-6">
+          <h2 className="font-display text-2xl">Geparkt</h2>
+          <div className="mt-3 grid gap-2">
+            {parked.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-surface px-4 py-3 gold-hairline">
+                <div>
+                  <p className="font-medium">{r.customer_name}</p>
+                  <p className="text-xs text-muted">
+                    {r.product_name} · {r.zip} {r.city}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Link
+                    to="/portal/auftraege/$id"
+                    params={{ id: r.id }}
+                    className="rounded-xl border border-line px-3 py-2 text-sm"
+                  >
+                    Bearbeiten
+                  </Link>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await sendParkedContract({ data: { id: r.id } });
+                        toast.success("Gesendet");
+                        load();
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Senden fehlgeschlagen");
+                      }
+                    }}
+                  >
+                    Senden
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="mt-4 hidden overflow-x-auto rounded-2xl bg-surface gold-hairline md:block">
         <table className="w-full text-left text-sm">
           <thead className="text-xs uppercase tracking-wide text-muted">
