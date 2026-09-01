@@ -71,6 +71,8 @@ export type ContractDraft = {
   privacyConfirmed?: boolean;
   signatureData?: string;
   fullFlow?: boolean;
+  scanBase64?: string;
+  scanName?: string;
 };
 
 function monthStart() {
@@ -418,12 +420,13 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
   const id = nid();
   const ref = data.newsalesRef?.trim() || null;
   const full = Boolean(data.fullFlow);
-  if (full) {
-    const iban = (data.iban || "").replace(/\s+/g, "").toUpperCase();
-    if (!iban || iban.length < 15) throw new Error("IBAN ist beim eigenen E1-Vertrag Pflicht.");
-    if (!data.sepaConfirmed || !data.privacyConfirmed) {
-      throw new Error("SEPA und Datenschutz müssen bestätigt sein.");
-    }
+  const { optionalIban } = await import("@/lib/iban");
+  const iban = optionalIban(data.iban);
+  if (full && !data.privacyConfirmed) {
+    throw new Error("Datenschutz muss beim eigenen E1-Vertrag bestätigt sein.");
+  }
+  if (iban && full && !data.sepaConfirmed) {
+    throw new Error("SEPA muss bestätigt sein, wenn eine IBAN angegeben ist.");
   }
   await db`
       insert into contracts (
@@ -439,14 +442,14 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
         ${split.agency}, ${split.advisor}, ${split.margin},
         ${Boolean(data.sepaConfirmed)}, ${Boolean(data.privacyConfirmed)}, ${Boolean(data.signatureData)},
         ${data.notes?.trim() || null}, ${ref}, ${full ? "e1_direct" : "newsales_manual"},
-        ${data.iban?.trim() || null}, ${data.bankOwner?.trim() || null}
+        ${iban || null}, ${data.bankOwner?.trim() || null}
       )
     `;
   await db`
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (
         ${nid()}, ${id}, null, ${full ? "erfasst" : "uebermittelt"}, ${context.userId},
-        ${`In New Sales · gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · Berater ${split.advisor} € · Agentur ${split.agency} € · Marge ${split.margin} €${ref ? ` · NS ${ref}` : ""}`}
+        ${`Gebucht auf ${ownerId === context.userId ? "eigene ID" : stufeOwner.first_name + " " + stufeOwner.last_name} · ${asStr(tariff.provider)} ${asStr(tariff.name)} · Stufe ${stufe} · Berater ${split.advisor} € · Agentur ${split.agency} € · Marge ${split.margin} €${iban ? "" : " · ohne IBAN"}${ref ? ` · NS ${ref}` : ""}`}
       )
     `;
   await audit(db, {
@@ -512,6 +515,8 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
           previousProvider: data.previousProvider?.trim(),
           startDate: data.startDate,
           notes: data.notes?.trim(),
+          iban,
+          bankOwner: data.bankOwner?.trim(),
         });
         if (pushed.ok && pushed.ref) {
           await db`
@@ -525,7 +530,26 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       /* New Sales API optional — Portal-Eintrag bleibt */
     }
   }
-  return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin };
+  try {
+    const { createHandover, putFile } = await import("./ops.server");
+    if (!full) await createHandover(db, id, context.userId);
+    if (data.scanBase64) {
+      const stored = await putFile(data.scanBase64, data.scanName || "vertrag.pdf");
+      await db`
+        insert into documents (id, contract_id, type, file_path, uploaded_by)
+        values (${nid()}, ${id}, ${"vertrag_scan"}, ${stored.path}, ${context.userId})
+      `;
+    }
+    if (data.signatureData) {
+      await db`
+        insert into documents (id, contract_id, type, file_path, uploaded_by)
+        values (${nid()}, ${id}, ${"unterschrift"}, ${data.signatureData}, ${context.userId})
+      `;
+    }
+  } catch {
+    /* Handover/Scan optional */
+  }
+  return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin, ibanMissing: !iban };
 });
 export const listContracts = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d = {}) => d).handler(async ({ context, data }) => {
   const db = await sql();
@@ -807,11 +831,38 @@ export const updateContractNotes = createServerFn({ method: "POST" }).middleware
       update contracts
       set notes = ${data.notes ?? null},
           meter_number = coalesce(${data.meterNumber ?? null}, meter_number),
+          bank_iban = coalesce(${data.iban ? (await import("@/lib/iban")).optionalIban(data.iban) : null}, bank_iban),
+          bank_owner = coalesce(${data.bankOwner ?? null}, bank_owner),
+          sepa_confirmed = case when ${Boolean(data.sepaConfirmed)} then true else sepa_confirmed end,
           updated_at = now()
       where id = ${data.id}
     `;
   return { ok: true };
 });
+export const uploadContractFile = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; base64: string; filename?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [row] = await db<{ user_id: string }>`select user_id from contracts where id = ${data.id}`;
+    if (!row) throw new Error("Auftrag nicht gefunden");
+    await assertCanSeeUser(db, me, row.user_id);
+    if (!data.base64) throw new Error("Datei fehlt");
+    const { putFile } = await import("./ops.server");
+    const stored = await putFile(data.base64, data.filename || "vertrag.pdf");
+    await db`
+      insert into documents (id, contract_id, type, file_path, uploaded_by)
+      values (${nid()}, ${data.id}, ${"vertrag_scan"}, ${stored.path}, ${context.userId})
+    `;
+    await audit(db, {
+      userId: context.userId,
+      action: "contract.upload",
+      entityType: "contract",
+      entityId: data.id,
+    });
+    return { ok: true, path: stored.path };
+  });
 export const listCustomers = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((q = "") => q).handler(async ({ context, data: q }) => {
   const db = await sql();
   const me = await requireProfile(db, context.userId);

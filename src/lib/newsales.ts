@@ -23,6 +23,8 @@ export type NewsalesOrder = {
   previousProvider?: string;
   startDate?: string;
   notes?: string;
+  iban?: string;
+  bankOwner?: string;
 };
 
 export function newsalesConfigured(env: NodeJS.ProcessEnv = process.env) {
@@ -45,6 +47,9 @@ export function newsalesBody(order: NewsalesOrder) {
     previousProvider: order.previousProvider || null,
     startDate: order.startDate || null,
     notes: order.notes || null,
+    iban: order.iban || null,
+    bankOwner: order.bankOwner || null,
+    ibanMissing: !order.iban,
   };
 }
 

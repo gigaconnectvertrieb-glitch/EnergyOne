@@ -10,12 +10,15 @@ import { vatOn } from "@/lib/steuer";
 import { eur } from "@/lib/utils";
 
 export const Route = createFileRoute("/portal/auftraege/neu")({
-  validateSearch: (raw: Record<string, unknown>) => ({
-    street: typeof raw.street === "string" ? raw.street : "",
-    house: typeof raw.house === "string" ? raw.house : "",
-    zip: typeof raw.zip === "string" ? raw.zip : "",
-    city: typeof raw.city === "string" ? raw.city : "",
-  }),
+  validateSearch: (raw: Record<string, unknown>) => {
+    const s = (k: string) => (typeof raw[k] === "string" && raw[k] ? String(raw[k]) : undefined);
+    return {
+      street: s("street"),
+      house: s("house"),
+      zip: s("zip"),
+      city: s("city"),
+    } as { street?: string; house?: string; zip?: string; city?: string };
+  },
   component: Capture,
 });
 
@@ -25,10 +28,10 @@ function Capture() {
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [phone, setPhone] = useState("");
-  const [street, setStreet] = useState(pre.street);
-  const [house, setHouse] = useState(pre.house);
-  const [zip, setZip] = useState(pre.zip);
-  const [city, setCity] = useState(pre.city);
+  const [street, setStreet] = useState(pre.street || "");
+  const [house, setHouse] = useState(pre.house || "");
+  const [zip, setZip] = useState(pre.zip || "");
+  const [city, setCity] = useState(pre.city || "");
   const [provider, setProvider] = useState("");
   const [type, setType] = useState("");
   const [q, setQ] = useState("");
@@ -48,6 +51,8 @@ function Capture() {
   const [sepa, setSepa] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [sign, setSign] = useState("");
+  const [email, setEmail] = useState("");
+  const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
 
   useEffect(() => {
     bootstrapMe()
@@ -110,8 +115,12 @@ function Capture() {
       toast.error("Verbrauch in kWh fehlt — für die Provision.");
       return;
     }
-    if (full && (!sepa || !privacy)) {
-      toast.error("SEPA und Datenschutz müssen bestätigt sein.");
+    if (full && !privacy) {
+      toast.error("Datenschutz muss bestätigt sein.");
+      return;
+    }
+    if (full && iban.trim() && !sepa) {
+      toast.error("SEPA muss bestätigt sein, wenn eine IBAN angegeben ist.");
       return;
     }
     setBusy(true);
@@ -121,6 +130,7 @@ function Capture() {
           firstName: first,
           lastName: last,
           phone,
+          email: email || undefined,
           street,
           houseNumber: house,
           zip,
@@ -130,17 +140,19 @@ function Capture() {
           forStaffId: forStaff || undefined,
           inNewsales: !full,
           fullFlow: full,
-          iban: full ? iban : undefined,
-          bankOwner: full ? bankOwner : undefined,
-          sepaConfirmed: full ? sepa : undefined,
+          iban: iban || undefined,
+          bankOwner: bankOwner || undefined,
+          sepaConfirmed: sepa,
           privacyConfirmed: full ? privacy : undefined,
           signatureData: full ? sign : undefined,
+          scanBase64: scan?.base64,
+          scanName: scan?.name,
         },
       });
       toast.success(
         res.margin
-          ? `In der Datenbank · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}`
-          : `In der Datenbank · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
+          ? `Gespeichert · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto · Agentur ${eur(res.agency)} · Marge ${eur(res.margin)}${res.ibanMissing ? " · ohne IBAN" : ""}`
+          : `Gespeichert · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto${res.ibanMissing ? " · ohne IBAN" : ""}`,
       );
       nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
@@ -155,8 +167,8 @@ function Capture() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Schnell erfassen</p>
       <h1 className="mt-1 font-display text-4xl">Name, Adresse, Tarif</h1>
       <p className="mt-2 text-sm text-muted">
-        Vertrag steht in New Sales. Hier nur Name, Adresse, Tarif, Telefon — keine IBAN.
-        IBAN und SEPA kommen erst beim eigenen E1-Strom. Stufe {stufe}.
+        Name, Adresse, Tarif, Telefon. IBAN und Vertragsscan sind optional — ohne IBAN geht der Auftrag trotzdem raus.
+        Stufe {stufe}.
       </p>
 
       {staff.length > 1 ? (
@@ -184,6 +196,9 @@ function Capture() {
         </div>
         <Field label="Telefon">
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
+        </Field>
+        <Field label="E-Mail (optional)">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
         </Field>
         <div className="grid grid-cols-[1fr_5.5rem] gap-3">
           <Field label="Straße">
@@ -283,29 +298,57 @@ function Capture() {
         {quote && !quote.ok ? <p className="mt-3 text-sm text-danger">{quote.reason}</p> : null}
       </div>
 
-      {full ? (
-        <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-          <p className="text-xs uppercase tracking-[0.16em] text-gold">Voller Vertrag · SEPA · AGB</p>
-          <Field label="IBAN">
-            <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" />
-          </Field>
-          <Field label="Kontoinhaber">
-            <Input value={bankOwner} onChange={(e) => setBankOwner(e.target.value)} />
-          </Field>
+      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+        <p className="text-xs uppercase tracking-[0.16em] text-gold">Bank & Vertrag — optional</p>
+        <p className="text-sm text-muted">Ohne IBAN speichern und abschicken. Später nachtragen oder Scan hochladen.</p>
+        <Field label="IBAN">
+          <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" placeholder="leer lassen geht" />
+        </Field>
+        <Field label="Kontoinhaber">
+          <Input value={bankOwner} onChange={(e) => setBankOwner(e.target.value)} />
+        </Field>
+        {iban.trim() ? (
           <CheckboxRow checked={sepa} onChange={setSepa}>
             SEPA-Lastschriftmandat erteilt
           </CheckboxRow>
+        ) : null}
+        <Field label="Vertrag / Rechnung / Scan">
+          <input
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            className="mt-1 block w-full text-sm"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) {
+                setScan(null);
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const base64 = String(reader.result || "");
+                setScan({ name: f.name, base64 });
+              };
+              reader.readAsDataURL(f);
+            }}
+          />
+          {scan ? <p className="mt-1 text-xs text-muted">{scan.name}</p> : null}
+        </Field>
+      </div>
+
+      {full ? (
+        <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Eigener E1-Strom · AGB</p>
           <CheckboxRow checked={privacy} onChange={setPrivacy}>
             Datenschutz / AGB akzeptiert
           </CheckboxRow>
-          <p className="text-sm text-muted">Unterschrift am Tablet</p>
+          <p className="text-sm text-muted">Unterschrift am Tablet (optional)</p>
           <SignaturePad value={sign} onChange={setSign} />
         </div>
       ) : null}
 
       <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
         <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save()}>
-          {busy ? "Speichert…" : full ? "Vertrag speichern" : "In die Datenbank"}
+          {busy ? "Speichert…" : "Abschicken"}
         </Button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { changeStatus, getContract, updateContractNotes } from "@/lib/server/api";
+import { changeStatus, getContract, updateContractNotes, uploadContractFile } from "@/lib/server/api";
 import { listSignEnvelopes, saveTabletSignature, sendSignEmail, downloadContractPdf } from "@/lib/server/sign-api";
 import { SIGN_STATUS_LABELS, type SignStatus } from "@/lib/sign";
 import { SignaturePad } from "@/components/signature-pad";
@@ -22,6 +22,8 @@ function Page() {
   const [comment, setComment] = useState("");
   const [notes, setNotes] = useState("");
   const [meter, setMeter] = useState("");
+  const [iban, setIban] = useState("");
+  const [owner, setOwner] = useState("");
   const [signMail, setSignMail] = useState("");
   const [pad, setPad] = useState("");
   const [sign, setSign] = useState<Awaited<ReturnType<typeof listSignEnvelopes>> | null>(null);
@@ -32,6 +34,8 @@ function Page() {
         setData(d);
         setNotes(d.contract.notes);
         setMeter(d.contract.meter_number);
+        setIban(d.contract.bank_iban || "");
+        setOwner(d.contract.bank_owner || "");
         setSignMail(d.contract.customer.email || "");
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Fehler"));
@@ -98,6 +102,17 @@ function Page() {
           {c.meter_number ? <p>Zähler {c.meter_number}</p> : null}
           {c.start_date ? <p>Lieferbeginn {deDate(c.start_date)}</p> : null}
         </Card>
+        <Card title="Bank">
+          {c.bank_iban ? (
+            <>
+              <p className="font-medium">{c.bank_iban}</p>
+              {c.bank_owner ? <p>{c.bank_owner}</p> : null}
+              <p className="text-xs text-muted">{c.sepa_confirmed ? "SEPA bestätigt" : "SEPA offen"}</p>
+            </>
+          ) : (
+            <p className="text-gold">Keine IBAN — Auftrag ist trotzdem erfasst.</p>
+          )}
+        </Card>
         <Card title="Provision">
           <NettoBrutto net={c.advisor_amount ?? c.commission_amount} size="md" />
           <p className="text-sm text-muted">Berater Stufe {c.commission_stufe || 1} · Liste netto, zzgl. 19% USt</p>
@@ -122,8 +137,10 @@ function Page() {
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
         <h2 className="text-sm font-medium">New Sales</h2>
         <p className="mt-1 text-sm text-muted">
-          Der Vertrag liegt bei New Sales. Hier nur Name, Adresse, Telefon, Tarif — damit die
-          E1-Datenbank voll ist. Teamleiter gleichen in New Sales ab.
+          {c.source === "newsales_api"
+            ? "An New Sales über die API übergeben."
+            : "Im Portal erfasst. Sobald die API-Zugänge da sind, geht derselbe Abschluss automatisch raus."}
+          {!c.bank_iban ? " Ohne IBAN abgeschickt — kann nachgetragen werden." : ""}
         </p>
         {c.newsales_ref ? <p className="mt-3 text-sm">Vorgang {c.newsales_ref}</p> : null}
       </div>
@@ -245,15 +262,47 @@ function Page() {
         <Field label="Zählernummer">
           <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
         </Field>
+        <Field label="IBAN nachtragen">
+          <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" />
+        </Field>
+        <Field label="Kontoinhaber">
+          <Input value={owner} onChange={(e) => setOwner(e.target.value)} />
+        </Field>
         <Field label="Notizen">
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <Field label="Vertrag / Scan hochladen">
+          <input
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            className="mt-1 block w-full text-sm"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const reader = new FileReader();
+              reader.onload = async () => {
+                try {
+                  await uploadContractFile({
+                    data: { id, base64: String(reader.result || ""), filename: f.name },
+                  });
+                  toast.success("Datei im Auftrag");
+                  load();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+                }
+              };
+              reader.readAsDataURL(f);
+            }}
+          />
         </Field>
         <Button
           className="mt-3"
           variant="outline"
           size="sm"
           onClick={async () => {
-            await updateContractNotes({ data: { id, notes, meterNumber: meter } });
+            await updateContractNotes({
+              data: { id, notes, meterNumber: meter, iban, bankOwner: owner },
+            });
             toast.success("Gespeichert");
             load();
           }}

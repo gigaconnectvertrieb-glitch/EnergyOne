@@ -33,6 +33,7 @@ describe("newsales api", () => {
     assert.equal(body.source, "e1-direktvertrieb");
     assert.equal(body.customer.lastName, "Müller");
     assert.equal(body.consumptionKwh, 3200);
+    assert.equal(body.ibanMissing, true);
   });
 
   it("maps New Sales statuses into the portal workflow", () => {
