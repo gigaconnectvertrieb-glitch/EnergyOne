@@ -25,6 +25,10 @@ function Page() {
   const [zip, setZip] = useState("");
   const [city, setCity] = useState("");
   const [consent, setConsent] = useState(false);
+  const [providerOld, setProviderOld] = useState("");
+  const [prevNo, setPrevNo] = useState("");
+  const [meter, setMeter] = useState("");
+  const [kuendigen, setKuendigen] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -116,6 +120,21 @@ function Page() {
                 <Input value={city} onChange={(e) => setCity(e.target.value)} />
               </Field>
             </div>
+            <Field label="Bisheriger Anbieter">
+              <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} placeholder="Steht auf der Rechnung" />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Kundennummer alt">
+                <Input value={prevNo} onChange={(e) => setPrevNo(e.target.value)} />
+              </Field>
+              <Field label="Zählernummer">
+                <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
+              </Field>
+            </div>
+            <label className="flex gap-2 text-sm text-muted">
+              <input type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
+              Kündigung beim bisherigen Anbieter vorbereiten
+            </label>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
               Datenschutz und Kontaktaufnahme
@@ -139,6 +158,10 @@ function Page() {
                       kwh: Number(kwh),
                       consent,
                       kind,
+                      previousProvider: providerOld,
+                      previousCustomerNo: prevNo,
+                      meter,
+                      kuendigen,
                     },
                   });
                   toast.success("Buchung aufgenommen. Mail kommt an info@-Absender.");

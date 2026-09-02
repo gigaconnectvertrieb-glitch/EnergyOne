@@ -272,7 +272,10 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
     city: string;
     kwh: number;
     consent: boolean;
-    kind?: string;
+    previousProvider?: string;
+    previousCustomerNo?: string;
+    meter?: string;
+    kuendigen?: boolean;
   }) => d)
   .handler(async ({ data }) => {
     if (!data.consent) throw new Error("Bitte Datenschutz zustimmen.");
@@ -332,14 +335,44 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh,
         commission_rate, commission_amount, commission_stufe,
         agency_amount, advisor_amount, margin_amount,
-        privacy_confirmed, source, notes
+        privacy_confirmed, source, notes, previous_provider, meter_number
       ) values (
         ${contractId}, ${customerId}, ${owner.user_id}, ${String(tariffRow.type)}, ${String(tariffRow.id)},
         'erfasst', ${kwh}, ${amount}, ${amount}, 13,
         ${amount}, ${amount}, 0,
-        true, 'e1_web', ${"Website-Buchung · Marge komplett Gründer"}
+        true, 'e1_web', ${data.kuendigen ? `Website · Kündigung ${data.previousProvider || "Altanbieter"} vorbereitet` : "Website-Buchung · Marge komplett Gründer"},
+        ${data.previousProvider?.trim() || null}, ${data.meter?.trim() || null}
       )
     `;
+    if (data.kuendigen) {
+      try {
+        const { kuendigungLines } = await import("@/lib/kuendigung");
+        const { buildPagedPdf } = await import("@/lib/sign");
+        const { putFile } = await import("./ops.server");
+        const lines = kuendigungLines({
+          first: data.firstName,
+          last: data.lastName,
+          street: data.street,
+          house: data.house,
+          zip: data.zip,
+          city: data.city,
+          email: data.email,
+          phone: data.phone,
+          provider: data.previousProvider || "bisheriger Lieferant",
+          customerNo: data.previousCustomerNo,
+          meter: data.meter,
+          type: String(tariffRow.type),
+        });
+        const pdf = buildPagedPdf(lines, "Kuendigung Altanbieter");
+        const stored = await putFile(pdf.toString("base64"), `kuendigung-${contractId}.pdf`);
+        await db`
+          insert into contract_files (id, contract_id, kind, filename, mime, path)
+          values (${nid()}, ${contractId}, ${"kuendigung"}, ${"Kuendigung-Altanbieter.pdf"}, ${"application/pdf"}, ${stored.path})
+        `;
+      } catch {
+        /* Datei optional */
+      }
+    }
     try {
       const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
       if (gmailAppPasswordReady()) {
