@@ -11,7 +11,7 @@ export function gmailAppPasswordReady() {
 }
 
 export function gmailSmtpUser() {
-  return env("GMAIL_SMTP_USER") || `business@${MAIL_DOMAIN}`;
+  return env("GMAIL_SMTP_USER") || `info@${MAIL_DOMAIN}`;
 }
 
 function readReply(socket: NodeJS.ReadableStream, expect: number) {
