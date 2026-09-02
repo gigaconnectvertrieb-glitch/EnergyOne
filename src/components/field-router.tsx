@@ -377,9 +377,13 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
                     }}
                   >
                     {h.house}
+                    {h.units ? <span className="ml-1 text-[10px] opacity-70">{h.units} WE</span> : null}
                   </button>
                 ))}
               </div>
+              {selectedHouse && "units" in selectedHouse && selectedHouse.units ? (
+                <p className="mt-2 text-xs text-[#555]">{selectedHouse.units} Wohneinheiten (OSM)</p>
+              ) : null}
             </div>
           ) : (
             <p className="mt-3 text-sm text-[#666]">Keine Hausnummern in OSM. Nummer selbst eintragen.</p>

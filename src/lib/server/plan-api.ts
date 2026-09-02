@@ -143,8 +143,8 @@ export const importCityPlan = createServerFn({ method: "POST" })
         );
     for (const h of houses.length ? houses : []) {
       await db`
-        insert into field_doors (id, territory_id, street, house, zip, city, lat, lng, note, status)
-        values (${nid()}, ${terId}, ${h.street}, ${h.house}, ${h.zip || zip}, ${data.city}, ${h.lat}, ${h.lng}, ${"OSM"}, ${"offen"})
+        insert into field_doors (id, territory_id, street, house, zip, city, lat, lng, note, status, units)
+        values (${nid()}, ${terId}, ${h.street}, ${h.house}, ${h.zip || zip}, ${data.city}, ${h.lat}, ${h.lng}, ${"OSM"}, ${"offen"}, ${h.units ?? null})
       `;
     }
     if (!houses.length) {

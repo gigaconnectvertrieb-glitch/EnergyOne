@@ -114,6 +114,9 @@ type OverpassEl = {
     "addr:street"?: string;
     "addr:place"?: string;
     "addr:postcode"?: string;
+    "building:flats"?: string;
+    "addr:flats"?: string;
+    "building:apartments"?: string;
   };
 };
 
@@ -199,7 +202,16 @@ export type HouseHit = {
   lng: number;
   street: string;
   zip?: string;
+  units?: number;
 };
+
+function parseUnits(tags?: Record<string, string>) {
+  if (!tags) return undefined;
+  const raw = tags["building:flats"] || tags["addr:flats"] || tags["building:apartments"];
+  if (!raw) return undefined;
+  const n = Number(String(raw).replace(/[^\d]/g, ""));
+  return n > 0 && n < 400 ? n : undefined;
+}
 
 function hitsFromOverpass(elements: OverpassEl[], streetFallback = ""): HouseHit[] {
   const seen = new Set<string>();
@@ -213,7 +225,7 @@ function hitsFromOverpass(elements: OverpassEl[], streetFallback = ""): HouseHit
     const key = `${st.toLowerCase()}|${house}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ house, lat: la, lng: ln, street: st, zip: el.tags?.["addr:postcode"] || "" });
+    out.push({ house, lat: la, lng: ln, street: st, zip: el.tags?.["addr:postcode"] || "", units: parseUnits(el.tags) });
     if (out.length >= HOUSE_CAP) break;
   }
   return out.sort((a, b) => {

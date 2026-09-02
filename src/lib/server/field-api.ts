@@ -528,7 +528,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       ring = [];
     }
     const doors = await db<Record<string, unknown>>`
-      select id, street, house, zip, city, lat, lng from field_doors where territory_id = ${asStr(ter.id)} order by street, house
+      select id, street, house, zip, city, lat, lng, units from field_doors where territory_id = ${asStr(ter.id)} order by street, house
     `;
     const houses = doors.map((d) => ({
       id: asStr(d.id),
@@ -538,6 +538,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       city: asStr(d.city),
       lat: num(d.lat),
       lng: num(d.lng),
+      units: d.units != null ? num(d.units) : undefined,
     }));
     let grouped = groupStreets(houses.map((h) => ({ ...h, house: h.house || "" })));
     if (typeof data.lat === "number" && typeof data.lng === "number") {
