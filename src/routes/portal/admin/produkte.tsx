@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listTariffs, quoteCommission } from "@/lib/server/api";
+import { listE1OwnTariffs, listTariffs, quoteCommission, saveE1OwnTariff } from "@/lib/server/api";
+import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { eur } from "@/lib/utils";
 import { vatOn } from "@/lib/steuer";
@@ -15,6 +16,11 @@ function Page() {
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({ providers: [], items: [] });
   const [open, setOpen] = useState<string>("");
   const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
+  const [own, setOwn] = useState<Awaited<ReturnType<typeof listE1OwnTariffs>>>([]);
+
+  useEffect(() => {
+    listE1OwnTariffs().then(setOwn).catch(() => setOwn([]));
+  }, []);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -27,8 +33,22 @@ function Page() {
     <div>
       <h1 className="font-display text-4xl">Provisionsliste</h1>
       <p className="text-sm text-muted">
-        316 Tarife. Mitarbeiter Stufe 1–3, Agentur Stufe 13 (Luca / Orhan, Liste 01.09.2026).
+        New Sales plus eigene E1-Tarife. Website-Buchung zählt volle Stufe 13 an die Gründer.
       </p>
+
+      <h2 className="mt-8 font-display text-2xl">E1 eigene Tarife</h2>
+      <p className="text-sm text-muted">
+        Arbeitspreis und Grundpreis eintragen, aktiv und auf Website buchbar. Flag Eigene E1-Tarife in den Einstellungen an.
+      </p>
+      <div className="mt-3 grid gap-3">
+        {own.map((t) => (
+          <E1Editor
+            key={String(t.id)}
+            row={t}
+            onSaved={() => listE1OwnTariffs().then(setOwn).catch(() => setOwn([]))}
+          />
+        ))}
+      </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Field label="Suche">
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tarif oder ID" />
@@ -85,6 +105,64 @@ function Page() {
         ))}
         {catalog.items.length === 0 ? <p className="text-sm text-muted">Keine Tarife zu dieser Suche.</p> : null}
       </div>
+    </div>
+  );
+}
+
+function E1Editor({
+  row,
+  onSaved,
+}: {
+  row: Record<string, unknown>;
+  onSaved: () => void;
+}) {
+  const [ct, setCt] = useState(row.arbeit_ct != null ? String(row.arbeit_ct) : "");
+  const [grund, setGrund] = useState(row.grund_year != null ? String(row.grund_year) : "");
+  const [bonus, setBonus] = useState(String(row.bonus_year || 0));
+  const [active, setActive] = useState(Boolean(row.active));
+  const [web, setWeb] = useState(Boolean(row.web_bookable));
+  return (
+    <div className="rounded-2xl bg-surface p-4 gold-hairline">
+      <p className="font-medium">{String(row.name)}</p>
+      <p className="text-xs text-muted">
+        {String(row.type)} · {String(row.kind)}
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <Field label="ct/kWh">
+          <Input value={ct} onChange={(e) => setCt(e.target.value.replace(/[^\d,.]/g, ""))} />
+        </Field>
+        <Field label="Grundpreis EUR/Jahr">
+          <Input value={grund} onChange={(e) => setGrund(e.target.value.replace(/[^\d,.]/g, ""))} />
+        </Field>
+        <Field label="Bonus EUR/Jahr">
+          <Input value={bonus} onChange={(e) => setBonus(e.target.value.replace(/[^\d,.]/g, ""))} />
+        </Field>
+      </div>
+      <label className="mt-2 flex gap-2 text-sm">
+        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Aktiv
+      </label>
+      <label className="flex gap-2 text-sm">
+        <input type="checkbox" checked={web} onChange={(e) => setWeb(e.target.checked)} /> Auf der Website buchbar
+      </label>
+      <Button
+        className="mt-3"
+        size="sm"
+        onClick={async () => {
+          await saveE1OwnTariff({
+            data: {
+              id: String(row.id),
+              arbeit_ct: Number(ct.replace(",", ".")),
+              grund_year: Number(grund.replace(",", ".")),
+              bonus_year: Number(bonus.replace(",", ".")) || 0,
+              active,
+              web_bookable: web,
+            },
+          });
+          onSaved();
+        }}
+      >
+        Speichern
+      </Button>
     </div>
   );
 }

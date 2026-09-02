@@ -13,6 +13,7 @@ const NAV_PRIVAT = [
   { to: "/privat", label: "Privat" },
   { to: "/firmen", label: "Unternehmen" },
   { to: "/rechner", label: "Rechner" },
+  { to: "/buchen", label: "Buchen" },
   { to: "/karriere", label: "Karriere" },
 ];
 
@@ -20,6 +21,7 @@ const NAV_FIRMEN = [
   { to: "/firmen", label: "Geschäftskunden" },
   { to: "/firmen/leistungen", label: "Leistungen" },
   { to: "/rechner", label: "Kostenrechner" },
+  { to: "/buchen", label: "Buchen" },
   { to: "/firmen/anfrage", label: "Gespräch" },
   { to: "/privat", label: "Privatkunden" },
 ];

@@ -284,6 +284,44 @@ export const listTariffs = createServerFn({ method: "POST" })
     };
   });
 
+export const listE1OwnTariffs = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "settings.manage") && !can(me.role, "users.manage")) throw new Error("Kein Zugriff");
+    return db<Record<string, unknown>>`
+      select id, name, type, kind, active, web_bookable, arbeit_ct, grund_year, bonus_year, notes
+      from tariffs where provider = 'E1' order by type, name
+    `;
+  });
+
+export const saveE1OwnTariff = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: {
+    id: string;
+    arbeit_ct: number;
+    grund_year: number;
+    bonus_year?: number;
+    active: boolean;
+    web_bookable: boolean;
+  }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "settings.manage") && !can(me.role, "users.manage")) throw new Error("Kein Zugriff");
+    await db`
+      update tariffs
+      set arbeit_ct = ${data.arbeit_ct},
+          grund_year = ${data.grund_year},
+          bonus_year = ${data.bonus_year || 0},
+          active = ${data.active},
+          web_bookable = ${data.web_bookable}
+      where id = ${data.id} and provider = 'E1'
+    `;
+    return { ok: true };
+  });
+
 export const quoteCommission = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { tariffId: string; consumptionKwh: number; stufe?: number }) => d)

@@ -210,3 +210,148 @@ export const customerSelfLookup = createServerFn({ method: "POST" })
       city: String(row.city ?? ""),
     };
   });
+
+export const listPublicE1Tariffs = createServerFn({ method: "POST" })
+  .validator((d: { type?: string; kind?: string; kwh?: number } = {}) => d)
+  .handler(async ({ data }) => {
+    const db = await sql();
+    const [flag] = await db<{ enabled: boolean }>`
+      select enabled from feature_flags where key = 'phase2_own_tariffs' limit 1
+    `;
+    if (!flag?.enabled) return { ready: false, items: [] as Array<Record<string, unknown>> };
+    const type = data.type === "gas" ? "gas" : data.type === "strom" ? "strom" : "";
+    const kind = data.kind === "gewerbe" ? "gewerbe" : data.kind === "privat" ? "privat" : "";
+    const rows = await db<Record<string, unknown>>`
+      select id, name, type, kind, arbeit_ct, grund_year, bonus_year
+      from tariffs
+      where provider = 'E1' and active = true and web_bookable = true
+        and arbeit_ct is not null and arbeit_ct > 0
+        and grund_year is not null
+        and (${type} = '' or type = ${type})
+        and (kind = 'beide' or ${kind} = '' or kind = ${kind})
+      order by type, name
+    `;
+    const kwh = Number(data.kwh) || 0;
+    return {
+      ready: rows.length > 0,
+      items: rows.map((r) => {
+        const arbeit = Number(r.arbeit_ct) || 0;
+        const grund = Number(r.grund_year) || 0;
+        const bonus = Number(r.bonus_year) || 0;
+        const year = kwh > 0 ? Math.round((kwh * (arbeit / 100) + grund - bonus) * 100) / 100 : 0;
+        return {
+          id: String(r.id),
+          name: String(r.name),
+          type: String(r.type),
+          kind: String(r.kind),
+          arbeit_ct: arbeit,
+          grund_year: grund,
+          bonus_year: bonus,
+          year,
+        };
+      }),
+    };
+  });
+
+export const submitE1WebOrder = createServerFn({ method: "POST" })
+  .validator((d: {
+    tariffId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    street: string;
+    house: string;
+    zip: string;
+    city: string;
+    kwh: number;
+    consent: boolean;
+    kind?: string;
+  }) => d)
+  .handler(async ({ data }) => {
+    if (!data.consent) throw new Error("Bitte Datenschutz zustimmen.");
+    if (!data.firstName.trim() || !data.lastName.trim()) throw new Error("Name fehlt.");
+    if (!data.email.includes("@")) throw new Error("E-Mail fehlt.");
+    if (!data.phone.trim()) throw new Error("Telefon fehlt.");
+    if (!data.street.trim() || !data.house.trim() || data.zip.replace(/\D/g, "").length !== 5 || !data.city.trim()) {
+      throw new Error("Adresse unvollständig.");
+    }
+    if (!Number(data.kwh)) throw new Error("Verbrauch in kWh fehlt.");
+    const db = await sql();
+    const [flag] = await db<{ enabled: boolean }>`
+      select enabled from feature_flags where key = 'phase2_own_tariffs' limit 1
+    `;
+    if (!flag?.enabled) throw new Error("Eigene E1-Tarife sind noch nicht freigeschaltet.");
+    const [tariff] = await db<Record<string, unknown>>`
+      select * from tariffs
+      where id = ${data.tariffId} and provider = 'E1' and active = true and web_bookable = true
+    `;
+    if (!tariff) throw new Error("Dieser Tarif ist nicht buchbar.");
+    const [owner] = await db<{ user_id: string }>`
+      select user_id from profiles
+      where role = 'super_admin' and status = 'active'
+      order by case when lower(staff_id) in ('orhan','luca') then 0 else 1 end
+      limit 1
+    `;
+    if (!owner) throw new Error("Kein Gründer-Konto für die Buchung.");
+    const customerId = nid();
+    const contractId = nid();
+    const kwh = Number(data.kwh);
+    const { splitDeal } = await import("@/lib/tariffs");
+    const bands = await db<Record<string, unknown>>`
+      select stufe, kwh_from, kwh_to, amount_eur, amount_ct_kwh
+      from tariff_bands where tariff_id = ${data.tariffId}
+    `;
+    const parsed = bands.map((b) => ({
+      stufe: Number(b.stufe) || 13,
+      kwh_from: Number(b.kwh_from) || 0,
+      kwh_to: Number(b.kwh_to) || 999999,
+      amount_eur: Number(b.amount_eur) || 160,
+      amount_ct_kwh: Number(b.amount_ct_kwh) || 0,
+    }));
+    const split = splitDeal(parsed, 13, kwh);
+    const amount = split.ok ? split.advisor : 160;
+    await db`
+      insert into customers (
+        id, first_name, last_name, email, phone, street, house_number, zip, city, consents
+      ) values (
+        ${customerId}, ${data.firstName.trim()}, ${data.lastName.trim()},
+        ${data.email.trim().toLowerCase()}, ${data.phone.trim()},
+        ${data.street.trim()}, ${data.house.trim()}, ${data.zip.replace(/\D/g, "").slice(0, 5)},
+        ${data.city.trim()}, ${JSON.stringify({ web: true, kind: data.kind || "privat" })}::jsonb
+      )
+    `;
+    await db`
+      insert into contracts (
+        id, customer_id, user_id, type, tariff_id, status, consumption_kwh,
+        commission_rate, commission_amount, commission_stufe,
+        agency_amount, advisor_amount, margin_amount,
+        privacy_confirmed, source, notes
+      ) values (
+        ${contractId}, ${customerId}, ${owner.user_id}, ${String(tariff.type)}, ${String(tariff.id)},
+        'erfasst', ${kwh}, ${amount}, ${amount}, 13,
+        ${amount}, ${amount}, 0,
+        true, 'e1_web', ${"Website-Buchung · Marge komplett Gründer"}
+      )
+    `;
+    try {
+      const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+      if (gmailAppPasswordReady()) {
+        await sendViaAppPassword({
+          to: data.email.trim(),
+          subject: "Ihre E1-Buchung",
+          text: [
+            `Guten Tag ${data.firstName} ${data.lastName},`,
+            "",
+            `wir haben Ihre Buchung ${String(tariff.name)} aufgenommen.`,
+            "Die Prüfung folgt. Bei Fragen: info@e1direktvertrieb.de",
+            "",
+            "E1 Direktvertrieb",
+          ].join("\n"),
+        });
+      }
+    } catch {
+      /* mail optional */
+    }
+    return { ok: true, id: contractId };
+  });

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
-import { getPublicCalc, submitLead } from "@/lib/server/public";
+import { getPublicCalc, listPublicE1Tariffs, submitLead } from "@/lib/server/public";
 import {
   GEWERBE_KWH,
   PLACEHOLDER_COMPARE,
@@ -47,7 +47,25 @@ function Page() {
         });
       })
       .catch(() => {});
-  }, []);
+    listPublicE1Tariffs({ data: { type: sparte, kind, kwh: Number(kwh) || 0 } })
+      .then((r) => {
+        const best = r.items[0];
+        if (!best) return;
+        setLive(true);
+        setCmp((prev) => ({
+          ...prev,
+          [kind]: {
+            ...prev[kind],
+            [sparte]: {
+              arbeitCt: Number(best.arbeit_ct),
+              grundEurYear: Number(best.grund_year),
+              label: String(best.name),
+            },
+          },
+        }));
+      })
+      .catch(() => {});
+  }, [kind, sparte, kwh]);
 
   function applyPreset(nextKind: RechnerKind, key: string) {
     const table = nextKind === "gewerbe" ? GEWERBE_KWH : PRIVAT_KWH;
