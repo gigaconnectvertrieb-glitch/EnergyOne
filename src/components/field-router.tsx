@@ -168,12 +168,11 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
 
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
     setHits([]);
-    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: h.house || h.street ? 18 : 15 });
-    const concrete = Boolean((h.house || "").trim() || (h.street || "").trim());
-    if (!concrete) {
+    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: h.street || h.house ? 17 : 15 });
+    if (!(h.street || "").trim() && !(h.house || "").trim()) {
       setObj(null);
       setHouse("");
-      toast.message("Karte auf den Ort. Für Abschluss Straße und Hausnummer suchen oder ein Haus antippen.");
+      toast.message("Straße mit dazu, dann kommen die Hausnummern.");
       return;
     }
     setBusy(true);
@@ -182,9 +181,10 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
         data: { lat: h.lat, lng: h.lng, street: h.street, house: h.house, zip: h.zip, city: h.city },
       });
       setObj(next);
-      setHouse(h.house || next.house || next.houses[0]?.house || "");
+      setHouse(h.house || next.house || "");
+      toast.success(next.street ? `${next.street} geloggt` : "Straße geladen");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Objekt nicht geladen");
+      toast.error(e instanceof Error ? e.message : "Straße nicht geladen");
     } finally {
       setBusy(false);
     }
@@ -214,7 +214,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Straße und Hausnummer"
+              placeholder="Biblis Hauptstraße"
               className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
@@ -268,30 +268,34 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
         <div className="absolute bottom-3 left-3 right-3 z-[1200] rounded-2xl bg-white p-4 text-[#1a1a1a] shadow-2xl">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c9a227]">Objekt</p>
           <h2 className="mt-1 font-display text-2xl text-[#111]">
-            {obj.street || "Adresse"} {house}
+            {obj.street || "Straße"} {house}
           </h2>
           <p className="text-sm text-[#555]">{[obj.zip, obj.city].filter(Boolean).join(" ")}</p>
           {obj.houses.length ? (
-            <label className="mt-3 block text-xs text-[#666]">
-              Hausnummer
-              <select
-                className="mt-1 h-11 w-full rounded-lg border border-black/15 bg-white px-2"
-                value={house}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setHouse(v);
-                  const h = obj.houses.find((x) => x.house === v);
-                  if (h) mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
-                }}
-              >
+            <div className="mt-3">
+              <p className="text-xs text-[#666]">Hausnummer antippen</p>
+              <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-auto">
                 {obj.houses.map((h) => (
-                  <option key={h.house} value={h.house}>
+                  <button
+                    key={h.house}
+                    type="button"
+                    className={cn(
+                      "min-h-10 min-w-10 rounded-lg border px-2 text-sm",
+                      house === h.house ? "border-[#c9a227] bg-[#c9a227] text-[#111]" : "border-black/15 bg-white text-[#111]",
+                    )}
+                    onClick={() => {
+                      setHouse(h.house);
+                      mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
+                    }}
+                  >
                     {h.house}
-                  </option>
+                  </button>
                 ))}
-              </select>
-            </label>
-          ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-[#666]">Keine Hausnummern in OSM. Nummer selbst eintragen.</p>
+          )}
           <p className={cn("mt-3 text-sm font-medium", obj.inTerritory ? "text-[#3f8f6b]" : "text-[#c45c4a]")}>
             {obj.inTerritory ? "Im Teamgebiet" : "Außerhalb des Teamgebiets"}
             {pack?.name ? ` · ${pack.name}` : ""}
