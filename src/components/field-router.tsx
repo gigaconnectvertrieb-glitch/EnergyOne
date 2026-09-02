@@ -13,6 +13,7 @@ import {
   setGeojson,
   type MapLibreMap,
 } from "@/lib/map-gl";
+import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
 
 type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
@@ -22,6 +23,8 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const gRef = useRef<GoogleMap | null>(null);
+  const gMarkers = useRef<Array<{ setMap: (m: null) => void }>>([]);
   const markersRef = useRef<Array<{ remove: () => void }>>([]);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -36,6 +39,30 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   useEffect(() => {
     let cancelled = false;
     async function boot() {
+      const key = googleMapsKey();
+      if (key && ref.current && !gRef.current && !mapRef.current) {
+        try {
+          await loadGoogleMaps(key);
+          if (cancelled || !ref.current) return;
+          const gmap = createGoogleMap(ref.current, center);
+          gRef.current = gmap;
+          window.google?.maps.event.addListener(gmap, "click", (e) => {
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            if (tapStartRef.current) {
+              tapStartRef.current = false;
+              setTapStart(false);
+              void loadWalk(lat, lng);
+              return;
+            }
+            void pick({ lat, lng, street: "", house: "", zip: "", city: "", display: "" });
+          });
+          void loadWalk();
+          return;
+        } catch {
+          /* OSM */
+        }
+      }
       await loadMapLibre();
       if (cancelled || !ref.current || mapRef.current) return;
       const map = createE1Map(ref.current, center, 15, { controls: false });
@@ -104,6 +131,37 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   }
 
   function paint(data: Walk) {
+    const gmap = gRef.current;
+    if (gmap && window.google?.maps) {
+      gMarkers.current.forEach((m) => m.setMap(null));
+      gMarkers.current = [];
+      for (const h of data.houses.slice(0, 400)) {
+        const mk = new window.google.maps.Marker({
+          map: gmap,
+          position: { lat: h.lat, lng: h.lng },
+          label: { text: h.house, color: "#0B0D12", fontSize: "10px" },
+          title: `${h.street} ${h.house}`,
+        });
+        mk.addListener("click", () => {
+          void pick({
+            lat: h.lat,
+            lng: h.lng,
+            street: h.street,
+            house: h.house,
+            zip: h.zip || "",
+            city: h.city || "",
+            display: `${h.street} ${h.house}`,
+          });
+        });
+        gMarkers.current.push(mk);
+      }
+      if (data.houses[0]) {
+        gmap.setCenter({ lat: data.houses[0].lat, lng: data.houses[0].lng });
+        gmap.setZoom(18);
+        gmap.setTilt(67.5);
+      }
+      return;
+    }
     const map = mapRef.current;
     if (!map?.getSource("e1-zone")) return;
     markersRef.current.forEach((m) => m.remove());
