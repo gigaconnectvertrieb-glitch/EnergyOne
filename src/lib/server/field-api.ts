@@ -526,4 +526,63 @@ export const saveWalkOrder = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const fieldBalance = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const rows = await db<{ period: string; n: string; eur: string }>`
+      select 'tag' as period,
+        count(*)::text as n,
+        coalesce(sum(coalesce(advisor_amount, commission_amount)),0)::text as eur
+      from contracts
+      where user_id = ${me.user_id} and status <> 'storniert'
+        and created_at >= current_date
+      union all
+      select 'woche',
+        count(*)::text,
+        coalesce(sum(coalesce(advisor_amount, commission_amount)),0)::text
+      from contracts
+      where user_id = ${me.user_id} and status <> 'storniert'
+        and created_at >= date_trunc('week', current_date)
+      union all
+      select 'monat',
+        count(*)::text,
+        coalesce(sum(coalesce(advisor_amount, commission_amount)),0)::text
+      from contracts
+      where user_id = ${me.user_id} and status <> 'storniert'
+        and created_at >= date_trunc('month', current_date)
+    `;
+    const pick = (k: string) => rows.find((r) => r.period === k);
+    const tag = pick("tag");
+    const woche = pick("woche");
+    const monat = pick("monat");
+    return {
+      name: `${me.first_name} ${me.last_name}`.trim(),
+      role: me.role,
+      tag: { n: Number(tag?.n || 0), eur: Number(tag?.eur || 0) },
+      woche: { n: Number(woche?.n || 0), eur: Number(woche?.eur || 0) },
+      monat: { n: Number(monat?.n || 0), eur: Number(monat?.eur || 0) },
+    };
+  });
+
+export const claimTerritory = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const [ter] = await db<{ id: string }>`select id from territories where id = ${data.id} and active = true`;
+    if (!ter) throw new Error("Gebiet nicht gefunden.");
+    await db`
+      insert into territory_members (territory_id, user_id)
+      values (${data.id}, ${me.user_id})
+      on conflict do nothing
+    `;
+    if (can(me.role, "team.view")) {
+      await db`update territories set user_id = ${me.user_id}, updated_at = now() where id = ${data.id}`;
+    }
+    return { ok: true };
+  });
+
 

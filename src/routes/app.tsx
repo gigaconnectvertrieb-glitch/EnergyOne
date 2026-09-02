@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, ListChecks, Map, MoreHorizontal } from "lucide-react";
+import { CalendarDays, ListChecks, Map, Wallet } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
@@ -25,22 +25,26 @@ export const Route = createFileRoute("/app")({
 });
 
 const TABS = [
-  { to: "/app", label: "Routing", icon: Map },
-  { to: "/app/suche", label: "Suche", icon: CalendarDays },
+  { to: "/app", label: "Route", icon: Map },
+  { to: "/app/abschluss", label: "Abschluss", icon: CalendarDays },
+  { to: "/app/bilanz", label: "Bilanz", icon: Wallet },
   { to: "/app/liste", label: "Nachlauf", icon: ListChecks },
-  { to: "/app/mehr", label: "Mehr", icon: MoreHorizontal },
 ] as const;
 
 function AppShell() {
   const { user, isPending } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (pathname.startsWith("/app/login")) return <Outlet />;
   if (isPending) return <div className="grid min-h-dvh place-items-center bg-bg text-muted">Laden…</div>;
-  if (!user) return <RedirectToSignIn />;
+  if (!user) return <RedirectToSignIn to="/app/login" />;
   return (
     <div className="min-h-dvh bg-bg text-ink">
       <header className="sticky top-0 z-20 flex h-12 items-center gap-2.5 border-b border-white/5 bg-bg/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <BrandMark className="h-7 w-auto" />
         <p className="font-display text-base tracking-wide text-gold">Feld</p>
+        <Link to="/app/mehr" className="ml-auto text-xs text-muted">
+          Mehr
+        </Link>
       </header>
       {pathname.startsWith("/app/mehr") ? null : <GoalStrip />}
       <main className="px-4 pb-24 pt-3">
