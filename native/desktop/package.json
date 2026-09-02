@@ -8,8 +8,8 @@
     "dist": "electron-builder --win nsis"
   },
   "build": {
-    "appId": "de.e1direktvertrieb.orga",
-    "productName": "E1 Orga",
+    "appId": "de.e1direktvertrieb.vertrieb",
+    "productName": "E1 Vertrieb",
     "win": { "target": "nsis" },
     "files": ["main.cjs"]
   }
