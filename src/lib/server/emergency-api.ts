@@ -28,6 +28,16 @@ export const startEmergency = createServerFn({ method: "POST" })
         message: "Mitarbeiter braucht euch live vor Ort.",
         link: `/app/notfall?room=${encodeURIComponent(room)}`,
       });
+      try {
+        const { sendPushToUser } = await import("./push.server");
+        await sendPushToUser(db, b.user_id, {
+          title: `Notfall ${name}`,
+          body: "Jetzt zuschalten",
+          url: `/app/notfall?room=${encodeURIComponent(room)}`,
+        });
+      } catch {
+        /* */
+      }
     }
     return { id, room };
   });

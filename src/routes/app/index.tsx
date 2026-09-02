@@ -44,6 +44,15 @@ function Page() {
       ) : (
         <p className="text-sm text-muted">Noch kein Gebiet. Orhan spielt auf.</p>
       )}
+      {home?.yield ? (
+        <div className="rounded-2xl bg-surface p-4 gold-hairline">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-gold">Abschöpfung</p>
+          <p className="mt-1 font-display text-3xl">{home.yield.pct} %</p>
+          <p className="mt-1 text-xs text-muted">
+            {home.yield.deals} Abschlüsse · {home.yield.units} WE · {home.yield.houses} Häuser
+          </p>
+        </div>
+      ) : null}
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Heute" value={bal ? eur(bal.tag.eur) : "—"} sub={bal ? `${bal.tag.n} Abschluss` : ""} />
         <Stat label="Woche" value={bal ? eur(bal.woche.eur) : "—"} sub={bal ? `${bal.woche.n}` : ""} />

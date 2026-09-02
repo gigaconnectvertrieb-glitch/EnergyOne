@@ -46,6 +46,36 @@ function mapDoor(r: Record<string, unknown>) {
   };
 }
 
+function mapYield(houses: number, we: number, deals: number) {
+  const base = we > 0 ? we : houses;
+  return {
+    houses,
+    units: we,
+    deals,
+    pct: base > 0 ? Math.round((deals / base) * 1000) / 10 : 0,
+  };
+}
+
+async function yieldFor(db: Awaited<ReturnType<typeof sql>>, terId: string) {
+  const [door] = await db<{ houses: number; we: number }>`
+    select count(*)::int as houses, coalesce(sum(coalesce(units, 1)), 0)::int as we
+    from field_doors where territory_id = ${terId}
+  `;
+  const [deal] = await db<{ n: number }>`
+    select count(*)::int as n
+    from contracts co
+    join customers cu on cu.id = co.customer_id
+    where co.status <> 'storniert'
+      and exists (
+        select 1 from field_doors fd
+        where fd.territory_id = ${terId}
+          and lower(fd.street) = lower(cu.street)
+          and fd.house = cu.house_number
+      )
+  `;
+  return mapYield(num(door?.houses), num(door?.we), num(deal?.n));
+}
+
 export const getFieldHome = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -66,6 +96,7 @@ export const getFieldHome = createServerFn({ method: "GET" })
       order by m.created_at desc
       limit 1
     `;
+    const yieldNow = used ? await yieldFor(db, asStr(used.id)) : null;
     return {
       territory: used
         ? {
@@ -81,6 +112,7 @@ export const getFieldHome = createServerFn({ method: "GET" })
         : null,
       openFollowups: num(open?.n),
       week,
+      yield: yieldNow,
     };
   });
 
@@ -230,8 +262,18 @@ export const assignTerritory = createServerFn({ method: "POST" })
       type: "gebiet",
       title: "Neues Gebiet",
       message: ter?.name || "Gebiet liegt bereit.",
-      link: `/app?gebiet=${data.id}`,
+      link: "/app/karte",
     });
+    try {
+      const { sendPushToUser } = await import("./push.server");
+      await sendPushToUser(db, data.userId, {
+        title: "Neues Gebiet",
+        body: ter?.name || "Gebiet herunterladen",
+        url: "/app/karte",
+      });
+    } catch {
+      /* push optional */
+    }
     await audit(db, {
       userId: context.userId,
       action: "territory.assign",
@@ -589,6 +631,26 @@ export const saveWalkOrder = createServerFn({ method: "POST" })
     const payload = data.reset ? null : JSON.stringify({ streets: data.streets });
     await db`update territories set walk_order = ${payload}::jsonb, updated_at = now() where id = ${asStr(ter.id)}`;
     return { ok: true };
+  });
+
+export const setDoorUnits = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { doorId?: string; street: string; house: string; units: number }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const ter = await assignedTerritory(db, me.user_id);
+    if (!ter) throw new Error("Kein Gebiet.");
+    const units = Math.max(1, Math.min(200, Math.round(data.units)));
+    if (data.doorId) {
+      await db`update field_doors set units = ${units} where id = ${data.doorId} and territory_id = ${asStr(ter.id)}`;
+    } else {
+      await db`
+        update field_doors set units = ${units}
+        where territory_id = ${asStr(ter.id)} and street = ${data.street} and house = ${data.house}
+      `;
+    }
+    return { ok: true, units };
   });
 
 export const acceptTerritory = createServerFn({ method: "POST" })
