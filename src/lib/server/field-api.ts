@@ -443,6 +443,33 @@ export const listWeeklyFollowups = createServerFn({ method: "GET" })
     return { week: weekKey(), rows: sortWeekly(mapped) };
   });
 
+export const listAllFollowups = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view")) throw new Error("Kein Zugriff");
+    const rows = await db<Record<string, unknown>>`
+      select v.*, p.first_name, p.last_name
+      from field_visits v
+      left join profiles p on p.user_id = v.user_id
+      where v.list_status = 'offen'
+      order by v.created_at desc
+      limit 300
+    `;
+    return rows.map((r) => ({
+      id: asStr(r.id),
+      street: asStr(r.street),
+      house: asStr(r.house),
+      zip: asStr(r.zip),
+      city: asStr(r.city),
+      reason: asStr(r.reason),
+      follow_up_on: r.follow_up_on ? asStr(r.follow_up_on) : "",
+      advisor: `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+      created_at: asStr(r.created_at),
+    }));
+  });
+
 export const setFollowupStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { id: string; status: "offen" | "erledigt" }) => d)

@@ -32,7 +32,10 @@ function Page() {
           </p>
         </div>
       ) : null}
-      <Link to="/app/notfall" className="mt-6 block rounded-2xl bg-surface px-4 py-4 text-sm gold-hairline">
+      <Link to="/app/bs" className="mt-4 block rounded-2xl bg-surface px-4 py-4 text-sm gold-hairline">
+        BS · Bewerber aufnehmen
+      </Link>
+      <Link to="/app/notfall" className="mt-4 block rounded-2xl bg-surface px-4 py-4 text-sm gold-hairline">
         Notfall · Leitung zuschalten
       </Link>
       {ters.length ? (
