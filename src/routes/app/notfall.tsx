@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { closeEmergency, listEmergencies, startEmergency } from "@/lib/server/emergency-api";
+import { closeEmergency, listEmergencies, silentAlarm, startEmergency } from "@/lib/server/emergency-api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -16,6 +16,8 @@ function Page() {
   const { room: given } = Route.useSearch();
   const [room, setRoom] = useState(given || "");
   const [id, setId] = useState("");
+  const [note, setNote] = useState("");
+  const [sent, setSent] = useState(false);
   const [open, setOpen] = useState<Awaited<ReturnType<typeof listEmergencies>>>([]);
   const src = useMemo(
     () => (room ? `https://meet.jit.si/${encodeURIComponent(room)}#config.prejoinPageEnabled=false` : ""),
@@ -49,6 +51,45 @@ function Page() {
       {!room ? (
         <>
           <Button onClick={() => void start()}>Leitung zuschalten</Button>
+          <div className="rounded-2xl bg-surface p-4 gold-hairline">
+            <p className="text-sm font-medium">Stiller Alarm</p>
+            <p className="mt-1 text-xs text-muted">Geht an Luca und Orhan mit Standort. Die Polizei erreicht ihr nur über den Anruf.</p>
+            <textarea
+              className="mt-3 w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm"
+              rows={2}
+              placeholder="Kurz was passiert (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <Button
+              className="mt-3 w-full"
+              variant="outline"
+              disabled={sent}
+              onClick={async () => {
+                try {
+                  const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+                  });
+                  await silentAlarm({
+                    data: {
+                      lat: pos.coords.latitude,
+                      lng: pos.coords.longitude,
+                      note,
+                    },
+                  });
+                  setSent(true);
+                  toast.success("Stiller Alarm bei der Leitung.");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Nicht gesendet");
+                }
+              }}
+            >
+              {sent ? "Gesendet" : "Stillen Alarm senden"}
+            </Button>
+            <a href="tel:110" className="mt-3 block rounded-xl bg-red-700 px-4 py-3 text-center text-sm font-medium text-white">
+              110 anrufen
+            </a>
+          </div>
           {open.length ? (
             <div className="grid gap-2">
               <p className="text-xs text-gold">Offene Rufe</p>

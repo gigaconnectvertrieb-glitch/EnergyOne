@@ -71,8 +71,57 @@ function mapRow(r: Record<string, unknown>) {
     room: asStr(r.room),
     name: `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
     created_at: asStr(r.created_at),
+    kind: asStr(r.kind) || "video",
+    address: asStr(r.address),
+    note: asStr(r.note),
+    lat: r.lat != null ? Number(r.lat) : 0,
+    lng: r.lng != null ? Number(r.lng) : 0,
   };
 }
+
+export const silentAlarm = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { lat?: number; lng?: number; address?: string; note?: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const id = nid();
+    const room = `still-${id.slice(0, 8)}`;
+    await db`
+      insert into field_emergencies (id, user_id, room, status, kind, lat, lng, note, address)
+      values (
+        ${id}, ${me.user_id}, ${room}, 'offen', 'still',
+        ${data.lat ?? null}, ${data.lng ?? null}, ${data.note || ""}, ${data.address || ""}
+      )
+    `;
+    const bosses = await db<{ user_id: string }>`
+      select user_id from profiles
+      where role = 'super_admin' and status = 'active' and user_id <> ${me.user_id}
+    `;
+    const name = `${me.first_name} ${me.last_name}`.trim();
+    const where = data.address || (data.lat && data.lng ? `${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}` : "kein GPS");
+    const body = `${name} · ${where}${data.note ? ` · ${data.note}` : ""}`;
+    for (const b of bosses) {
+      await notify(db, {
+        userId: b.user_id,
+        type: "notfall",
+        title: "Stiller Alarm",
+        message: body,
+        link: "/portal/standort",
+      });
+      try {
+        const { sendPushToUser } = await import("./push.server");
+        await sendPushToUser(db, b.user_id, {
+          title: "Stiller Alarm",
+          body,
+          url: "/portal/standort",
+        });
+      } catch {
+        /* */
+      }
+    }
+    return { id };
+  });
 
 export const closeEmergency = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

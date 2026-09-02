@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listWorkLive, listWorkPings } from "@/lib/server/work-api";
+import { listEmergencies } from "@/lib/server/emergency-api";
 
 export const Route = createFileRoute("/portal/standort")({ component: Page });
 
@@ -8,12 +9,14 @@ function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listWorkLive>>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [pings, setPings] = useState<Awaited<ReturnType<typeof listWorkPings>>>([]);
+  const [alarms, setAlarms] = useState<Awaited<ReturnType<typeof listEmergencies>>>([]);
   useEffect(() => {
-    const load = () =>
+    const load = () => {
       listWorkLive()
         .then(setRows)
         .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Kein Zugriff"));
+      listEmergencies().then(setAlarms).catch(() => setAlarms([]));
+    };
     void load();
     const t = window.setInterval(load, 15000);
     return () => window.clearInterval(t);
@@ -35,6 +38,24 @@ function Page() {
         Kommt direkt aus der Feld-App, sobald jemand Arbeit starten drückt. Liste alle 15 Sekunden neu.
       </p>
       {err ? <p className="mt-4 text-danger">{err}</p> : null}
+      {alarms.filter((a) => a.kind === "still").length ? (
+        <div className="mt-6 grid gap-3">
+          {alarms
+            .filter((a) => a.kind === "still")
+            .map((a) => (
+              <div key={a.id} className="rounded-3xl border border-red-500/40 bg-surface p-5">
+                <p className="text-sm font-medium text-red-300">Stiller Alarm · {a.name}</p>
+                <p className="mt-2 text-sm">{a.address || "Standort siehe Koordinaten"}</p>
+                {a.note ? <p className="mt-1 text-sm text-muted">{a.note}</p> : null}
+                {a.lat && a.lng ? (
+                  <a className="mt-2 inline-block text-xs text-gold" href={`https://www.google.com/maps?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer">
+                    {a.lat.toFixed(5)} / {a.lng.toFixed(5)}
+                  </a>
+                ) : null}
+              </div>
+            ))}
+        </div>
+      ) : null}
       <div className="mt-6 grid gap-3">
         {rows.map((r) => (
           <div key={r.id} className="rounded-3xl bg-surface p-5 gold-hairline">
