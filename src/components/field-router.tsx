@@ -168,7 +168,14 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
 
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
     setHits([]);
-    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
+    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: h.house || h.street ? 18 : 15 });
+    const concrete = Boolean((h.house || "").trim() || (h.street || "").trim());
+    if (!concrete) {
+      setObj(null);
+      setHouse("");
+      toast.message("Karte auf den Ort. Für Abschluss Straße und Hausnummer suchen oder ein Haus antippen.");
+      return;
+    }
     setBusy(true);
     try {
       const next = await openFieldObject({
@@ -207,7 +214,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Ort, PLZ und Straße"
+              placeholder="Straße und Hausnummer"
               className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
