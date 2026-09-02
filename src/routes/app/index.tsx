@@ -5,6 +5,7 @@ import { fieldBalance, getFieldHome } from "@/lib/server/field-api";
 import { listDashboardContracts, revealContract } from "@/lib/server/vault-api";
 import { WorkShift } from "@/components/work-shift";
 import { PushEnable } from "@/components/push-enable";
+import { AppUpdate } from "@/components/app-update";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
