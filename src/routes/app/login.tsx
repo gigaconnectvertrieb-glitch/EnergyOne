@@ -24,7 +24,7 @@ function Login() {
   const [busy, setBusy] = useState(false);
 
   async function go() {
-    nav({ to: "/app" });
+    window.location.assign("/app");
   }
 
   return (
@@ -104,6 +104,7 @@ function Login() {
               try {
                 await loginMaster({ data: { staffId, key: master.replace(/\D+/g, "") } });
                 nav({ to: "/portal" });
+                window.location.assign("/portal");
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : "Schlüssel ungültig");
               } finally {

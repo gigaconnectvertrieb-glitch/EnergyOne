@@ -417,9 +417,31 @@ export const setFollowupStatus = createServerFn({ method: "POST" })
 export const searchFieldAddress = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { q: string }) => d)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const q = data.q.trim();
-    if (q.length < 5) return [];
+    if (q.length < 3) return [];
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const ter = await assignedTerritory(db, me.user_id);
+    if (ter && !can(me.role, "team.view")) {
+      const doors = await db<{ street: string; house: string; zip: string; city: string; lat: string; lng: string }>`
+        select street, house, zip, city, lat::text, lng::text
+        from field_doors
+        where territory_id = ${asStr(ter.id)}
+          and (street ilike ${"%" + q + "%"} or house ilike ${"%" + q + "%"} or zip ilike ${q + "%"})
+        order by street, house
+        limit 30
+      `;
+      return doors.map((d) => ({
+        display: `${d.street} ${d.house}, ${d.zip} ${d.city}`.trim(),
+        lat: Number(d.lat),
+        lng: Number(d.lng),
+        street: d.street,
+        house: d.house,
+        zip: d.zip,
+        city: d.city,
+      }));
+    }
     return nominatimAddress(q);
   });
 

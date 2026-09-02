@@ -190,6 +190,9 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
       window.clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    if (q.trim().length < 3) {
       setHits([]);
       return;
     }
@@ -264,14 +267,13 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             </Button>
           </div>
         ) : null}
-        {planner ? (
         <div className="overflow-hidden rounded-xl bg-white text-[#1a1a1a] shadow-lg">
           <div className="flex items-center gap-2 px-3">
             <Search className="size-4 text-[#c9a227]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Biblis Hauptstraße"
+              placeholder={planner ? "Stadt und Straße" : "Nur Straßen aus dem Gebiet"}
               className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
@@ -299,6 +301,34 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             </ul>
           ) : null}
         </div>
+        {pack?.walk.streets.length ? (
+          <div className="max-h-28 overflow-auto rounded-xl bg-white/95 p-2 text-[#111] shadow">
+            <p className="px-1 text-[10px] uppercase tracking-widest text-[#888]">Straßen im Gebiet</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {pack.walk.streets.map((s) => (
+                <button
+                  key={s.street}
+                  type="button"
+                  className="rounded-full bg-black/5 px-2 py-1 text-xs"
+                  onClick={() => {
+                    const first = s.houses[0];
+                    if (!first) return;
+                    void pick({
+                      lat: first.lat,
+                      lng: first.lng,
+                      street: s.street,
+                      house: "",
+                      zip: "",
+                      city: "",
+                      display: s.street,
+                    });
+                  }}
+                >
+                  {s.street}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
         <div className="flex gap-2">
           <button
