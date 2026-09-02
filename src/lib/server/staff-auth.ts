@@ -94,24 +94,6 @@ function lockUser<T>(userId: string, fn: () => Promise<T>) {
 async function issueSession(email: string, userId: string) {
   return lockUser(userId, async () => {
     const ctx = await auth.$context;
-    try {
-      const session = await ctx.internalAdapter.createSession(userId);
-      if (session?.token) {
-        const { setCookie } = await import("@tanstack/react-start/server");
-        const name = ctx.authCookies?.sessionToken?.name || "better-auth.session_token";
-        const maxAge = ctx.sessionConfig?.expiresIn || 60 * 60 * 24 * 7;
-        setCookie(name, session.token, {
-          path: "/",
-          maxAge,
-          sameSite: "lax",
-          httpOnly: true,
-          secure: true,
-        });
-        return { ok: true as const, email };
-      }
-    } catch {
-      /* Fallback: E-Mail-Login */
-    }
     const password = `${randomBytes(24).toString("base64url")}Aa1!`;
     const hash = await ctx.password.hash(password);
     const db = await sql();
