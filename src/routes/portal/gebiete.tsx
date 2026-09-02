@@ -109,7 +109,7 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebiete</h1>
       <p className="mt-2 text-sm text-muted">
-        Orhan spielt PLZ oder Stadt auf und weist zu. Der Mitarbeiter arbeitet die Straßen in der Feld-App ab. Keine zweite Karte.
+        Luca und Orhan können hier beides. Orhan führt die Gebiete im Alltag: PLZ oder Stadt laden, Mitarbeiter zuweisen. Der Mitarbeiter arbeitet in der Feld-App.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
