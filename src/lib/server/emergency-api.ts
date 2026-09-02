@@ -17,7 +17,7 @@ export const startEmergency = createServerFn({ method: "POST" })
     `;
     const bosses = await db<{ user_id: string }>`
       select user_id from profiles
-      where role = 'super_admin' and status = 'active' and user_id <> ${me.user_id}
+      where role = 'super_admin' and status = 'active'
     `;
     const name = `${me.first_name} ${me.last_name}`.trim();
     for (const b of bosses) {
@@ -26,14 +26,14 @@ export const startEmergency = createServerFn({ method: "POST" })
         type: "notfall",
         title: `Notfall ${name}`,
         message: "Mitarbeiter braucht euch live vor Ort.",
-        link: `/app/notfall?room=${encodeURIComponent(room)}`,
+        link: `/portal/notfall?room=${encodeURIComponent(room)}`,
       });
       try {
         const { sendPushToUser } = await import("./push.server");
         await sendPushToUser(db, b.user_id, {
           title: `Notfall ${name}`,
           body: "Jetzt zuschalten",
-          url: `/app/notfall?room=${encodeURIComponent(room)}`,
+          url: `/portal/notfall?room=${encodeURIComponent(room)}`,
         });
       } catch {
         /* */

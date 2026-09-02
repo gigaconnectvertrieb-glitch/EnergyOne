@@ -20,7 +20,10 @@ function Page() {
   const [sent, setSent] = useState(false);
   const [open, setOpen] = useState<Awaited<ReturnType<typeof listEmergencies>>>([]);
   const src = useMemo(
-    () => (room ? `https://meet.jit.si/${encodeURIComponent(room)}#config.prejoinPageEnabled=false` : ""),
+    () =>
+      room
+        ? `https://meet.jit.si/${encodeURIComponent(room)}#config.prejoinPageEnabled=false&config.disableDeepLinking=true&interfaceConfig.MOBILE_APP_PROMO=false`
+        : "",
     [room],
   );
 
