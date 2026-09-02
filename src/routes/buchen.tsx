@@ -10,7 +10,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/buchen")({ component: Page });
 
 function Page() {
-  const [kind, setKind] = useState("privat");
+  const [kind] = useState("privat");
   const [type, setType] = useState("strom");
   const [kwh, setKwh] = useState("3500");
   const [items, setItems] = useState<Awaited<ReturnType<typeof listPublicE1Tariffs>>["items"]>([]);
@@ -51,6 +51,13 @@ function Page() {
       <div className="mx-auto max-w-xl px-4 py-16">
         <p className="text-xs uppercase tracking-[0.28em] text-gold">E1 Strom und Gas</p>
         <h1 className="mt-2 font-display text-5xl">Direkt buchen</h1>
+        <p className="mt-3 text-sm text-muted">
+          Für Privathaushalte. Unternehmen bitte über die{" "}
+          <a className="text-gold" href="/firmen/anfrage">
+            Geschäftskunden-Anfrage
+          </a>
+          .
+        </p>
         {!ready ? (
           <p className="mt-6 text-muted">
             Eigene E1-Tarife sind vorbereitet. Sobald Arbeitspreis und Grundpreis im Portal stehen und der Tarif
@@ -59,12 +66,6 @@ function Page() {
         ) : (
           <div className="mt-8 grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Kunde">
-                <Select value={kind} onChange={(e) => setKind(e.target.value)}>
-                  <option value="privat">Privathaushalt</option>
-                  <option value="gewerbe">Unternehmen</option>
-                </Select>
-              </Field>
               <Field label="Sparte">
                 <Select value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="strom">Strom</option>
