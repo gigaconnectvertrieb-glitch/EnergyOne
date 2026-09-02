@@ -189,6 +189,15 @@ function Page() {
               </p>
             )}
           </div>
+          {kind === "privat" ? (
+            <Link to="/buchen" className="mt-4 inline-block">
+              <Button>Diesen Haushalt jetzt buchen</Button>
+            </Link>
+          ) : (
+            <Link to="/firmen/anfrage" className="mt-4 inline-block">
+              <Button variant="outline">Als Unternehmen anfragen</Button>
+            </Link>
+          )}
         ) : (
           <p className="mt-6 text-sm text-muted">
             Tragen Sie den Arbeitspreis von Ihrer Strom- oder Gasrechnung ein. Dann rechnen wir Jahr und Monat aus.

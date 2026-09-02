@@ -21,7 +21,6 @@ const NAV_FIRMEN = [
   { to: "/firmen", label: "Geschäftskunden" },
   { to: "/firmen/leistungen", label: "Leistungen" },
   { to: "/rechner", label: "Kostenrechner" },
-  { to: "/buchen", label: "Buchen" },
   { to: "/firmen/anfrage", label: "Gespräch" },
   { to: "/privat", label: "Privatkunden" },
 ];
@@ -68,8 +67,8 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
                 Portal
               </Link>
             </SignedIn>
-            <Link to={firmen ? "/firmen/anfrage" : "/beratung"}>
-              <Button size="sm">{firmen ? "Gespräch vereinbaren" : "Beratung anfordern"}</Button>
+            <Link to={firmen ? "/firmen/anfrage" : "/buchen"}>
+              <Button size="sm">{firmen ? "Gespräch vereinbaren" : "Jetzt buchen"}</Button>
             </Link>
           </div>
           <button
@@ -97,8 +96,8 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
               <Link to="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm">
                 Mitarbeiter-Login
               </Link>
-              <Link to={firmen ? "/firmen/anfrage" : "/beratung"} onClick={() => setOpen(false)}>
-                <Button className="mt-2 w-full">{firmen ? "Gespräch vereinbaren" : "Beratung anfordern"}</Button>
+              <Link to={firmen ? "/firmen/anfrage" : "/buchen"} onClick={() => setOpen(false)}>
+                <Button className="mt-2 w-full">{firmen ? "Gespräch vereinbaren" : "Jetzt buchen"}</Button>
               </Link>
             </div>
           </div>

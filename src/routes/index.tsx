@@ -52,8 +52,13 @@ function Hero() {
           Ein Gesicht, ein Name, eine Nummer.
         </p>
         <div className="reveal reveal-d3 mt-10 flex flex-wrap items-center gap-4">
+          <Link to="/buchen">
+            <Button size="lg">Jetzt buchen</Button>
+          </Link>
           <Link to="/privat">
-            <Button size="lg">Privathaushalt</Button>
+            <Button size="lg" variant="outline">
+              Privathaushalt
+            </Button>
           </Link>
           <Link to="/firmen">
             <Button size="lg" variant="outline">

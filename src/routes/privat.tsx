@@ -22,11 +22,11 @@ function Page() {
           <li>Strom und Gas getrennt oder zusammen</li>
         </ul>
         <div className="reveal reveal-d3 mt-10 flex flex-wrap gap-3">
-          <Link to="/rechner">
-            <Button>Ersparnis rechnen</Button>
+          <Link to="/buchen">
+            <Button>Jetzt buchen</Button>
           </Link>
-          <Link to="/beratung">
-            <Button variant="outline">Beratung anfordern</Button>
+          <Link to="/rechner">
+            <Button variant="outline">Ersparnis rechnen</Button>
           </Link>
         </div>
         </div>
