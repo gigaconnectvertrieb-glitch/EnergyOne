@@ -231,15 +231,32 @@ export const listPublicE1Tariffs = createServerFn({ method: "POST" })
       rows = [];
     }
     const fallback = [
-      { id: "e1-strom-privat", name: "E1 Strom Haushalt", type: "strom", kind: "privat", arbeit_ct: 29.5, grund_year: 144, bonus_year: 0 },
-      { id: "e1-strom-gewerbe", name: "E1 Strom Gewerbe", type: "strom", kind: "gewerbe", arbeit_ct: 24.9, grund_year: 180, bonus_year: 0 },
-      { id: "e1-gas-privat", name: "E1 Gas Haushalt", type: "gas", kind: "privat", arbeit_ct: 11.5, grund_year: 144, bonus_year: 0 },
-      { id: "e1-gas-gewerbe", name: "E1 Gas Gewerbe", type: "gas", kind: "gewerbe", arbeit_ct: 9.8, grund_year: 180, bonus_year: 0 },
-    ].filter((t) => (!type || t.type === type) && (!kind || t.kind === kind));
-    const source = rows.length ? rows : fallback;
+      { id: "e1-strom-privat", name: "E1 Strom Haushalt", type: "strom", kind: "privat", arbeit_ct: 29.5, grund_year: 144, bonus_year: 0, provider: "E1", comingSoon: true },
+      { id: "e1-gas-privat", name: "E1 Gas Haushalt", type: "gas", kind: "privat", arbeit_ct: 11.5, grund_year: 144, bonus_year: 0, provider: "E1", comingSoon: true },
+    ].filter((t) => (!type || t.type === type) && (!kind || t.kind === kind || t.kind === "beide"));
+    let partner: Record<string, unknown>[] = [];
+    try {
+      partner = await db<Record<string, unknown>>`
+        select id, name, type, provider
+        from tariffs
+        where active = true and provider <> 'E1'
+          and (${type} = '' or type = ${type})
+        order by provider, name
+        limit 40
+      `;
+    } catch {
+      partner = [];
+    }
+    const e1 = (rows.length ? rows : fallback).map((r) => ({
+      ...r,
+      provider: "E1",
+      comingSoon: true,
+    }));
+    const source = [...e1, ...partner];
     const kwh = Number(data.kwh) || 0;
     return {
       ready: true,
+      newsales: Boolean((process.env.NEWSALES_API_URL || "").trim() && (process.env.NEWSALES_API_KEY || "").trim()),
       items: source.map((r) => {
         const arbeit = Number(r.arbeit_ct) || 0;
         const grund = Number(r.grund_year) || 0;
@@ -248,12 +265,14 @@ export const listPublicE1Tariffs = createServerFn({ method: "POST" })
         return {
           id: String(r.id),
           name: String(r.name),
+          provider: String(r.provider || "E1"),
           type: String(r.type),
-          kind: String(r.kind),
+          kind: String(r.kind || "privat"),
           arbeit_ct: arbeit,
           grund_year: grund,
           bonus_year: bonus,
           year,
+          comingSoon: Boolean(r.comingSoon) || String(r.provider) === "E1",
         };
       }),
     };
@@ -292,14 +311,17 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
     if (!Number(data.kwh)) throw new Error("Verbrauch in kWh fehlt.");
     const db = await sql();
     const [tariff] = await db<Record<string, unknown>>`
-      select * from tariffs
-      where id = ${data.tariffId} and provider = 'E1'
+      select * from tariffs where id = ${data.tariffId}
     `;
     const tariffRow = tariff || {
-      id: data.tariffId || "e1-strom-privat",
-      type: data.kind === "gewerbe" ? "strom" : "strom",
-      name: "E1 Strom",
+      id: data.tariffId,
+      type: "strom",
+      name: "Tarif",
+      provider: "E1",
     };
+    if (String(tariffRow.provider) === "E1" || String(tariffRow.id).startsWith("e1-")) {
+      throw new Error("E1 eigener Strom folgt in Kürze. Bitte einen lieferbaren Tarif wählen.");
+    }
     const [owner] = await db<{ user_id: string }>`
       select user_id from profiles
       where role = 'super_admin' and status = 'active'
@@ -347,7 +369,7 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
         ${contractId}, ${customerId}, ${owner.user_id}, ${String(tariffRow.type)}, ${String(tariffRow.id)},
         'uebermittelt', ${kwh}, ${amount}, ${amount}, 13,
         ${amount}, ${amount}, 0,
-        true, ${Boolean(data.sepa && iban)}, 'e1_web',
+        true, ${Boolean(data.sepa && iban)}, ${"newsales_web"},
         ${data.kuendigen ? `Website gebucht · Kündigung ${data.previousProvider || "Altanbieter"}` : "Website gebucht · Marge komplett Gründer"},
         ${data.previousProvider?.trim() || null}, ${data.meter?.trim() || null},
         ${iban || null}, ${data.bankOwner?.trim() || `${data.firstName} ${data.lastName}`.trim()}
@@ -357,6 +379,40 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (${nid()}, ${contractId}, null, ${"uebermittelt"}, ${owner.user_id}, ${"Website-Abschluss gebucht"})
     `;
+    try {
+      const { newsalesConfigured, submitNewsalesOrder } = await import("./newsales.server");
+      if (newsalesConfigured()) {
+        const pushed = await submitNewsalesOrder({
+          portalId: contractId,
+          advisorId: owner.user_id,
+          advisorName: "E1 Website",
+          customer: {
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+            phone: data.phone.trim(),
+            email: data.email.trim(),
+            street: data.street.trim(),
+            houseNumber: data.house.trim(),
+            zip: data.zip.replace(/\D/g, "").slice(0, 5),
+            city: data.city.trim(),
+          },
+          productName: String(tariffRow.name),
+          provider: String(tariffRow.provider),
+          type: String(tariffRow.type),
+          consumptionKwh: kwh,
+          meterNumber: data.meter,
+          previousProvider: data.previousProvider,
+          iban,
+          bankOwner: data.bankOwner || `${data.firstName} ${data.lastName}`.trim(),
+          notes: data.kuendigen ? "Kündigung übernehmen" : "",
+        });
+        if (pushed.ok && pushed.ref) {
+          await db`update contracts set newsales_ref = ${pushed.ref}, source = ${"newsales_api"} where id = ${contractId}`;
+        }
+      }
+    } catch {
+      /* API optional bis Zugänge da sind */
+    }
     try {
       const { notify } = await import("./helpers");
       const admins = await db<{ user_id: string }>`select user_id from profiles where role = 'super_admin'`;

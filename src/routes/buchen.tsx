@@ -38,7 +38,8 @@ function Page() {
       .then((r) => {
         setReady(r.ready);
         setItems(r.items);
-        if (r.items[0] && !r.items.some((i) => i.id === tariffId)) setTariffId(String(r.items[0].id));
+        const first = r.items.find((i) => !i.comingSoon) || r.items[0];
+        if (first && !r.items.some((i) => i.id === tariffId && !i.comingSoon)) setTariffId(String(first.id));
       })
       .catch(() => {
         setReady(false);
@@ -81,12 +82,19 @@ function Page() {
             <Field label="Tarif">
               <Select value={tariffId} onChange={(e) => setTariffId(e.target.value)}>
                 {items.map((t) => (
-                  <option key={String(t.id)} value={String(t.id)}>
-                    {String(t.name)}
+                  <option key={String(t.id)} value={String(t.id)} disabled={Boolean(t.comingSoon)}>
+                    {Boolean(t.comingSoon)
+                      ? `${String(t.name)} · in Kürze eigener Strom`
+                      : `${String(t.provider)} · ${String(t.name)}`}
                   </option>
                 ))}
               </Select>
             </Field>
+            {chosen && chosen.comingSoon ? (
+              <p className="text-sm text-muted">
+                E1 eigener Strom steht in Kürze. Aktuell buchen wir lieferbare Tarife über unseren Partner.
+              </p>
+            ) : null}
             {chosen ? (
               <p className="text-sm text-muted">
                 {String(chosen.arbeit_ct).replace(".", ",")} ct/kWh · Grundpreis {eur(Number(chosen.grund_year))} / Jahr
