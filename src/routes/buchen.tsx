@@ -133,7 +133,7 @@ function Page() {
             </div>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
-              Kündigung beim bisherigen Anbieter vorbereiten
+              Kündigung übernehmen. E1 erzeugt das Schreiben und verschickt es.
             </label>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />

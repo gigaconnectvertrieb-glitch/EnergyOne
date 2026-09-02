@@ -369,6 +369,18 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
           insert into contract_files (id, contract_id, kind, filename, mime, path)
           values (${nid()}, ${contractId}, ${"kuendigung"}, ${"Kuendigung-Altanbieter.pdf"}, ${"application/pdf"}, ${stored.path})
         `;
+        const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+        if (gmailAppPasswordReady()) {
+          const sparteName = String(tariffRow.type) === "gas" ? "Gas" : "Strom";
+          const text = [
+            `Kündigung ${sparteName} im Auftrag von ${data.firstName} ${data.lastName}.`,
+            to: `info@e1direktvertrieb.de, ${data.email.trim()}`,
+            subject: `Kündigung Altanbieter · ${data.lastName} · ${data.previousProvider || "Lieferant"}`,
+            text,
+            filename: "Kuendigung-Altanbieter.pdf",
+            pdf,
+          });
+        }
       } catch {
         /* Datei optional */
       }
