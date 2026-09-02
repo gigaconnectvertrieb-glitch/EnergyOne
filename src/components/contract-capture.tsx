@@ -11,7 +11,16 @@ import { eur } from "@/lib/utils";
 import { deBankFromIban } from "@/lib/iban";
 import { cacheTariffs, isOffline, queueContract, readCachedTariffs } from "@/lib/offline-queue";
 
-export type CapturePre = { street?: string; house?: string; zip?: string; city?: string };
+export type CapturePre = {
+  street?: string;
+  house?: string;
+  zip?: string;
+  city?: string;
+  first?: string;
+  last?: string;
+  phone?: string;
+  email?: string;
+};
 
 const DRAFT = "e1_auftrag_entwurf";
 
@@ -24,12 +33,12 @@ export function ContractCapture({
 }) {
   const nav = useNavigate();
   const start = pre || {};
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
+  const [first, setFirst] = useState(start.first || "");
+  const [last, setLast] = useState(start.last || "");
   const [salutation, setSalutation] = useState("Herr");
   const [birth, setBirth] = useState("");
   const [landline, setLandline] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [mobile, setMobile] = useState(start.phone || "");
   const [street, setStreet] = useState(start.street || "");
   const [house, setHouse] = useState(start.house || "");
   const [zip, setZip] = useState(start.zip || "");
@@ -55,7 +64,7 @@ export function ContractCapture({
   const [sepa, setSepa] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [sign, setSign] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(start.email || "");
   const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
   const [meter, setMeter] = useState("");
   const [providerOld, setProviderOld] = useState("");

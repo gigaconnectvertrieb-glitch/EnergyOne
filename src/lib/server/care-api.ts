@@ -30,10 +30,11 @@ export const listCare = createServerFn({ method: "GET" })
     if (!can(me.role, "users.manage")) throw new Error("Nur Leitung");
     await ensureCare(db);
     const rows = await db<Record<string, unknown>>`
-      select c.id, c.due_on, c.status, c.contract_id,
+      select c.id, c.due_on, c.status, c.contract_id, co.created_at as first_at,
              cu.first_name, cu.last_name, cu.phone, cu.email, cu.street, cu.house_number, cu.zip, cu.city
       from customer_care c
       join customers cu on cu.id = c.customer_id
+      left join contracts co on co.id = c.contract_id
       where c.status = 'offen'
       order by c.due_on asc
       limit 200
@@ -42,6 +43,9 @@ export const listCare = createServerFn({ method: "GET" })
       id: asStr(r.id),
       contract_id: asStr(r.contract_id),
       due_on: asStr(r.due_on).slice(0, 10),
+      first_at: asStr(r.first_at).slice(0, 10),
+      first_name: asStr(r.first_name),
+      last_name: asStr(r.last_name),
       name: `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
       phone: asStr(r.phone),
       email: asStr(r.email),

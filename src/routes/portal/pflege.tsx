@@ -25,7 +25,10 @@ function Page() {
           <div key={r.id} className="rounded-2xl bg-surface p-4 gold-hairline">
             <p className="font-medium">{r.name}</p>
             <p className="text-sm text-muted">
-              {r.street} {r.house}, {r.zip} {r.city} · fällig {r.due_on}
+              {r.street} {r.house}, {r.zip} {r.city}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Erstabschluss {r.first_at || "—"} · Jahr rum {r.due_on}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {r.phone ? (
@@ -55,10 +58,14 @@ function Page() {
                   house: r.house,
                   zip: r.zip,
                   city: r.city,
+                  first: r.first_name,
+                  last: r.last_name,
+                  phone: r.phone,
+                  email: r.email,
                 }}
                 className="rounded-full bg-gold px-3 py-2 text-xs text-bg"
               >
-                Wieder aufnehmen
+                Daten übernehmen
               </Link>
               <button
                 type="button"
