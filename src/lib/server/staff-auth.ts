@@ -206,7 +206,7 @@ export const issueStaffMaster = createServerFn({ method: "POST" })
     const me = await requireProfile(db, context.userId);
     if (!can(me.role, "users.manage")) throw new Error("Kein Zugriff.");
     const key = String(100000000000 + Math.floor(Math.random() * 899999999999));
-    await db`update profiles set staff_master_hash = ${sha256(key)}, updated_at = now() where user_id = ${data.userId}`;
+    await db`update profiles set staff_master_hash = ${sha256(key)} where user_id = ${data.userId}`;
     await auditAuth("auth.staff_master_issue", await clientIp(), { target: data.userId });
     return { key };
   });
