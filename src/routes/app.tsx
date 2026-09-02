@@ -27,10 +27,10 @@ export const Route = createFileRoute("/app")({
 });
 
 const TABS = [
-  { to: "/app", label: "Heute", icon: House, exact: true },
-  { to: "/app/karte", label: "Karte", icon: Map },
+  { to: "/app/karte", label: "Routing", icon: Map },
+  { to: "/app", label: "Dashboard", icon: House, exact: true },
   { to: "/app/abschluss", label: "Buchen", icon: CalendarDays },
-  { to: "/app/liste", label: "Liste", icon: ListChecks },
+  { to: "/app/liste", label: "Leads", icon: ListChecks },
 ] as const;
 
 function AppShell() {
@@ -46,15 +46,22 @@ function AppShell() {
     <div className="min-h-dvh bg-bg text-ink">
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-white/6 bg-[#07080c] px-4 pt-[env(safe-area-inset-top)]">
         <BrandMark className="h-7 w-auto" />
-        <div className="min-w-0">
-          <p className="font-display text-[15px] leading-none text-gold">E1 Feld</p>
-          <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted">Außendienst</p>
-        </div>
+        <p className="hidden font-display text-[15px] text-gold sm:block">E1 Feld</p>
+        <nav className="ml-4 hidden items-center gap-1 md:flex">
+          {TABS.map((t) => {
+            const on = "exact" in t && t.exact ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
+            return (
+              <Link key={t.to} to={t.to} className={cn("rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.14em]", on ? "bg-gold text-bg" : "text-muted")}>
+                {t.label}
+              </Link>
+            );
+          })}
+          <Link to="/app/bilanz" className={cn("rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.14em]", pathname.startsWith("/app/bilanz") ? "bg-gold text-bg" : "text-muted")}>
+            Reporting
+          </Link>
+        </nav>
         <div className="ml-auto flex items-center gap-2">
           <ServerLive />
-          <Link to="/app/bilanz" className="text-[11px] text-muted">
-            Zahlen
-          </Link>
           <Link to="/app/mehr" className="text-[11px] text-gold">
             Mehr
           </Link>
@@ -63,10 +70,10 @@ function AppShell() {
       <div className="px-4 pt-2">
         <OfflineBar />
       </div>
-      <main className={pathname.startsWith("/app/karte") ? "pb-24" : "px-4 pb-24 pt-4"}>
+      <main className={pathname.startsWith("/app/karte") ? "pb-24 md:pb-4" : "px-4 pb-24 pt-4 md:pb-8"}>
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         {TABS.map((t) => {
           const on = "exact" in t && t.exact ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
           return (

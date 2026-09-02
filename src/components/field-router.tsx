@@ -392,6 +392,10 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             {obj.inTerritory ? "Im Teamgebiet" : "Außerhalb des Teamgebiets"}
             {pack?.name ? ` · ${pack.name}` : ""}
           </p>
+          <p className="mt-2 text-sm text-[#333]">
+            Wohneinheiten: {selectedHouse && "units" in selectedHouse && selectedHouse.units ? selectedHouse.units : "—"}
+          </p>
+          <p className="text-xs text-[#666]">Provision erscheint am Haus, sobald der Tarifrechner die API hat.</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button
               variant="outline"

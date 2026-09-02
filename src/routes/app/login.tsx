@@ -28,8 +28,24 @@ function Login() {
   }
 
   return (
-    <main className="min-h-dvh bg-bg px-4 py-10">
-      <div className="mx-auto w-full max-w-sm">
+    <main className="min-h-dvh bg-[#07080c] text-ink lg:grid lg:grid-cols-2">
+      <div className="relative hidden min-h-dvh lg:block">
+        <img
+          src="https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=1400&q=80"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07080c] via-[#07080c]/50 to-transparent" />
+        <div className="absolute bottom-10 left-10 right-10">
+          <BrandLockup />
+          <p className="mt-4 max-w-sm text-sm text-white/80">Außendienst. Gebiet, Tür, Abschluss — ein System.</p>
+        </div>
+      </div>
+      <div className="grid place-items-center px-6 py-12">
+      <div className="w-full max-w-sm">
+        <div className="lg:hidden">
+          <BrandLockup />
+        </div>
         <BrandLockup />
         <p className="mt-6 text-[11px] uppercase tracking-[0.28em] text-gold">Feld-App</p>
         <h1 className="mt-2 font-display text-4xl">Anmelden</h1>
@@ -136,6 +152,7 @@ function Login() {
         <a href="/portal" className="mt-2 block text-center text-xs text-muted">
           Direkt ins Portal
         </a>
+      </div>
       </div>
     </main>
   );
