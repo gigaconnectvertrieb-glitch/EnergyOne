@@ -146,11 +146,8 @@ function Login() {
             <Button disabled={busy}>Leitung anmelden</Button>
           </form>
         ) : null}
-        <a href="/login" className="mt-8 block text-center text-xs text-gold">
-          Zum Büro-Portal
-        </a>
-        <a href="/portal" className="mt-2 block text-center text-xs text-muted">
-          Direkt ins Portal
+        <a href="/" className="mt-8 block text-center text-xs text-muted">
+          Zur Website
         </a>
       </div>
       </div>

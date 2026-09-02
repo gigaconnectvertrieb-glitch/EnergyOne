@@ -1,7 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { SignedIn, SignedOut } from "@/lib/auth/gates";
 import { Wordmark } from "./logo";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
@@ -57,16 +56,6 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
             ))}
           </nav>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
-            <SignedOut>
-              <Link to="/login" className="px-3 py-2 text-sm text-muted hover:text-ink">
-                Login
-              </Link>
-            </SignedOut>
-            <SignedIn>
-              <Link to="/portal" className="px-3 py-2 text-sm text-muted hover:text-ink">
-                Portal
-              </Link>
-            </SignedIn>
             <Link to={firmen ? "/firmen/anfrage" : "/buchen"}>
               <Button size="sm">{firmen ? "Gespräch vereinbaren" : "Jetzt buchen"}</Button>
             </Link>
@@ -93,9 +82,6 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
                   {n.label}
                 </Link>
               ))}
-              <Link to="/login" onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 text-sm">
-                Mitarbeiter-Login
-              </Link>
               <Link to={firmen ? "/firmen/anfrage" : "/buchen"} onClick={() => setOpen(false)}>
                 <Button className="mt-2 w-full">{firmen ? "Gespräch vereinbaren" : "Jetzt buchen"}</Button>
               </Link>
@@ -120,7 +106,6 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
               <Link to="/datenschutz">Datenschutz</Link>
               <Link to="/agb">AGB</Link>
               <Link to={firmen ? "/privat" : "/firmen"}>{firmen ? "Zum Privatbereich" : "Zum Firmenbereich"}</Link>
-              <Link to="/login">Mitarbeiter-Portal</Link>
             </div>
           </div>
           <div className="text-sm text-muted">

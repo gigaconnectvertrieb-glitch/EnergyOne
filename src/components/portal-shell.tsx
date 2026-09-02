@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState, Navigate } from "@tanstack/react-router";
 import {
   Bell,
   BookOpen,
@@ -118,22 +118,8 @@ export function PortalShell() {
     );
   }
 
-  if (me.profile.status === "pending") {
-    return (
-      <div className="min-h-dvh gold-wash grid place-items-center px-4">
-        <div className="max-w-md rounded-3xl bg-surface p-8 text-center gold-hairline">
-          <Wordmark className="justify-center" />
-          <h1 className="mt-6 font-display text-3xl">Zugang in Prüfung</h1>
-          <p className="mt-3 text-sm text-muted">
-            Ihr Konto ist angelegt. Ein Super-Admin schaltet Sie frei. Danach
-            können Sie Aufträge erfassen.
-          </p>
-          <div className="mt-6 flex justify-center">
-            <UserButton />
-          </div>
-        </div>
-      </div>
-    );
+  if (me.profile.role !== "super_admin") {
+    return <Navigate to="/app" />;
   }
 
   if (me.profile.status === "blocked") {
