@@ -447,7 +447,6 @@ export const sendParkedContract = createServerFn({ method: "POST" })
         if (gmailAppPasswordReady()) {
           await sendViaAppPassword({
             to: mail,
-            from: "info@e1direktvertrieb.de",
             subject: "Ihre Anfrage bei E1 Direktvertrieb",
             text: [
               `Guten Tag ${cust?.first_name || ""} ${cust?.last_name || ""},`.trim() + ",",
@@ -662,7 +661,6 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
       if (gmailAppPasswordReady()) {
         await sendViaAppPassword({
           to: customerMail,
-          from: "info@e1direktvertrieb.de",
           subject: "Ihre Anfrage bei E1 Direktvertrieb",
           text: [
             `Guten Tag ${data.firstName} ${data.lastName},`,
