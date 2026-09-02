@@ -157,6 +157,7 @@ function Page() {
         </div>
 
         {result.ok ? (
+          <>
           <div className="mt-6 rounded-3xl bg-surface p-6 gold-hairline">
             <p className="text-[11px] uppercase tracking-[0.28em] text-gold">Was das heißt</p>
             <dl className="mt-4 grid gap-3 text-sm">
@@ -198,6 +199,7 @@ function Page() {
               <Button variant="outline">Als Unternehmen anfragen</Button>
             </Link>
           )}
+          </>
         ) : (
           <p className="mt-6 text-sm text-muted">
             Tragen Sie den Arbeitspreis von Ihrer Strom- oder Gasrechnung ein. Dann rechnen wir Jahr und Monat aus.
