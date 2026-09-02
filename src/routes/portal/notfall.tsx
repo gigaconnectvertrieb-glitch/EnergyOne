@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { closeEmergency, listEmergencies } from "@/lib/server/emergency-api";
 import { Button } from "@/components/ui/button";
+import { PushEnable } from "@/components/push-enable";
 
 export const Route = createFileRoute("/portal/notfall")({
   validateSearch: (raw: Record<string, unknown>) => ({
@@ -36,7 +37,10 @@ function Page() {
     <div>
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Live</p>
       <h1 className="mt-1 font-display text-4xl">Notfall</h1>
-      <p className="mt-2 text-sm text-muted">Wenn jemand in E1 Tour zuschalten drückt, erscheint der Ruf hier.</p>
+      <p className="mt-2 text-sm text-muted">Wenn jemand in E1 Tour zuschalten drückt, erscheint der Ruf hier. Am Handy und am PC.</p>
+      <div className="mt-4">
+        <PushEnable />
+      </div>
       <div className="mt-6 grid gap-2">
         {open.filter((e) => e.kind !== "still").map((e) => (
           <button

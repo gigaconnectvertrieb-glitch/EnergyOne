@@ -20,24 +20,37 @@ export const startEmergency = createServerFn({ method: "POST" })
       where role = 'super_admin' and status = 'active'
     `;
     const name = `${me.first_name} ${me.last_name}`.trim();
+    const join = `/portal/notfall?room=${encodeURIComponent(room)}`;
     for (const b of bosses) {
       await notify(db, {
         userId: b.user_id,
         type: "notfall",
-        title: `Notfall ${name}`,
-        message: "Mitarbeiter braucht euch live vor Ort.",
-        link: `/portal/notfall?room=${encodeURIComponent(room)}`,
+        title: `${name} braucht Hilfe`,
+        message: "Bitte einmal zuschalten.",
+        link: join,
       });
       try {
         const { sendPushToUser } = await import("./push.server");
         await sendPushToUser(db, b.user_id, {
-          title: `Notfall ${name}`,
-          body: "Jetzt zuschalten",
-          url: `/portal/notfall?room=${encodeURIComponent(room)}`,
+          title: `${name} braucht Hilfe`,
+          body: "Bitte einmal zuschalten.",
+          url: join,
         });
       } catch {
         /* */
       }
+    }
+    try {
+      const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+      if (gmailAppPasswordReady()) {
+        await sendViaAppPassword({
+          to: "orhan.salo@e1direktvertrieb.de,luca.marrancone@e1direktvertrieb.de",
+          subject: `${name} braucht Hilfe`,
+          text: `${name} braucht Hilfe. Bitte einmal zuschalten.\n\nhttps://e1direktvertrieb.de${join}\n`,
+        });
+      }
+    } catch {
+      /* Mail optional */
     }
     return { id, room };
   });
@@ -96,29 +109,41 @@ export const silentAlarm = createServerFn({ method: "POST" })
     `;
     const bosses = await db<{ user_id: string }>`
       select user_id from profiles
-      where role = 'super_admin' and status = 'active' and user_id <> ${me.user_id}
+      where role = 'super_admin' and status = 'active'
     `;
     const name = `${me.first_name} ${me.last_name}`.trim();
     const where = data.address || (data.lat && data.lng ? `${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}` : "kein GPS");
-    const body = `${name} · ${where}${data.note ? ` · ${data.note}` : ""}`;
+    const body = `${name} braucht Hilfe. ${where}${data.note ? ` · ${data.note}` : ""}`;
     for (const b of bosses) {
       await notify(db, {
         userId: b.user_id,
         type: "notfall",
-        title: "Stiller Alarm",
+        title: `${name} braucht Hilfe`,
         message: body,
         link: "/portal/standort",
       });
       try {
         const { sendPushToUser } = await import("./push.server");
         await sendPushToUser(db, b.user_id, {
-          title: "Stiller Alarm",
-          body,
+          title: `${name} braucht Hilfe`,
+          body: "Bitte Standort prüfen.",
           url: "/portal/standort",
         });
       } catch {
         /* */
       }
+    }
+    try {
+      const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
+      if (gmailAppPasswordReady()) {
+        await sendViaAppPassword({
+          to: "orhan.salo@e1direktvertrieb.de,luca.marrancone@e1direktvertrieb.de",
+          subject: `${name} braucht Hilfe`,
+          text: `${body}\n\nhttps://e1direktvertrieb.de/portal/standort\n`,
+        });
+      }
+    } catch {
+      /* */
     }
     return { id };
   });
