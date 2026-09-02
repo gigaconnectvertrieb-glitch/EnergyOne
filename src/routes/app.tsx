@@ -5,6 +5,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
 import { OfflineBar } from "@/components/offline-bar";
+import { ServerLive } from "@/components/server-live";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -50,6 +51,7 @@ function AppShell() {
           <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted">Außendienst</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <ServerLive />
           <Link to="/app/bilanz" className="text-[11px] text-muted">
             Zahlen
           </Link>

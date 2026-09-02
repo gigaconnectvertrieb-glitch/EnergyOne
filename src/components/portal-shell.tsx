@@ -29,6 +29,7 @@ import { can, type Role } from "@/lib/e1";
 import { Wordmark } from "./logo";
 import { usePushWorker } from "./goal-card";
 import { AppUpdate } from "./app-update";
+import { ServerLive } from "./server-live";
 import { cn } from "@/lib/utils";
 
 type MeState = {
@@ -175,6 +176,9 @@ export function PortalShell() {
             {me.profile.first_name} {me.profile.last_name}
           </p>
           <p className="px-2 text-xs text-muted">{me.profile.role}</p>
+          <p className="px-2 pt-1">
+            <ServerLive />
+          </p>
           <div className="mt-2 px-1">
             <UserButton />
           </div>
