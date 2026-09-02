@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listWorkLive, listWorkPings } from "@/lib/server/work-api";
 import { listEmergencies } from "@/lib/server/emergency-api";
+import { createE1Map, loadMapLibre, type MapLibreMap } from "@/lib/map-gl";
 
 export const Route = createFileRoute("/portal/standort")({ component: Page });
 
@@ -9,7 +10,10 @@ function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listWorkLive>>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [alarms, setAlarms] = useState<Awaited<ReturnType<typeof listEmergencies>>>([]);
+  const [pings, setPings] = useState<Awaited<ReturnType<typeof listWorkPings>>>([]);
+  const mapEl = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const marks = useRef<Array<{ remove: () => void }>>([]);
   useEffect(() => {
     const load = () => {
       listWorkLive()
@@ -30,6 +34,34 @@ function Page() {
       .then(setPings)
       .catch(() => setPings([]));
   }, [open]);
+  useEffect(() => {
+    let cancel = false;
+    async function boot() {
+      await loadMapLibre();
+      if (cancel || !mapEl.current || mapRef.current) return;
+      const first = rows.find((r) => r.lat && r.lng);
+      mapRef.current = createE1Map(mapEl.current, first ? { lat: first.lat, lng: first.lng } : { lat: 50.1, lng: 8.7 }, 8, { controls: true });
+    }
+    void boot();
+    return () => {
+      cancel = true;
+    };
+  }, []);
+  useEffect(() => {
+    const map = mapRef.current;
+    const ML = window.maplibregl;
+    if (!map || !ML) return;
+    marks.current.forEach((m) => m.remove());
+    marks.current = [];
+    for (const r of rows) {
+      if (!r.lat || !r.lng) continue;
+      const el = document.createElement("div");
+      el.className = "rounded-full bg-gold px-2 py-1 text-[10px] text-bg";
+      el.textContent = r.name.split(" ")[0] || r.staff_id || "·";
+      const mk = new ML.Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(map);
+      marks.current.push(mk);
+    }
+  }, [rows]);
   return (
     <div>
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Organisation</p>
@@ -38,6 +70,7 @@ function Page() {
         Kommt direkt aus der Feld-App, sobald jemand Arbeit starten drückt. Liste alle 15 Sekunden neu.
       </p>
       {err ? <p className="mt-4 text-danger">{err}</p> : null}
+      <div ref={mapEl} className="mt-6 h-[22rem] overflow-hidden rounded-3xl gold-hairline" />
       {alarms.filter((a) => a.kind === "still").length ? (
         <div className="mt-6 grid gap-3">
           {alarms
