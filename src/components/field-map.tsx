@@ -106,6 +106,12 @@ export function FieldMap({ center, corners = [], stops = [], draw, onTap, onStop
     void boot();
     return () => {
       cancelled = true;
+      try {
+        mapRef.current?.remove();
+      } catch {
+        /* */
+      }
+      mapRef.current = null;
     };
   }, [center.lat, center.lng]);
 

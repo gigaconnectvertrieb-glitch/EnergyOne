@@ -9,7 +9,7 @@ import {
   weekKey,
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
-import { groupStreets, pointInPolygon } from "@/lib/geo-de";
+import { groupStreets, pointInPolygon, applyWalkOrder, haversineMeters } from "@/lib/geo-de";
 import { nominatimAddress, overpassHouses } from "./geo.server";
 import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
 import type { Sql } from "@/lib/db";
@@ -207,11 +207,11 @@ export const assignTerritory = createServerFn({ method: "POST" })
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     if (!can(me.role, "team.view")) throw new Error("Kein Zugriff");
-    await db`delete from territory_members where territory_id = ${data.id}`;
     await db`update territories set user_id = ${data.userId}, updated_at = now() where id = ${data.id}`;
     await db`
       insert into territory_members (territory_id, user_id)
       values (${data.id}, ${data.userId})
+      on conflict do nothing
     `;
     await audit(db, {
       userId: context.userId,
@@ -496,12 +496,33 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       lat: num(d.lat),
       lng: num(d.lng),
     }));
-    const grouped = groupStreets(houses.map((h) => ({ ...h, house: h.house || "" })));
-    const walk = {
+    let grouped = groupStreets(houses.map((h) => ({ ...h, house: h.house || "" })));
+    if (typeof data.lat === "number" && typeof data.lng === "number") {
+      const start = { lat: data.lat, lng: data.lng };
+      grouped = [...grouped].sort((a, b) => {
+        const aa = a.houses[0] || { lat: start.lat, lng: start.lng };
+        const bb = b.houses[0] || { lat: start.lat, lng: start.lng };
+        return haversineMeters(start, aa) - haversineMeters(start, bb);
+      });
+    }
+    let walk = {
       streets: grouped.map((s) => ({ street: s.street, houses: s.houses, meters: 0 })),
       meters: 0,
       count: houses.length,
     };
+    let custom = false;
+    try {
+      const saved = ter.walk_order ? (typeof ter.walk_order === "string" ? JSON.parse(asStr(ter.walk_order)) : ter.walk_order) : null;
+      const order = saved && typeof saved === "object" && Array.isArray((saved as { streets?: unknown }).streets)
+        ? (saved as { streets: Array<{ street: string; houses?: string[] }> }).streets
+        : null;
+      if (order?.length) {
+        walk = applyWalkOrder(walk, order);
+        custom = true;
+      }
+    } catch {
+      custom = false;
+    }
     return {
       name: asStr(ter.name),
       id: asStr(ter.id),
@@ -509,7 +530,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       ring,
       houses,
       walk,
-      custom: false,
+      custom,
     };
   });
 
