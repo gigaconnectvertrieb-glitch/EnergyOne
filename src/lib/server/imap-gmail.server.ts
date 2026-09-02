@@ -21,8 +21,6 @@ function parseHeaderBlock(raw: string) {
     from_address: (m ? m[2]! : fromRaw).trim().toLowerCase(),
     to: get("to"),
     cc: get("cc"),
-    delivered: get("delivered-to"),
-    original: get("x-original-to"),
     subject: decodeMimeWord(get("subject")),
     date: get("date"),
   };
@@ -50,7 +48,7 @@ function parseImapFetch(blob: string): ParsedGmailMessage[] {
       history_id: null,
       from_address: h.from_address,
       from_name: decodeMimeWord(h.from_name),
-      to_addresses: [h.to, h.delivered, h.original].filter(Boolean).join(", "),
+      to_addresses: h.to,
       cc_addresses: h.cc,
       subject: decodeMimeWord(h.subject) || parsed.subject,
       body_text: (parsed.html ? `<!--e1html-->${parsed.html}` : body).slice(0, 80000),

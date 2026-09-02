@@ -36,21 +36,6 @@ export function extractEmails(value: string) {
   return Array.from(new Set(found ?? []));
 }
 
-const SHARED_ORDER = ["info", "bewerbung", "business", "dmarc", "system"];
-
-/** Zielpostfach aus Empfängern, wenn alles in einem business@-Postfach landet. */
-export function mailboxLocalFromRecipients(...chunks: string[]) {
-  const emails = extractEmails(chunks.join(" "));
-  const locals = emails
-    .filter((e) => e.endsWith("@e1direktvertrieb.de"))
-    .map((e) => e.split("@")[0] || "")
-    .filter(Boolean);
-  for (const key of SHARED_ORDER) {
-    if (locals.includes(key)) return key;
-  }
-  return locals[0] || "business";
-}
-
 export function parseAddressList(value: string) {
   return value
     .split(/[,;]+/)
