@@ -6,9 +6,8 @@ function env(key: string) {
 }
 
 export function gmailAppPasswordReady() {
-  const user = env("GMAIL_SMTP_USER") || env("GOOGLE_WORKSPACE_ADMIN_EMAIL");
   const pass = env("GMAIL_APP_PASSWORD").replace(/\s+/g, "");
-  return Boolean(user && pass.length >= 8);
+  return pass.length >= 8;
 }
 
 export function gmailSmtpUser() {
@@ -44,12 +43,13 @@ export async function sendViaAppPassword(input: {
   const user = gmailSmtpUser();
   const pass = env("GMAIL_APP_PASSWORD").replace(/\s+/g, "");
   if (!user || !pass) throw new Error("GMAIL_APP_PASSWORD fehlt.");
-  const replyTo = `info@${MAIL_DOMAIN}`;
+  const visibleFrom = `info@${MAIL_DOMAIN}`;
   const recipients = input.to.split(",").map((x) => x.trim()).filter(Boolean);
   const boundary = "e1mail" + Date.now().toString(36);
   const headers = [
-    `From: E1 Direktvertrieb <${user}>`,
-    `Reply-To: E1 Direktvertrieb <${replyTo}>`,
+    `From: E1 Direktvertrieb <${visibleFrom}>`,
+    `Reply-To: E1 Direktvertrieb <${visibleFrom}>`,
+    `Sender: E1 Direktvertrieb <${user}>`,
     `To: ${recipients.join(", ")}`,
     `Subject: =?UTF-8?B?${Buffer.from(input.subject).toString("base64")}?=`,
     "MIME-Version: 1.0",
