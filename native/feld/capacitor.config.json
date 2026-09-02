@@ -1,0 +1,17 @@
+{
+  "appId": "de.e1direktvertrieb.feld",
+  "appName": "E1 Feld",
+  "webDir": "www",
+  "server": {
+    "url": "https://e1direktvertrieb.de/app",
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "preferredContentMode": "mobile"
+  }
+}
