@@ -74,6 +74,7 @@ export function ContractCapture({
   const [early, setEarly] = useState(false);
   const [postInvoice, setPostInvoice] = useState(false);
   const [digitalSign, setDigitalSign] = useState(false);
+  const [step, setStep] = useState(1);
 
   useEffect(() => {
     bootstrapMe()
@@ -230,15 +231,34 @@ export function ContractCapture({
     }
   }
 
-  return (
-    <div className="mx-auto max-w-xl pb-16">
-      <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld · Aufnahme</p>
-      <h1 className="mt-1 font-display text-4xl">Auftrag aufnehmen</h1>
-      <p className="mt-2 max-w-xl text-sm text-muted">
-        Ab nächster Woche hier eingeben. Speichern zählt immer. Liegt die New-Sales-API, geht der Abschluss mit. Sonst in New Sales nachtragen und die Nummer am Auftrag speichern.
-      </p>
+  const field = afterTo === "app";
+  const show = (n: number) => !field || step === n;
+      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Abschluss</p>
+      <h1 className="mt-1 font-display text-4xl">Vertrag</h1>
+      {street || house ? (
+        <p className="mt-2 text-sm text-muted">
+          {street} {house}
+          {zip || city ? ` · ${zip} ${city}` : ""}
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Adresse aus der Karte oder hier eintragen.</p>
+      )}
+      {afterTo === "app" ? (
+        <div className="mt-5 flex gap-1 text-[11px] uppercase tracking-[0.12em]">
+          {["Kunde", "Verbrauch", "Vergleich", "Fertig"].map((l, i) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setStep(i + 1)}
+              className={`rounded-full px-3 py-1 ${step === i + 1 ? "bg-gold text-bg" : "text-muted"}`}
+            >
+              {i + 1} {l}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      {staff.length > 1 ? (
+      {staff.length > 1 && show(1) ? (
         <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
           <Field label="Buchen auf Mitarbeiter-ID">
             <Select value={forStaff} onChange={(e) => setForStaff(e.target.value)}>
@@ -252,6 +272,7 @@ export function ContractCapture({
         </div>
       ) : null}
 
+      {show(1) ? (
       <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Lieferadresse & Vertragspartner</p>
         <Field label="Anrede">
@@ -302,8 +323,15 @@ export function ContractCapture({
         <Field label="E-Mail">
           <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
         </Field>
+        {field ? (
+          <Button type="button" onClick={() => setStep(2)}>
+            Weiter zu Verbrauch
+          </Button>
+        ) : null}
       </div>
+      ) : null}
 
+      {show(2) ? (
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Vergleich</p>
         <Field label="Bisheriger Anbieter">
@@ -433,8 +461,15 @@ export function ContractCapture({
         <Field label="Jahresverbrauch kWh" hint="Nur für die Provision im Portal">
           <Input inputMode="numeric" value={kwh} onChange={(e) => setKwh(e.target.value.replace(/[^\d]/g, ""))} />
         </Field>
+        {field ? (
+          <Button type="button" onClick={() => setStep(3)}>
+            Weiter zum Abschluss
+          </Button>
+        ) : null}
       </div>
+      ) : null}
 
+      {show(3) || show(4) ? (
       <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Provision</p>
         {selected ? (
@@ -605,6 +640,7 @@ export function ContractCapture({
           {busy ? "Speichert…" : "Auftrag buchen"}
         </Button>
       </div>
+      ) : null}
     </div>
   );
 }
