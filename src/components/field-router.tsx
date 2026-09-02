@@ -285,6 +285,23 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
       });
       setObj(next);
       setHouse(h.house || next.house || "");
+      if (!h.house && next.houses.length) {
+        const lats = next.houses.map((x) => x.lat);
+        const lngs = next.houses.map((x) => x.lng);
+        try {
+          mapRef.current?.fitBounds(
+            [
+              [Math.min(...lngs), Math.min(...lats)],
+              [Math.max(...lngs), Math.max(...lats)],
+            ],
+            { padding: 50, maxZoom: 18, duration: 500 },
+          );
+        } catch {
+          /* */
+        }
+        gRef.current?.setCenter({ lat: next.houses[0].lat, lng: next.houses[0].lng });
+        gRef.current?.setZoom(17);
+      }
       toast.success(next.street ? `${next.street} geloggt` : "Straße geladen");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Straße nicht geladen");
