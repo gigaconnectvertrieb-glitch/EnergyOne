@@ -68,3 +68,59 @@ export async function applyNewsalesWebhook(payload: {
   `;
   return { ok: true, id, status };
 }
+
+export async function pushSavedContract(contractId: string) {
+  if (!newsalesConfigured()) return { ok: false as const, reason: "not_configured" as const };
+  const db = await sql();
+  const [row] = await db<Record<string, unknown>>`
+    select
+      c.id, c.consumption_kwh, c.meter_number, c.previous_provider, c.start_date,
+      c.bank_iban, c.bank_owner, c.notes, c.user_id, c.type, c.newsales_ref,
+      t.name as tariff_name, t.provider,
+      cu.first_name, cu.last_name, cu.phone, cu.email, cu.street, cu.house_number, cu.zip, cu.city, cu.birth_date,
+      p.first_name as advisor_first, p.last_name as advisor_last
+    from contracts c
+    join customers cu on cu.id = c.customer_id
+    left join tariffs t on t.id = c.tariff_id
+    left join profiles p on p.user_id = c.user_id
+    where c.id = ${contractId}
+  `;
+  if (!row) return { ok: false as const, reason: "missing" as const };
+  if (asStr(row.newsales_ref)) return { ok: true as const, ref: asStr(row.newsales_ref), already: true };
+  const pushed = await submitNewsalesOrder({
+    portalId: asStr(row.id),
+    advisorId: asStr(row.user_id),
+    advisorName: `${asStr(row.advisor_first)} ${asStr(row.advisor_last)}`.trim(),
+    customer: {
+      firstName: asStr(row.first_name),
+      lastName: asStr(row.last_name),
+      phone: asStr(row.phone),
+      email: asStr(row.email) || undefined,
+      street: asStr(row.street),
+      houseNumber: asStr(row.house_number),
+      zip: asStr(row.zip),
+      city: asStr(row.city),
+      birthDate: row.birth_date ? String(row.birth_date).slice(0, 10) : undefined,
+    },
+    productName: asStr(row.tariff_name) || "Strom",
+    provider: asStr(row.provider) || "Partner",
+    type: asStr(row.type) || "strom",
+    consumptionKwh: Number(row.consumption_kwh) || 0,
+    meterNumber: asStr(row.meter_number) || undefined,
+    previousProvider: asStr(row.previous_provider) || undefined,
+    startDate: row.start_date ? String(row.start_date).slice(0, 10) : undefined,
+    notes: asStr(row.notes) || undefined,
+    iban: asStr(row.bank_iban) || undefined,
+    bankOwner: asStr(row.bank_owner) || undefined,
+  });
+  if (pushed.ok) {
+    await db`
+      update contracts
+      set newsales_ref = coalesce(nullif(${pushed.ref}, ''), newsales_ref),
+          source = 'newsales_api',
+          updated_at = now()
+      where id = ${contractId}
+    `;
+  }
+  return pushed;
+}

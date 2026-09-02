@@ -217,6 +217,9 @@ function Capture() {
     <div className="mx-auto max-w-xl pb-16">
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld · Aufnahme</p>
       <h1 className="mt-1 font-display text-4xl">Auftrag aufnehmen</h1>
+      <p className="mt-2 max-w-xl text-sm text-muted">
+        Ab nächster Woche hier eingeben. Speichern zählt immer. Liegt die New-Sales-API, geht der Abschluss mit. Sonst in New Sales nachtragen und die Nummer am Auftrag speichern.
+      </p>
 
       {staff.length > 1 ? (
         <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">

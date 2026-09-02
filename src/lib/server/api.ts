@@ -473,6 +473,12 @@ export const sendParkedContract = createServerFn({ method: "POST" })
       insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
       values (${nid()}, ${data.id}, 'erfasst', 'uebermittelt', ${context.userId}, ${"Geparkt gesendet"})
     `;
+    try {
+      const { pushSavedContract } = await import("./newsales.server");
+      await pushSavedContract(data.id);
+    } catch {
+      /* API optional */
+    }
     const [cust] = await db<{ email: string | null; first_name: string; last_name: string }>`
       select cu.email, cu.first_name, cu.last_name
       from contracts c join customers cu on cu.id = c.customer_id
@@ -502,6 +508,37 @@ export const sendParkedContract = createServerFn({ method: "POST" })
       }
     }
     return { ok: true, id: data.id };
+  });
+
+export const pushNewsales = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    await requireProfile(db, context.userId);
+    const { pushSavedContract, newsalesConfigured } = await import("./newsales.server");
+    if (!newsalesConfigured()) {
+      throw new Error("API-Zugänge fehlen. Auftrag bleibt im Portal. Vorgangsnummer unten nachtragen.");
+    }
+    const res = await pushSavedContract(data.id);
+    if (!res.ok) throw new Error(res.reason === "not_configured" ? "API nicht konfiguriert." : "New Sales hat abgelehnt.");
+    return { ok: true, ref: res.ref || "" };
+  });
+
+export const noteNewsalesRef = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string; ref: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    await requireProfile(db, context.userId);
+    const ref = data.ref.trim();
+    if (!ref) throw new Error("Vorgangsnummer fehlt.");
+    await db`
+      update contracts
+      set newsales_ref = ${ref}, source = 'newsales_manual', updated_at = now()
+      where id = ${data.id}
+    `;
+    return { ok: true };
   });
 
 export const findDuplicates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(async ({ data }) => {

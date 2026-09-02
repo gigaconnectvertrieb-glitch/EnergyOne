@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { changeStatus, getContract, updateContractNotes, uploadContractFile } from "@/lib/server/api";
+import { changeStatus, getContract, noteNewsalesRef, pushNewsales, updateContractNotes, uploadContractFile } from "@/lib/server/api";
 import { listSignEnvelopes, saveTabletSignature, sendSignEmail, downloadContractPdf } from "@/lib/server/sign-api";
 import { SIGN_STATUS_LABELS, type SignStatus } from "@/lib/sign";
 import { SignaturePad } from "@/components/signature-pad";
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/portal/auftraege/$id")({ component: Page 
 function Page() {
   const { id } = Route.useParams();
   const [data, setData] = useState<Awaited<ReturnType<typeof getContract>> | null>(null);
+  const [nsRef, setNsRef] = useState("");
   const [reason, setReason] = useState("");
   const [comment, setComment] = useState("");
   const [notes, setNotes] = useState("");
@@ -138,11 +139,45 @@ function Page() {
         <h2 className="text-sm font-medium">New Sales</h2>
         <p className="mt-1 text-sm text-muted">
           {c.source === "newsales_api"
-            ? "An New Sales über die API übergeben."
-            : "Im Portal erfasst. Sobald die API-Zugänge da sind, geht derselbe Abschluss automatisch raus."}
-          {!c.bank_iban ? " Ohne IBAN abgeschickt — kann nachgetragen werden." : ""}
+            ? "Über die API übergeben."
+            : "Im Portal gespeichert. API sendet, sobald die Zugänge da sind. Bis dahin in New Sales von Hand nachtragen und die Vorgangsnummer hier eintragen."}
+          {!c.bank_iban ? " Ohne IBAN." : ""}
         </p>
         {c.newsales_ref ? <p className="mt-3 text-sm">Vorgang {c.newsales_ref}</p> : null}
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+          <Field label="Vorgangsnummer aus New Sales">
+            <Input value={nsRef} onChange={(e) => setNsRef(e.target.value)} placeholder="NS-…" />
+          </Field>
+          <Button
+            className="self-end"
+            variant="outline"
+            onClick={async () => {
+              try {
+                await noteNewsalesRef({ data: { id, ref: nsRef } });
+                toast.success("Nummer gespeichert");
+                setData(await getContract({ data: { id } }));
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Nicht gespeichert");
+              }
+            }}
+          >
+            Nachtragen
+          </Button>
+        </div>
+        <Button
+          className="mt-3"
+          onClick={async () => {
+            try {
+              const r = await pushNewsales({ data: { id } });
+              toast.success(r.ref ? `API · ${r.ref}` : "An New Sales gesendet");
+              setData(await getContract({ data: { id } }));
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "API nicht erreichbar");
+            }
+          }}
+        >
+          Jetzt an New Sales senden
+        </Button>
       </div>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
