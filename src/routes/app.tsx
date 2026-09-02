@@ -1,12 +1,10 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, ListChecks, Map, Wallet } from "lucide-react";
+import { CalendarDays, House, ListChecks, Map } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
-import { GoalStrip } from "@/components/goal-card";
 import { OfflineBar } from "@/components/offline-bar";
-import { WorkShift } from "@/components/work-shift";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -28,10 +26,10 @@ export const Route = createFileRoute("/app")({
 });
 
 const TABS = [
-  { to: "/app", label: "Route", icon: Map },
-  { to: "/app/abschluss", label: "Abschluss", icon: CalendarDays },
-  { to: "/app/bilanz", label: "Bilanz", icon: Wallet },
-  { to: "/app/liste", label: "Nachlauf", icon: ListChecks },
+  { to: "/app", label: "Heute", icon: House, exact: true },
+  { to: "/app/karte", label: "Karte", icon: Map },
+  { to: "/app/abschluss", label: "Buchen", icon: CalendarDays },
+  { to: "/app/liste", label: "Liste", icon: ListChecks },
 ] as const;
 
 function AppShell() {
@@ -45,26 +43,30 @@ function AppShell() {
   if (!user) return <RedirectToSignIn to="/app/login" />;
   return (
     <div className="min-h-dvh bg-bg text-ink">
-      <header className="sticky top-0 z-20 flex h-12 items-center gap-2.5 border-b border-white/5 bg-bg/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-white/6 bg-[#07080c] px-4 pt-[env(safe-area-inset-top)]">
         <BrandMark className="h-7 w-auto" />
-        <p className="font-display text-base tracking-wide text-gold">Feld</p>
+        <div className="min-w-0">
+          <p className="font-display text-[15px] leading-none text-gold">E1 Feld</p>
+          <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-muted">Außendienst</p>
+        </div>
         <div className="ml-auto flex items-center gap-2">
-          <WorkShift />
-          <Link to="/app/mehr" className="text-xs text-muted">
+          <Link to="/app/bilanz" className="text-[11px] text-muted">
+            Zahlen
+          </Link>
+          <Link to="/app/mehr" className="text-[11px] text-gold">
             Mehr
           </Link>
         </div>
       </header>
-      {pathname.startsWith("/app/mehr") ? null : <GoalStrip />}
       <div className="px-4 pt-2">
         <OfflineBar />
       </div>
-      <main className="px-4 pb-24 pt-3">
+      <main className={pathname.startsWith("/app/karte") ? "pb-24" : "px-4 pb-24 pt-4"}>
         <Outlet />
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md">
         {TABS.map((t) => {
-          const on = t.to === "/app" ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
+          const on = "exact" in t && t.exact ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
           return (
             <Link
               key={t.to}
