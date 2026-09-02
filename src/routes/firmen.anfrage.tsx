@@ -25,7 +25,11 @@ function Page() {
         <p className="text-xs uppercase tracking-[0.28em] text-gold">Geschäftskunden</p>
         <h1 className="mt-2 font-display text-5xl">Gespräch vereinbaren.</h1>
         <p className="mt-3 text-muted">
-          Die Anfrage geht an info@e1direktvertrieb.de und direkt an die Geschäftsführung.
+          Die Anfrage geht an{" "}
+          <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
+            info@e1direktvertrieb.de
+          </a>{" "}
+          und direkt an die Geschäftsführung.
         </p>
         <form
           className="mt-8 grid gap-3 rounded-3xl bg-surface p-6 gold-hairline"

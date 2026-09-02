@@ -126,7 +126,12 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
           </div>
           <div className="text-sm text-muted">
             <p className="mb-2 text-xs uppercase tracking-[0.2em] text-gold">Kontakt</p>
-            <p>{firmen ? "Geschäftskunden · info@e1direktvertrieb.de" : "Privatkunden · info@e1direktvertrieb.de"}</p>
+            <p>
+              {firmen ? "Geschäftskunden" : "Privatkunden"} ·{" "}
+              <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
+                info@e1direktvertrieb.de
+              </a>
+            </p>
             {phone ? (
               <p className="mt-2">
                 Telefon{" "}

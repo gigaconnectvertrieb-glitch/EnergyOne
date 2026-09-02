@@ -20,8 +20,11 @@ function Page() {
           </p>
           <p>
             <strong className="text-ink">Gewerbe:</strong> Praxis, Laden, Büro, Filiale,
-            Gastronomie. Ein Ansprechpartner statt Hotline. Anfragen an
-            info@e1direktvertrieb.de.
+            Gastronomie. Ein Ansprechpartner statt Hotline. Anfragen an{" "}
+            <a className="text-gold" href="mailto:info@e1direktvertrieb.de">
+              info@e1direktvertrieb.de
+            </a>
+            .
           </p>
           <p>
             <strong className="text-ink">Grundversorgung</strong> ist das Auffangnetz,
