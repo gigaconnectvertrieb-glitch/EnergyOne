@@ -1,3 +1,6 @@
+/** Eigener E1-Strom / White-Label. Code bleibt, Schalter aus bis EVU steht. */
+export const OWN_SUPPLY_LIVE = false;
+
 export const STAFF_UNLOCKS = [
   { key: "phase2_own_tariffs", label: "Eigene E1-Tarife" },
   { key: "full_contract", label: "Voller Vertrag (SEPA, AGB, Unterschrift)" },
@@ -35,9 +38,9 @@ export const DEFAULT_STAFF_FLAGS: Record<string, boolean> = {
   structure_commissions: false,
   white_label: false,
   digital_signature: true,
-  phase2_own_tariffs: true,
-  phase2_self_service: true,
-  phase2_market_comm: true,
+  phase2_own_tariffs: false,
+  phase2_self_service: false,
+  phase2_market_comm: false,
   full_contract: false,
 };
 

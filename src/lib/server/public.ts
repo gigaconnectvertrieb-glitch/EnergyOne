@@ -3,6 +3,7 @@ import { nid } from "@/lib/utils";
 import { sql } from "./helpers";
 import { MAIL_DOMAIN } from "@/lib/mail";
 import { PUBLIC_PHONE, PUBLIC_PHONE_LABEL } from "@/lib/contact";
+import { OWN_SUPPLY_LIVE } from "@/lib/features";
 
 export const getPublicContact = createServerFn({ method: "GET" }).handler(async () => {
   const envPhone = (process.env.PUBLIC_PHONE || process.env.E1_PUBLIC_PHONE || "").trim();
@@ -272,7 +273,7 @@ export const listPublicE1Tariffs = createServerFn({ method: "POST" })
           grund_year: grund,
           bonus_year: bonus,
           year,
-          comingSoon: Boolean(r.comingSoon) || String(r.provider) === "E1",
+          comingSoon: !OWN_SUPPLY_LIVE || Boolean(r.comingSoon) || String(r.provider) === "E1",
         };
       }),
     };
@@ -323,8 +324,8 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
       name: "Tarif",
       provider: "E1",
     };
-    if (String(tariffRow.provider) === "E1" || String(tariffRow.id).startsWith("e1-")) {
-      throw new Error("E1 eigener Strom folgt in Kürze. Bitte einen lieferbaren Tarif wählen.");
+    if (!OWN_SUPPLY_LIVE && (String(tariffRow.provider) === "E1" || String(tariffRow.id).startsWith("e1-"))) {
+      throw new Error("E1 eigener Strom ist vorbereitet, aber noch nicht aktiv. Bitte einen Partner-Tarif wählen.");
     }
     const [owner] = await db<{ user_id: string }>`
       select user_id from profiles
