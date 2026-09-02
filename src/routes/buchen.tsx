@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
 import { PublicShell } from "@/components/public-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -9,12 +9,21 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/buchen")({ component: Page });
 
+function Block({ step, title, children }: { step: string; title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-3xl bg-surface/80 p-6 md:p-8 gold-hairline">
+      <p className="text-[11px] uppercase tracking-[0.28em] text-gold">{step}</p>
+      <h2 className="mt-2 font-display text-2xl">{title}</h2>
+      <div className="mt-6 grid gap-5">{children}</div>
+    </section>
+  );
+}
+
 function Page() {
-  const [kind] = useState("privat");
+  const kind = "privat";
   const [type, setType] = useState("strom");
   const [kwh, setKwh] = useState("3500");
   const [items, setItems] = useState<Awaited<ReturnType<typeof listPublicE1Tariffs>>["items"]>([]);
-  const [ready, setReady] = useState(false);
   const [tariffId, setTariffId] = useState("");
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
@@ -36,72 +45,61 @@ function Page() {
   useEffect(() => {
     listPublicE1Tariffs({ data: { type, kind, kwh: Number(kwh) || 0 } })
       .then((r) => {
-        setReady(r.ready);
         setItems(r.items);
-        const first = r.items.find((i) => !i.comingSoon) || r.items[0];
-        if (first && !r.items.some((i) => i.id === tariffId && !i.comingSoon)) setTariffId(String(first.id));
+        const pick = r.items.find((i) => !i.comingSoon) || r.items[0];
+        if (pick) setTariffId(String(pick.id));
       })
-      .catch(() => {
-        setReady(false);
-        setItems([]);
-      });
+      .catch(() => setItems([]));
   }, [type, kind, kwh]);
 
   const chosen = items.find((i) => i.id === tariffId);
+  const live = items.filter((i) => !i.comingSoon);
+  const soon = items.filter((i) => i.comingSoon);
 
   return (
     <PublicShell>
-      <div className="mx-auto max-w-xl px-4 py-16">
-        <p className="text-xs uppercase tracking-[0.28em] text-gold">E1 Strom und Gas</p>
-        <h1 className="mt-2 font-display text-5xl">Direkt buchen</h1>
-        <p className="mt-3 text-sm text-muted">
-          Für Privathaushalte. Unternehmen bitte über die{" "}
-          <a className="text-gold" href="/firmen/anfrage">
+      <div className="mx-auto max-w-3xl px-4 py-16 md:py-24">
+        <p className="text-[11px] uppercase tracking-[0.36em] text-gold">Privathaushalt</p>
+        <h1 className="mt-4 font-display text-5xl leading-[0.95] md:text-6xl">Abschluss in Ruhe.</h1>
+        <p className="mt-5 max-w-xl text-lg text-muted">
+          Vier kurze Schritte. Ein Gesicht hinter der Marke. Unternehmen bitte über die{" "}
+          <Link to="/firmen/anfrage" className="text-gold">
             Geschäftskunden-Anfrage
-          </a>
+          </Link>
           .
         </p>
-        {!ready ? (
-          <p className="mt-6 text-muted">
-            Eigene E1-Tarife sind vorbereitet. Sobald Arbeitspreis und Grundpreis im Portal stehen und der Tarif
-            auf der Website freigegeben ist, können Haushalt und Firma hier abschließen. Bis dahin Beratung über das Formular.
-          </p>
-        ) : (
-          <div className="mt-8 grid gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+
+        <div className="mt-12 grid gap-8">
+          <Block step="01" title="Tarif">
+            <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Sparte">
                 <Select value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="strom">Strom</option>
                   <option value="gas">Gas</option>
                 </Select>
               </Field>
+              <Field label="Jahresverbrauch kWh">
+                <Input value={kwh} onChange={(e) => setKwh(e.target.value.replace(/\D/g, ""))} inputMode="numeric" />
+              </Field>
             </div>
-            <Field label="Jahresverbrauch kWh">
-              <Input value={kwh} onChange={(e) => setKwh(e.target.value.replace(/\D/g, ""))} inputMode="numeric" />
-            </Field>
-            <Field label="Tarif">
+            <Field label="Lieferbarer Tarif">
               <Select value={tariffId} onChange={(e) => setTariffId(e.target.value)}>
-                {items.map((t) => (
-                  <option key={String(t.id)} value={String(t.id)} disabled={Boolean(t.comingSoon)}>
-                    {Boolean(t.comingSoon)
-                      ? `${String(t.name)} · in Kürze eigener Strom`
-                      : `${String(t.provider)} · ${String(t.name)}`}
+                {live.map((t) => (
+                  <option key={String(t.id)} value={String(t.id)}>
+                    {String(t.provider)} · {String(t.name)}
                   </option>
                 ))}
               </Select>
             </Field>
-            {chosen && chosen.comingSoon ? (
-              <p className="text-sm text-muted">
-                E1 eigener Strom steht in Kürze. Aktuell buchen wir lieferbare Tarife über unseren Partner.
+            {soon.length ? (
+              <p className="text-sm leading-relaxed text-muted">
+                E1 eigener Strom folgt in Kürze. Bis dahin vermitteln wir geprüfte Tarife. Derselbe Ansprechpartner.
               </p>
             ) : null}
-            {chosen ? (
-              <p className="text-sm text-muted">
-                {String(chosen.arbeit_ct).replace(".", ",")} ct/kWh · Grundpreis {eur(Number(chosen.grund_year))} / Jahr
-                {Number(chosen.year) > 0 ? ` · ca. ${eur(Number(chosen.year))} / Jahr` : ""}
-              </p>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-2">
+          </Block>
+
+          <Block step="02" title="Sie">
+            <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Vorname">
                 <Input value={first} onChange={(e) => setFirst(e.target.value)} />
               </Field>
@@ -109,13 +107,15 @@ function Page() {
                 <Input value={last} onChange={(e) => setLast(e.target.value)} />
               </Field>
             </div>
-            <Field label="E-Mail">
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </Field>
-            <Field label="Telefon">
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-[1fr_5rem] gap-3">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="E-Mail">
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+              <Field label="Telefon">
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-[1fr_5.5rem] gap-5">
               <Field label="Straße">
                 <Input value={street} onChange={(e) => setStreet(e.target.value)} />
               </Field>
@@ -123,7 +123,7 @@ function Page() {
                 <Input value={house} onChange={(e) => setHouse(e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-[7rem_1fr] gap-3">
+            <div className="grid grid-cols-[7.5rem_1fr] gap-5">
               <Field label="PLZ">
                 <Input value={zip} onChange={(e) => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))} />
               </Field>
@@ -131,45 +131,55 @@ function Page() {
                 <Input value={city} onChange={(e) => setCity(e.target.value)} />
               </Field>
             </div>
+          </Block>
+
+          <Block step="03" title="Bisheriger Vertrag">
             <Field label="Bisheriger Anbieter">
-              <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} placeholder="Steht auf der Rechnung" />
+              <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Kundennummer alt">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Kundennummer">
                 <Input value={prevNo} onChange={(e) => setPrevNo(e.target.value)} />
               </Field>
               <Field label="Zählernummer">
                 <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
               </Field>
             </div>
+            <label className="flex items-start gap-3 text-sm leading-relaxed text-muted">
+              <input className="mt-1 accent-[#c9a227]" type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
+              Kündigung übernehmen. Wir erstellen das Schreiben und senden es an Sie und an uns.
+            </label>
+          </Block>
+
+          <Block step="04" title="Zahlung">
             <Field label="IBAN">
-              <Input value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" required />
+              <Input value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" />
             </Field>
-            <label className="flex gap-2 text-sm text-muted">
-              <input type="checkbox" checked={sepa} onChange={(e) => setSepa(e.target.checked)} />
-              SEPA-Lastschrift
+            <label className="flex items-start gap-3 text-sm leading-relaxed text-muted">
+              <input className="mt-1 accent-[#c9a227]" type="checkbox" checked={sepa} onChange={(e) => setSepa(e.target.checked)} />
+              SEPA-Lastschrift. Nur der neue Tarif, kein Extra-Kontoabzug durch E1.
             </label>
-            <label className="flex gap-2 text-sm text-muted">
-              <input type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
-              Kündigung übernehmen. E1 erzeugt das Schreiben und verschickt es.
-            </label>
-            <label className="flex gap-2 text-sm text-muted">
-              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-              Datenschutz und Kontaktaufnahme
+            <label className="flex items-start gap-3 text-sm leading-relaxed text-muted">
+              <input className="mt-1 accent-[#c9a227]" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              Datenschutz und Kontakt durch E1 Direktvertrieb.{" "}
+              <Link to="/datenschutz" className="text-gold">
+                Hinweis
+              </Link>
             </label>
             <Button
+              className="mt-2 h-12 w-full md:w-auto md:px-10"
               disabled={busy}
               onClick={async () => {
                 if (!iban.replace(/\s/g, "")) {
-                  toast.error("IBAN ist auf der Website Pflicht.");
-                  setBusy(false);
+                  toast.error("IBAN fehlt.");
                   return;
                 }
                 if (!sepa) {
-                  toast.error("SEPA bestätigen.");
-                  setBusy(false);
+                  toast.error("SEPA bitte bestätigen.");
                   return;
                 }
+                setBusy(true);
+                try {
                   await submitE1WebOrder({
                     data: {
                       tariffId,
@@ -192,7 +202,7 @@ function Page() {
                       sepa,
                     },
                   });
-                  toast.success("Buchung aufgenommen. Mail kommt an info@-Absender.");
+                  toast.success("Abschluss aufgenommen. Sie erhalten eine Mail.");
                 } catch (e) {
                   toast.error(e instanceof Error ? e.message : "Buchung fehlgeschlagen");
                 } finally {
@@ -200,10 +210,16 @@ function Page() {
                 }
               }}
             >
-              Jetzt buchen
+              Verbindlich abschließen
             </Button>
-          </div>
-        )}
+            {chosen && !chosen.comingSoon ? (
+              <p className="text-xs text-muted">
+                {String(chosen.provider)} · {String(chosen.name)}
+                {Number(chosen.year) > 0 ? ` · ca. ${eur(Number(chosen.year))} im Jahr` : ""}
+              </p>
+            ) : null}
+          </Block>
+        </div>
       </div>
     </PublicShell>
   );
