@@ -73,25 +73,30 @@ export const importCityPlan = createServerFn({ method: "POST" })
             { lat: data.north, lng: data.east },
             { lat: data.north, lng: data.west },
           ];
-    const zone = data.full
-      ? await overpassArea({
-          south: data.south,
-          north: data.north,
-          west: data.west,
-          east: data.east,
-        })
-      : await overpassZone({
-          south: data.south,
-          north: data.north,
-          west: data.west,
-          east: data.east,
-        });
+    let zone = { streets: [] as Awaited<ReturnType<typeof overpassZone>>["streets"], houses: [] as Awaited<ReturnType<typeof overpassZone>>["houses"] };
+    try {
+      zone = data.full
+        ? await overpassArea({
+            south: data.south,
+            north: data.north,
+            west: data.west,
+            east: data.east,
+          })
+        : await overpassZone({
+            south: data.south,
+            north: data.north,
+            west: data.west,
+            east: data.east,
+          });
+    } catch {
+      zone = { streets: [], houses: [] };
+    }
     const housesRaw = zone.houses.filter((h) => (ring.length >= 3 ? pointInPolygon(h, ring) : true));
     const zip = (data.zip || "").replace(/\D/g, "").slice(0, 5);
     const houses = zip ? housesRaw.filter((h) => !h.zip || h.zip === zip) : housesRaw;
     const streets = zone.streets.filter((s) => (ring.length >= 3 ? pointInPolygon(s, ring) : true));
-    if (!houses.length && !streets.length) {
-      throw new Error("Keine Straßen oder Hausnummern in diesem Ausschnitt. Zone enger zeichnen.");
+    if (!houses.length && !streets.length && !(data.userIds || []).length) {
+      throw new Error("Keine Straßen gefunden und niemand zugewiesen. Mitarbeiter wählen oder Zone enger setzen.");
     }
     const terId = nid();
     const geojson = JSON.stringify({

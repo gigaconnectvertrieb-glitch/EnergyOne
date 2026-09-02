@@ -233,6 +233,10 @@ function Page() {
                 disabled={busy}
                 onClick={async () => {
                   if (!place) return;
+                  if (!userIds.length) {
+                    toast.error("Erst den Mitarbeiter anhaken, dann aufspielen.");
+                    return;
+                  }
                   setBusy(true);
                   try {
                     const cityBox = {
@@ -250,23 +254,27 @@ function Page() {
                         lng: place.lng,
                         ...cityBox,
                         userIds,
-                        full: true,
+                        full: false,
                         zip: /^\d{5}/.test(place.name) ? place.name.slice(0, 5) : /^\d{5}$/.test(q.trim()) ? q.trim() : undefined,
                       },
                     });
-                    toast.success(`${res.houses || res.streets} Adressen geloggt`);
+                    toast.success(
+                      res.houses || res.streets
+                        ? `${res.houses || res.streets} Adressen aufgespielt`
+                        : "Gebiet zugewiesen. Straßen nachladen, wenn OSM wieder antwortet.",
+                    );
                     if (res.territoryId) await pullTerritoryFile(res.territoryId);
                     reload();
                     const detail = await getWorkPlan({ data: { id: res.planId } });
                     setOpen(detail);
                   } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Laden fehlgeschlagen");
+                    toast.error(e instanceof Error ? e.message : "Aufspielen fehlgeschlagen");
                   } finally {
                     setBusy(false);
                   }
                 }}
               >
-                {busy ? "Spielt auf…" : userIds.length ? "Laden und dem Mitarbeiter aufspielen" : "Stadt speichern"}
+                {busy ? "Spielt auf…" : "Gebiet aufspielen"}
               </Button>
               <Button
                 variant="outline"
