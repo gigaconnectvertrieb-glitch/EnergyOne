@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { bootstrapMe, listNotifications } from "@/lib/server/api";
 import { fieldBalance, getFieldHome } from "@/lib/server/field-api";
 import { listDashboardContracts, revealContract } from "@/lib/server/vault-api";
+import { eur } from "@/lib/utils";
 import { WorkShift } from "@/components/work-shift";
 import { PushEnable } from "@/components/push-enable";
 import { AppUpdate } from "@/components/app-update";
