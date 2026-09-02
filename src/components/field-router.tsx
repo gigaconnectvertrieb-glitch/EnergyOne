@@ -265,6 +265,9 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
     setHits([]);
     mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: h.street || h.house ? 17 : 15 });
+    gRef.current?.setCenter({ lat: h.lat, lng: h.lng });
+    gRef.current?.setZoom(h.street || h.house ? 18 : 16);
+    gRef.current?.setTilt(67.5);
     if (!(h.street || "").trim() && !(h.house || "").trim()) {
       setObj(null);
       setHouse("");
@@ -432,6 +435,9 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
                     onClick={() => {
                       setHouse(h.house);
                       mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
+                      gRef.current?.setCenter({ lat: h.lat, lng: h.lng });
+                      gRef.current?.setZoom(18);
+                      gRef.current?.setTilt(67.5);
                     }}
                   >
                     {h.house}
