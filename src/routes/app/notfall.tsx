@@ -111,7 +111,16 @@ function Page() {
         </>
       ) : (
         <>
-          <iframe title="Notfall" className="h-[28rem] w-full rounded-2xl bg-black" allow="camera; microphone; fullscreen; display-capture" src={src} />
+          <div className="relative overflow-hidden rounded-3xl bg-surface gold-hairline">
+            <iframe title="Notfall" className="pointer-events-none h-[22rem] w-full opacity-0" allow="camera; microphone; fullscreen" src={src} />
+            <div className="absolute inset-0 grid place-items-center bg-[#0b0d12] px-6 text-center">
+              <div>
+                <span className="mx-auto block size-12 animate-spin rounded-full border-2 border-gold/20 border-t-gold" />
+                <p className="mt-6 font-display text-2xl">Verbindung wird hergestellt</p>
+                <p className="mt-2 text-sm text-muted">Luca und Orhan werden gerufen. Bitte warten.</p>
+              </div>
+            </div>
+          </div>
           <Button
             variant="outline"
             onClick={async () => {
