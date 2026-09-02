@@ -185,6 +185,7 @@ export type Profile = {
   notes: string | null;
   is_demo: boolean;
   email?: string | null;
+  staff_id?: string | null;
 };
 
 export const FEATURE_DEFAULTS = [

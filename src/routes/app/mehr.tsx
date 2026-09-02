@@ -32,6 +32,9 @@ function Page() {
           </p>
         </div>
       ) : null}
+      <Link to="/app/profil" className="mt-4 block rounded-2xl bg-surface px-4 py-4 text-sm gold-hairline">
+        Profil · ID und Firmenmail
+      </Link>
       <Link to="/app/bs" className="mt-4 block rounded-2xl bg-surface px-4 py-4 text-sm gold-hairline">
         BS · Bewerber aufnehmen
       </Link>

@@ -31,14 +31,16 @@ export function mapProfile(r: Record<string, unknown>): Profile {
     notes: r.notes ? asStr(r.notes) : null,
     is_demo: Boolean(r.is_demo),
     email: r.email ? asStr(r.email) : null,
+    staff_id: r.staff_id ? asStr(r.staff_id) : null,
   };
 }
 
 export async function loadProfile(db: Sql, userId: string): Promise<Profile | null> {
   const rows = await db<Record<string, unknown>>`
-    select p.*, r.name as region_name
+    select p.*, r.name as region_name, u.email
     from profiles p
     left join regions r on r.id = p.region_id
+    left join "user" u on u.id = p.user_id
     where p.user_id = ${userId}
   `;
   return rows[0] ? mapProfile(rows[0]) : null;
