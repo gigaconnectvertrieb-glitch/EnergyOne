@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Navigation, Search, X } from "lucide-react";
-import { getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } from "@/lib/server/field-api";
+import { acceptTerritory, getFieldHome, getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } from "@/lib/server/field-api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ type Hit = Awaited<ReturnType<typeof searchFieldAddress>>[number];
 type Obj = Awaited<ReturnType<typeof openFieldObject>>;
 type Walk = Awaited<ReturnType<typeof getTerritoryWalk>>;
 
-export function FieldRouter({ center }: { center: { lat: number; lng: number } }) {
+export function FieldRouter({ center, planner = false }: { center: { lat: number; lng: number }; planner?: boolean }) {
   const nav = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -29,6 +29,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
   const [house, setHouse] = useState("");
   const [busy, setBusy] = useState(false);
   const [pack, setPack] = useState<Walk | null>(null);
+  const [offer, setOffer] = useState<{ id: string; name: string } | null>(null);
   const [tapStart, setTapStart] = useState(false);
   const tapStartRef = useRef(false);
 
@@ -68,6 +69,25 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       cancelled = true;
     };
   }, [center.lat, center.lng]);
+
+  useEffect(() => {
+    let live = true;
+    async function poll() {
+      try {
+        const home = await getFieldHome();
+        if (!live) return;
+        if (home.pending) setOffer(home.pending);
+      } catch {
+        /* */
+      }
+    }
+    void poll();
+    const t = window.setInterval(() => void poll(), 8000);
+    return () => {
+      live = false;
+      window.clearInterval(t);
+    };
+  }, []);
 
   async function loadWalk(lat?: number, lng?: number) {
     setBusy(true);
@@ -134,8 +154,8 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             lng: h.lng,
             street: h.street,
             house: h.house,
-            zip: "",
-            city: "",
+            zip: h.zip || "",
+            city: h.city || "",
             display: `${h.street} ${h.house}`,
           });
         };
@@ -154,7 +174,22 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
   }
 
   useEffect(() => {
-    if (q.trim().length < 5) {
+    let on = true;
+    async function tick() {
+      try {
+        const home = await getFieldHome();
+        if (on) setOffer(home.pending || null);
+      } catch {
+        /* */
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, 8000);
+    return () => {
+      on = false;
+      window.clearInterval(id);
+    };
+  }, []);
       setHits([]);
       return;
     }
@@ -208,6 +243,28 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
       </p>
 
       <div className="absolute left-3 right-3 top-3 z-[1200] grid gap-2">
+        {offer ? (
+          <div className="rounded-2xl bg-[#0b0d12] p-4 text-ink shadow-xl gold-hairline">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-gold">Neues Gebiet</p>
+            <p className="mt-1 text-sm">{offer.name}</p>
+            <Button
+              className="mt-3 w-full"
+              onClick={async () => {
+                try {
+                  await acceptTerritory({ data: { id: offer.id } });
+                  setOffer(null);
+                  await loadWalk();
+                  toast.success("Gebiet liegt auf der Karte");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Nicht geladen");
+                }
+              }}
+            >
+              Gebiet herunterladen
+            </Button>
+          </div>
+        ) : null}
+        {planner ? (
         <div className="overflow-hidden rounded-xl bg-white text-[#1a1a1a] shadow-lg">
           <div className="flex items-center gap-2 px-3">
             <Search className="size-4 text-[#c9a227]" />
@@ -242,6 +299,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             </ul>
           ) : null}
         </div>
+        ) : null}
         <div className="flex gap-2">
           <button
             type="button"

@@ -11,7 +11,7 @@ import {
 import { asStr, nid, num } from "@/lib/utils";
 import { groupStreets, pointInPolygon, applyWalkOrder, haversineMeters } from "@/lib/geo-de";
 import { nominatimAddress, overpassHouses } from "./geo.server";
-import { assertCanSeeUser, audit, requireProfile, sql, visibleUserIds } from "./helpers";
+import { assertCanSeeUser, audit, notify, requireProfile, sql, visibleUserIds } from "./helpers";
 import type { Sql } from "@/lib/db";
 
 async function assignedTerritory(db: Sql, userId: string) {
@@ -58,6 +58,14 @@ export const getFieldHome = createServerFn({ method: "GET" })
       select count(*)::int as n from field_visits
       where user_id = ${me.user_id} and list_status = 'offen' and reason in ('nicht_angetroffen','laufzeit_passt_nicht','kein_zutritt','spaeter')
     `;
+    const [pending] = await db<Record<string, unknown>>`
+      select t.id, t.name
+      from territory_members m
+      join territories t on t.id = m.territory_id
+      where m.user_id = ${me.user_id} and t.active = true and m.accepted_at is null
+      order by m.created_at desc
+      limit 1
+    `;
     return {
       territory: used
         ? {
@@ -67,6 +75,9 @@ export const getFieldHome = createServerFn({ method: "GET" })
             center_lat: num(used.center_lat),
             center_lng: num(used.center_lng),
           }
+        : null,
+      pending: pending
+        ? { id: asStr(pending.id), name: asStr(pending.name) }
         : null,
       openFollowups: num(open?.n),
       week,
@@ -209,10 +220,18 @@ export const assignTerritory = createServerFn({ method: "POST" })
     if (!can(me.role, "team.view")) throw new Error("Kein Zugriff");
     await db`update territories set user_id = ${data.userId}, updated_at = now() where id = ${data.id}`;
     await db`
-      insert into territory_members (territory_id, user_id)
-      values (${data.id}, ${data.userId})
-      on conflict do nothing
+      insert into territory_members (territory_id, user_id, accepted_at)
+      values (${data.id}, ${data.userId}, null)
+      on conflict (territory_id, user_id) do update set accepted_at = null
     `;
+    const [ter] = await db<{ name: string }>`select name from territories where id = ${data.id}`;
+    await notify(db, {
+      userId: data.userId,
+      type: "gebiet",
+      title: "Neues Gebiet",
+      message: ter?.name || "Gebiet liegt bereit.",
+      link: `/app?gebiet=${data.id}`,
+    });
     await audit(db, {
       userId: context.userId,
       action: "territory.assign",
@@ -487,12 +506,14 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       ring = [];
     }
     const doors = await db<Record<string, unknown>>`
-      select id, street, house, lat, lng from field_doors where territory_id = ${asStr(ter.id)} order by street, house
+      select id, street, house, zip, city, lat, lng from field_doors where territory_id = ${asStr(ter.id)} order by street, house
     `;
     const houses = doors.map((d) => ({
       id: asStr(d.id),
       street: asStr(d.street),
       house: asStr(d.house),
+      zip: asStr(d.zip),
+      city: asStr(d.city),
       lat: num(d.lat),
       lng: num(d.lng),
     }));
@@ -544,6 +565,20 @@ export const saveWalkOrder = createServerFn({ method: "POST" })
     if (!ter) throw new Error("Kein Gebiet zugewiesen.");
     const payload = data.reset ? null : JSON.stringify({ streets: data.streets });
     await db`update territories set walk_order = ${payload}::jsonb, updated_at = now() where id = ${asStr(ter.id)}`;
+    return { ok: true };
+  });
+
+export const acceptTerritory = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    await db`
+      update territory_members
+      set accepted_at = now()
+      where territory_id = ${data.id} and user_id = ${me.user_id}
+    `;
     return { ok: true };
   });
 

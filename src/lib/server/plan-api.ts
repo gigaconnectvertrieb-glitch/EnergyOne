@@ -4,7 +4,7 @@ import { can, type Role } from "@/lib/e1";
 import { bboxAround, bboxFromPoints, groupStreets, pointInPolygon, searchDeCities, uniqueStreets, type PlanStop } from "@/lib/geo-de";
 import { asStr, nid, num } from "@/lib/utils";
 import { nominatimPlaces, overpassArea, overpassZone } from "./geo.server";
-import { audit, requireProfile, sql } from "./helpers";
+import { audit, notify, requireProfile, sql } from "./helpers";
 
 function canPlan(role: Role) {
   return can(role, "team.view") || can(role, "settings.manage");
@@ -166,10 +166,17 @@ export const importCityPlan = createServerFn({ method: "POST" })
     const assignees = users.length ? users : [];
     for (const uid of assignees) {
       await db`
-        insert into territory_members (territory_id, user_id)
-        values (${terId}, ${uid})
-        on conflict do nothing
+        insert into territory_members (territory_id, user_id, accepted_at)
+        values (${terId}, ${uid}, null)
+        on conflict (territory_id, user_id) do update set accepted_at = null
       `;
+      await notify(db, {
+        userId: uid,
+        type: "gebiet",
+        title: "Neues Gebiet",
+        message: `${data.name || data.city} liegt bereit.`,
+        link: "/app",
+      });
     }
     if (assignees[0]) {
       await db`update territories set user_id = ${assignees[0]} where id = ${terId}`;
