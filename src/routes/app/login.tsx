@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { finishInvite, loginMaster, loginTotp, startInvite } from "@/lib/server/staff-auth";
 import { Button } from "@/components/ui/button";
