@@ -10,7 +10,7 @@ import {
 } from "@/lib/field";
 import { asStr, nid, num } from "@/lib/utils";
 import { groupStreets, pointInPolygon, applyWalkOrder, haversineMeters } from "@/lib/geo-de";
-import { googleGeocode, overpassHouses } from "./geo.server";
+import { googlePlacesSearch, overpassHouses } from "./geo.server";
 import { assertCanSeeUser, audit, notify, requireProfile, sql, visibleUserIds } from "./helpers";
 import type { Sql } from "@/lib/db";
 
@@ -511,7 +511,7 @@ export const searchFieldAddress = createServerFn({ method: "POST" })
         city: d.city,
       }));
     }
-    return googleGeocode(q);
+    return googlePlacesSearch(q);
   });
 
 export const openFieldObject = createServerFn({ method: "POST" })

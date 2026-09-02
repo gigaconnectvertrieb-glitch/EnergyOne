@@ -378,6 +378,55 @@ export async function googleGeocode(query: string): Promise<AddressHit[]> {
   }
 }
 
+export async function googlePlacesSearch(query: string): Promise<AddressHit[]> {
+  const key = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_KEY || "").trim();
+  if (!key) return googleGeocode(query);
+  const q = query.trim();
+  if (q.length < 3) return [];
+  const auto = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+  auto.searchParams.set("input", q);
+  auto.searchParams.set("components", "country:de");
+  auto.searchParams.set("language", "de");
+  auto.searchParams.set("key", key);
+  try {
+    const json = (await fetchJson(auto, {}, "Places nicht erreichbar.")) as {
+      status?: string;
+      predictions?: Array<{ description: string; place_id: string }>;
+    };
+    if (!json.predictions?.length) return googleGeocode(query);
+    const out: AddressHit[] = [];
+    for (const p of json.predictions.slice(0, 6)) {
+      const det = new URL("https://maps.googleapis.com/maps/api/place/details/json");
+      det.searchParams.set("place_id", p.place_id);
+      det.searchParams.set("fields", "formatted_address,geometry,address_component");
+      det.searchParams.set("language", "de");
+      det.searchParams.set("key", key);
+      const d = (await fetchJson(det, {}, "Places Details nicht erreichbar.")) as {
+        result?: {
+          formatted_address?: string;
+          geometry?: { location?: { lat: number; lng: number } };
+          address_components?: Array<{ long_name: string; types: string[] }>;
+        };
+      };
+      const loc = d.result?.geometry?.location;
+      if (!loc) continue;
+      const part = (t: string) => d.result?.address_components?.find((c) => c.types.includes(t))?.long_name || "";
+      out.push({
+        display: d.result?.formatted_address || p.description,
+        lat: loc.lat,
+        lng: loc.lng,
+        street: part("route"),
+        house: part("street_number"),
+        zip: part("postal_code"),
+        city: part("locality") || part("administrative_area_level_3") || "",
+      });
+    }
+    return out.length ? out : googleGeocode(query);
+  } catch {
+    return googleGeocode(query);
+  }
+}
+
 export async function overpassHouses(lat: number, lng: number, street?: string): Promise<HouseHit[]> {
   try {
     const query = `[out:json][timeout:20];nwr["addr:housenumber"](around:220,${lat},${lng});out center;`;

@@ -28,7 +28,7 @@ export function loadGoogleMaps(key: string) {
       return;
     }
     const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error("Google Maps nicht geladen"));
