@@ -236,6 +236,9 @@ export function ContractCapture({
 
   const field = afterTo === "app";
   const show = (n: number) => !field || step === n;
+
+  return (
+    <div className="mx-auto max-w-3xl pb-16">
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Abschluss</p>
       <h1 className="mt-1 font-display text-4xl">Vertrag</h1>
       {street || house ? (
