@@ -544,7 +544,7 @@ export function ContractCapture({
       </>
       ) : null}
 
-      {show(3) || show(4) ? (
+      {show(3) ? (
       <>
       <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Provision</p>
@@ -574,8 +574,17 @@ export function ContractCapture({
           </>
         ) : null}
         {quote && !quote.ok ? <p className="mt-3 text-sm text-danger">{quote.reason}</p> : null}
+        {field ? (
+          <Button className="mt-4" type="button" onClick={() => setStep(4)}>
+            Weiter zu Fertig
+          </Button>
+        ) : null}
       </div>
+      </>
+      ) : null}
 
+      {show(4) ? (
+      <>
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Bankverbindung — optional</p>
         <p className="text-sm text-muted">Leer lassen geht. Prüfen füllt BLZ und Konto aus der IBAN.</p>
