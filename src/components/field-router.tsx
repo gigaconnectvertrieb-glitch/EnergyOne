@@ -264,10 +264,14 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
 
   async function pick(h: Partial<Hit> & { lat: number; lng: number }) {
     setHits([]);
-    mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: h.street || h.house ? 17 : 15 });
-    gRef.current?.setCenter({ lat: h.lat, lng: h.lng });
-    gRef.current?.setZoom(h.street || h.house ? 18 : 16);
-    gRef.current?.setTilt(67.5);
+    if (h.house) {
+      mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 18 });
+      gRef.current?.setCenter({ lat: h.lat, lng: h.lng });
+      gRef.current?.setZoom(18);
+      gRef.current?.setTilt(67.5);
+    } else if (!h.street) {
+      mapRef.current?.jumpTo({ center: [h.lng, h.lat], zoom: 15 });
+    }
     if (!(h.street || "").trim() && !(h.house || "").trim()) {
       setObj(null);
       setHouse("");
@@ -374,13 +378,30 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
                   onClick={() => {
                     const first = s.houses[0];
                     if (!first) return;
+                    const lats = s.houses.map((h) => h.lat);
+                    const lngs = s.houses.map((h) => h.lng);
+                    if (mapRef.current && lats.length) {
+                      try {
+                        mapRef.current.fitBounds(
+                          [
+                            [Math.min(...lngs), Math.min(...lats)],
+                            [Math.max(...lngs), Math.max(...lats)],
+                          ],
+                          { padding: 50, maxZoom: 18, duration: 500 },
+                        );
+                      } catch {
+                        mapRef.current.jumpTo({ center: [first.lng, first.lat], zoom: 17 });
+                      }
+                    }
+                    gRef.current?.setCenter({ lat: first.lat, lng: first.lng });
+                    gRef.current?.setZoom(s.houses.length > 8 ? 17 : 18);
                     void pick({
                       lat: first.lat,
                       lng: first.lng,
                       street: s.street,
                       house: "",
-                      zip: "",
-                      city: "",
+                      zip: first.zip || "",
+                      city: first.city || "",
                       display: s.street,
                     });
                   }}
