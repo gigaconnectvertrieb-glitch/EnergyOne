@@ -49,12 +49,15 @@ function Page() {
         <Stat label="Woche" value={bal ? eur(bal.woche.eur) : "—"} sub={bal ? `${bal.woche.n}` : ""} />
         <Stat label="Monat" value={bal ? eur(bal.monat.eur) : "—"} sub={bal ? `${bal.monat.n}` : ""} />
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Link to="/app/abschluss" className="rounded-2xl bg-gold px-4 py-4 text-center text-sm font-medium text-bg">
+      <div className="grid grid-cols-3 gap-2">
+        <Link to="/app/abschluss" className="rounded-2xl bg-gold px-3 py-4 text-center text-sm font-medium text-bg">
           Abschluss
         </Link>
-        <Link to="/app/karte" className="rounded-2xl bg-surface px-4 py-4 text-center text-sm gold-hairline">
+        <Link to="/app/karte" className="rounded-2xl bg-surface px-3 py-4 text-center text-sm gold-hairline">
           Karte
+        </Link>
+        <Link to="/app/notfall" className="rounded-2xl bg-surface px-3 py-4 text-center text-sm text-red-400 gold-hairline">
+          Notfall
         </Link>
       </div>
       {home && home.openFollowups > 0 ? (
