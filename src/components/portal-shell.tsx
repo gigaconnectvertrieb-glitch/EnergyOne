@@ -28,6 +28,7 @@ import type { Profile } from "@/lib/e1";
 import { can, type Role } from "@/lib/e1";
 import { Wordmark } from "./logo";
 import { usePushWorker } from "./goal-card";
+import { AppUpdate } from "./app-update";
 import { cn } from "@/lib/utils";
 
 type MeState = {
@@ -201,6 +202,7 @@ export function PortalShell() {
           </div>
         </header>
         <div className="px-4 py-6 pb-28 lg:px-8 lg:pb-10">
+          <AppUpdate />
           <Outlet />
         </div>
       </div>

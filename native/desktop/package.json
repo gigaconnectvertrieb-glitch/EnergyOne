@@ -1,0 +1,16 @@
+{
+  "name": "e1-orga",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "de.e1direktvertrieb.orga",
+    "productName": "E1 Orga",
+    "win": { "target": "nsis" },
+    "files": ["main.cjs"]
+  }
+}

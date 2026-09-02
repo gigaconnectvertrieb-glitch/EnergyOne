@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listRegions, listStaffFlags, listUsers, setStaffFlag, updateUser } from "@/lib/server/api";
 import { createStaff, deleteStaff, issueStaffMaster } from "@/lib/server/staff-auth";
+import { publishBuild } from "@/lib/server/release-api";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/e1";
 import { STAFF_UNLOCKS } from "@/lib/features";
 import { MAIL_DOMAIN, workspaceLocalPart } from "@/lib/mail";
@@ -89,6 +90,21 @@ function Page() {
           </p>
         ) : null}
       </form>
+      <div className="mt-4">
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              const r = await publishBuild({ data: { note: "Neue Version im Feld und am PC" } });
+              toast.success(`Version ${r.build} — Push raus.`);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Nicht gesendet");
+            }
+          }}
+        >
+          Update an alle schicken
+        </Button>
+      </div>
 
       <div className="mt-4 grid gap-3">
         {rows.map((u) => (

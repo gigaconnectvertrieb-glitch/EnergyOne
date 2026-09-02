@@ -5,6 +5,7 @@ import { fieldBalance, getFieldHome } from "@/lib/server/field-api";
 import { eur } from "@/lib/utils";
 import { WorkShift } from "@/components/work-shift";
 import { PushEnable } from "@/components/push-enable";
+import { AppUpdate } from "@/components/app-update";
 
 export const Route = createFileRoute("/app/")({ component: Page });
 
@@ -32,6 +33,7 @@ function Page() {
         <h1 className="mt-1 font-display text-4xl leading-none">{hi}</h1>
         <p className="mt-2 text-sm text-muted">{name || "Feld"}</p>
       </div>
+      <AppUpdate />
       <div className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3 gold-hairline">
         <p className="text-sm">Schicht</p>
         <WorkShift />
