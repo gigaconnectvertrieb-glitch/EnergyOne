@@ -314,7 +314,7 @@ export function FieldRouter({ center }: { center: { lat: number; lng: number } }
             <Button
               onClick={() =>
                 nav({
-                  to: "/portal/auftraege/neu",
+                  to: "/app/abschluss",
                   search: { street: obj.street, house, zip: obj.zip, city: obj.city },
                 })
               }
