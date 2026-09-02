@@ -9,6 +9,7 @@ import { NettoBrutto } from "@/components/netto-brutto";
 import { vatOn } from "@/lib/steuer";
 import { eur } from "@/lib/utils";
 import { deBankFromIban } from "@/lib/iban";
+import { cacheTariffs, isOffline, queueContract, readCachedTariffs } from "@/lib/offline-queue";
 
 export type CapturePre = { street?: string; house?: string; zip?: string; city?: string };
 
@@ -91,8 +92,15 @@ export function ContractCapture({
   useEffect(() => {
     const t = window.setTimeout(() => {
       listTariffs({ data: { q, provider, type } })
-        .then(setCatalog)
-        .catch(() => setCatalog({ providers: [], items: [] }));
+        .then((rows) => {
+          setCatalog(rows);
+          void cacheTariffs(rows);
+        })
+        .catch(async () => {
+          const cached = await readCachedTariffs<Awaited<ReturnType<typeof listTariffs>>>();
+          if (cached) setCatalog(cached);
+          else setCatalog({ providers: [], items: [] });
+        });
     }, 180);
     return () => window.clearTimeout(t);
   }, [q, provider, type]);
@@ -144,9 +152,7 @@ export function ContractCapture({
       return;
     }
     setBusy(true);
-    try {
-      const res = await createContract({
-        data: {
+    const payload = {
           firstName: first,
           lastName: last,
           salutation,
@@ -189,7 +195,16 @@ export function ContractCapture({
           signatureData: full ? sign : undefined,
           scanBase64: scan?.base64,
           scanName: scan?.name,
-        },
+    };
+    try {
+      if (isOffline()) {
+        await queueContract(payload);
+        toast.success("Im Funkloch gespeichert. Geht raus, sobald Netz da ist.");
+        if (afterTo === "app") nav({ to: "/app/bilanz" });
+        return;
+      }
+      const res = await createContract({
+        data: payload,
       });
       toast.success(
         parked
@@ -203,7 +218,13 @@ export function ContractCapture({
       if (afterTo === "app") nav({ to: "/app/bilanz" });
       else nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+      try {
+        await queueContract(payload);
+        toast.success("Kein Netz. Auftrag liegt auf dem Gerät und wird nachgeschickt.");
+        if (afterTo === "app") nav({ to: "/app/bilanz" });
+      } catch {
+        toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+      }
     } finally {
       setBusy(false);
     }

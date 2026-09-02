@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { CalendarDays, ListChecks, Map, Wallet } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
 import { GoalStrip } from "@/components/goal-card";
+import { OfflineBar } from "@/components/offline-bar";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -34,6 +36,9 @@ const TABS = [
 function AppShell() {
   const { user, isPending } = useCurrentUserState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }, []);
   if (pathname.startsWith("/app/login")) return <Outlet />;
   if (isPending) return <div className="grid min-h-dvh place-items-center bg-bg text-muted">Laden…</div>;
   if (!user) return <RedirectToSignIn to="/app/login" />;
@@ -47,6 +52,9 @@ function AppShell() {
         </Link>
       </header>
       {pathname.startsWith("/app/mehr") ? null : <GoalStrip />}
+      <div className="px-4 pt-2">
+        <OfflineBar />
+      </div>
       <main className="px-4 pb-24 pt-3">
         <Outlet />
       </main>
