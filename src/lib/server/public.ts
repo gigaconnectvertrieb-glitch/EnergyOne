@@ -276,6 +276,10 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
     previousCustomerNo?: string;
     meter?: string;
     kuendigen?: boolean;
+    iban?: string;
+    bankOwner?: string;
+    sepa?: boolean;
+    kind?: string;
   }) => d)
   .handler(async ({ data }) => {
     if (!data.consent) throw new Error("Bitte Datenschutz zustimmen.");
@@ -330,20 +334,44 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
         ${data.city.trim()}, ${JSON.stringify({ web: true, kind: data.kind || "privat" })}::jsonb
       )
     `;
+    const { optionalIban } = await import("@/lib/iban");
+    const iban = optionalIban(data.iban);
     await db`
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh,
         commission_rate, commission_amount, commission_stufe,
         agency_amount, advisor_amount, margin_amount,
-        privacy_confirmed, source, notes, previous_provider, meter_number
+        privacy_confirmed, sepa_confirmed, source, notes, previous_provider, meter_number,
+        bank_iban, bank_owner
       ) values (
         ${contractId}, ${customerId}, ${owner.user_id}, ${String(tariffRow.type)}, ${String(tariffRow.id)},
-        'erfasst', ${kwh}, ${amount}, ${amount}, 13,
+        'uebermittelt', ${kwh}, ${amount}, ${amount}, 13,
         ${amount}, ${amount}, 0,
-        true, 'e1_web', ${data.kuendigen ? `Website · Kündigung ${data.previousProvider || "Altanbieter"} vorbereitet` : "Website-Buchung · Marge komplett Gründer"},
-        ${data.previousProvider?.trim() || null}, ${data.meter?.trim() || null}
+        true, ${Boolean(data.sepa && iban)}, 'e1_web',
+        ${data.kuendigen ? `Website gebucht · Kündigung ${data.previousProvider || "Altanbieter"}` : "Website gebucht · Marge komplett Gründer"},
+        ${data.previousProvider?.trim() || null}, ${data.meter?.trim() || null},
+        ${iban || null}, ${data.bankOwner?.trim() || `${data.firstName} ${data.lastName}`.trim()}
       )
     `;
+    await db`
+      insert into status_history (id, contract_id, old_status, new_status, changed_by, comment)
+      values (${nid()}, ${contractId}, null, ${"uebermittelt"}, ${owner.user_id}, ${"Website-Abschluss gebucht"})
+    `;
+    try {
+      const { notify } = await import("./helpers");
+      const admins = await db<{ user_id: string }>`select user_id from profiles where role = 'super_admin'`;
+      for (const a of admins) {
+        await notify(db, {
+          userId: a.user_id,
+          type: "auftrag",
+          title: "Website-Abschluss",
+          message: `${data.firstName} ${data.lastName} · ${String(tariffRow.name)} · ${amount.toFixed(2)} €`,
+          link: `/portal/auftraege/${contractId}`,
+        });
+      }
+    } catch {
+      /* */
+    }
     if (data.kuendigen) {
       try {
         const { kuendigungLines } = await import("@/lib/kuendigung");

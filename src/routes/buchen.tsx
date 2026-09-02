@@ -29,6 +29,8 @@ function Page() {
   const [prevNo, setPrevNo] = useState("");
   const [meter, setMeter] = useState("");
   const [kuendigen, setKuendigen] = useState(true);
+  const [iban, setIban] = useState("");
+  const [sepa, setSepa] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -132,6 +134,13 @@ function Page() {
                 <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
               </Field>
             </div>
+            <Field label="IBAN (kann leer bleiben)">
+              <Input value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" />
+            </Field>
+            <label className="flex gap-2 text-sm text-muted">
+              <input type="checkbox" checked={sepa} onChange={(e) => setSepa(e.target.checked)} />
+              SEPA, falls IBAN angegeben
+            </label>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
               Kündigung übernehmen. E1 erzeugt das Schreiben und verschickt es.
@@ -163,6 +172,8 @@ function Page() {
                       previousCustomerNo: prevNo,
                       meter,
                       kuendigen,
+                      iban,
+                      sepa,
                     },
                   });
                   toast.success("Buchung aufgenommen. Mail kommt an info@-Absender.");
