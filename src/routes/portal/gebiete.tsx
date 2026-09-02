@@ -109,16 +109,15 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebiete</h1>
       <p className="mt-2 text-sm text-muted">
-        Stadt suchen, Straßen laden, einem Mitarbeiter aufspielen. Der sieht das Gebiet dann in der Feld-App.
-        Ihr (Orhan, Luca) plant hier — nicht doppelt auf einer zweiten Karte.
+        Orhan spielt PLZ oder Stadt auf und weist zu. Der Mitarbeiter arbeitet die Straßen in der Feld-App ab. Keine zweite Karte.
       </p>
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
-        <Field label="Stadt in Deutschland">
+        <Field label="PLZ oder Stadt">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Köln, Berlin Prenzlauer Berg, Leipzig …"
+            placeholder="68649 oder Köln Nippes"
             autoComplete="off"
           />
         </Field>
@@ -252,6 +251,7 @@ function Page() {
                         ...cityBox,
                         userIds,
                         full: true,
+                        zip: /^\d{5}/.test(place.name) ? place.name.slice(0, 5) : /^\d{5}$/.test(q.trim()) ? q.trim() : undefined,
                       },
                     });
                     toast.success(`${res.houses || res.streets} Adressen geloggt`);

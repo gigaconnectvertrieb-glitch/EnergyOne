@@ -58,6 +58,7 @@ export const importCityPlan = createServerFn({ method: "POST" })
     userIds?: string[];
     corners?: Array<{ lat: number; lng: number }>;
     full?: boolean;
+    zip?: string;
   }) => d)
   .handler(async ({ context, data }) => {
     const db = await sql();
@@ -85,7 +86,9 @@ export const importCityPlan = createServerFn({ method: "POST" })
           west: data.west,
           east: data.east,
         });
-    const houses = zone.houses.filter((h) => (ring.length >= 3 ? pointInPolygon(h, ring) : true));
+    const housesRaw = zone.houses.filter((h) => (ring.length >= 3 ? pointInPolygon(h, ring) : true));
+    const zip = (data.zip || "").replace(/\D/g, "").slice(0, 5);
+    const houses = zip ? housesRaw.filter((h) => !h.zip || h.zip === zip) : housesRaw;
     const streets = zone.streets.filter((s) => (ring.length >= 3 ? pointInPolygon(s, ring) : true));
     if (!houses.length && !streets.length) {
       throw new Error("Keine Straßen oder Hausnummern in diesem Ausschnitt. Zone enger zeichnen.");
@@ -136,7 +139,7 @@ export const importCityPlan = createServerFn({ method: "POST" })
     for (const h of houses.length ? houses : []) {
       await db`
         insert into field_doors (id, territory_id, street, house, zip, city, lat, lng, note, status)
-        values (${nid()}, ${terId}, ${h.street}, ${h.house}, ${h.zip || ""}, ${data.city}, ${h.lat}, ${h.lng}, ${"OSM"}, ${"offen"})
+        values (${nid()}, ${terId}, ${h.street}, ${h.house}, ${h.zip || zip}, ${data.city}, ${h.lat}, ${h.lng}, ${"OSM"}, ${"offen"})
       `;
     }
     if (!houses.length) {

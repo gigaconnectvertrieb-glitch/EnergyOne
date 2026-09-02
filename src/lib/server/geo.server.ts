@@ -43,27 +43,36 @@ async function fetchJson(url: string | URL, init: RequestInit, err: string) {
 export async function nominatimPlaces(query: string): Promise<PlaceHit[]> {
   const q = query.trim();
   if (q.length < 2) return [];
+  const zip = /^\d{5}$/.test(q);
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("countrycodes", "de");
   url.searchParams.set("limit", "8");
-  url.searchParams.set("q", q);
+  if (zip) {
+    url.searchParams.set("postalcode", q);
+    url.searchParams.set("country", "de");
+  } else {
+    url.searchParams.set("q", q);
+  }
   const rows = (await fetchJson(url, {}, "Städtesuche gerade nicht erreichbar.")) as Array<{
     lat: string;
     lon: string;
     display_name: string;
     osm_id?: number;
     boundingbox?: string[];
-    address?: { city?: string; town?: string; village?: string; state?: string; suburb?: string };
+    address?: { city?: string; town?: string; village?: string; state?: string; suburb?: string; postcode?: string };
   }>;
   return rows.map((r) => {
     const bb = r.boundingbox || [];
     const lat = asNum(r.lat);
     const lng = asNum(r.lon);
-    const box = bboxAround(lat, lng, 2.4);
+    const box = bboxAround(lat, lng, zip ? 1.6 : 2.4);
+    const name = zip
+      ? `${r.address?.postcode || q} ${r.address?.suburb || r.address?.city || r.address?.town || r.address?.village || ""}`.trim()
+      : r.address?.suburb || r.address?.city || r.address?.town || r.address?.village || q;
     return {
-      name: r.address?.suburb || r.address?.city || r.address?.town || r.address?.village || q,
+      name,
       state: r.address?.state || "Deutschland",
       lat,
       lng,
