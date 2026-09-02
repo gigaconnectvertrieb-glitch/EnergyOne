@@ -13,6 +13,8 @@ import { cacheTariffs, isOffline, queueContract, readCachedTariffs } from "@/lib
 
 export type CapturePre = { street?: string; house?: string; zip?: string; city?: string };
 
+const DRAFT = "e1_auftrag_entwurf";
+
 export function ContractCapture({
   afterTo,
   pre,
@@ -77,6 +79,50 @@ export function ContractCapture({
   const [step, setStep] = useState(1);
   const [lockOn, setLockOn] = useState(true);
   const [lockPw, setLockPw] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT);
+      if (!raw) return;
+      const d = JSON.parse(raw) as Record<string, string>;
+      if (d.first) setFirst(d.first);
+      if (d.last) setLast(d.last);
+      if (d.salutation) setSalutation(d.salutation);
+      if (d.birth) setBirth(d.birth);
+      if (d.landline) setLandline(d.landline);
+      if (d.mobile) setMobile(d.mobile);
+      if (d.email) setEmail(d.email);
+      if (!start.street && d.street) setStreet(d.street);
+      if (!start.house && d.house) setHouse(d.house);
+      if (!start.zip && d.zip) setZip(d.zip);
+      if (!start.city && d.city) setCity(d.city);
+      if (d.providerOld) setProviderOld(d.providerOld);
+      if (d.kwh) setKwh(d.kwh);
+      if (d.tariffId) setTariffId(d.tariffId);
+      if (d.iban) setIban(d.iban);
+      if (d.bankOwner) setBankOwner(d.bankOwner);
+      if (d.meter) setMeter(d.meter);
+    } catch {
+      /* */
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(
+          DRAFT,
+          JSON.stringify({
+            first, last, salutation, birth, landline, mobile, email,
+            street, house, zip, city, providerOld, kwh, tariffId, iban, bankOwner, meter,
+          }),
+        );
+      } catch {
+        /* voll */
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [first, last, salutation, birth, landline, mobile, email, street, house, zip, city, providerOld, kwh, tariffId, iban, bankOwner, meter]);
 
   useEffect(() => {
     bootstrapMe()
@@ -203,6 +249,11 @@ export function ContractCapture({
     try {
       if (isOffline()) {
         await queueContract(payload);
+        try {
+          localStorage.removeItem(DRAFT);
+        } catch {
+          /* */
+        }
         toast.success("Im Funkloch gespeichert. Geht raus, sobald Netz da ist.");
         if (afterTo === "app") nav({ to: "/app" });
         return;
@@ -210,6 +261,11 @@ export function ContractCapture({
       const res = await createContract({
         data: payload,
       });
+      try {
+        localStorage.removeItem(DRAFT);
+      } catch {
+        /* */
+      }
       toast.success(
         parked
           ? res.margin
