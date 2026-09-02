@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listRegions, listStaffFlags, listUsers, setStaffFlag, updateUser } from "@/lib/server/api";
-import { createStaff, deleteStaff } from "@/lib/server/staff-auth";
+import { createStaff, deleteStaff, issueStaffMaster } from "@/lib/server/staff-auth";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/e1";
 import { STAFF_UNLOCKS } from "@/lib/features";
 import { MAIL_DOMAIN, workspaceLocalPart } from "@/lib/mail";
@@ -20,6 +20,7 @@ function Page() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("vertrieb");
   const [issued, setIssued] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ id: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -196,6 +197,30 @@ function Page() {
                   <option value="inactive">Inaktiv · raus</option>
                   <option value="blocked">Gesperrt</option>
                 </Select>
+                {flash?.id === u.user_id ? (
+                  <p className="mt-2 font-mono text-xl tracking-[0.2em] text-gold">{flash.key}</p>
+                ) : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const r = await issueStaffMaster({ data: { userId: u.user_id } });
+                      setFlash({ id: u.user_id, key: r.key });
+                      try {
+                        await navigator.clipboard.writeText(r.key);
+                      } catch {
+                        /* */
+                      }
+                      toast.success("5 Sekunden sichtbar, dann weg.");
+                      window.setTimeout(() => setFlash((cur) => (cur?.id === u.user_id ? null : cur)), 5000);
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Nicht erzeugt");
+                    }
+                  }}
+                >
+                  Generalschlüssel
+                </Button>
                 {u.role !== "super_admin" && (u.status === "active" || u.status === "pending") ? (
                   <Button
                     variant="outline"

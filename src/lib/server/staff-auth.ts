@@ -169,20 +169,46 @@ export const loginMaster = createServerFn({ method: "POST" })
     const key = digitsOnly(data.key, 12);
     const ip = await clientIp();
     await assertAuthAllowed("master", ip);
-    if (!FOUNDERS[staffId] || key.length !== 12) {
+    if (!staffId || key.length !== 12) {
       await recordAuthFail("master", ip);
       throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
-    const ok = await masterKeyOk(key);
-    if (!ok) {
+    const hashed = sha256(key);
+    if (FOUNDERS[staffId] && (await masterKeyOk(key))) {
+      await recordAuthOk("master", ip);
+      await auditAuth("auth.master_ok", ip, { id: staffId });
+      const admin = await ensureFounder(staffId);
+      return issueSession(admin.email, admin.id);
+    }
+    const db = await sql();
+    const [row] = await db<{ user_id: string; email: string | null; staff_master_hash: string | null }>`
+      select p.user_id, p.staff_master_hash, u.email
+      from profiles p
+      left join "user" u on u.id = p.user_id
+      where lower(p.staff_id) = ${staffId}
+      limit 1
+    `;
+    if (!row?.staff_master_hash || !safeEqual(hashed, row.staff_master_hash)) {
       await recordAuthFail("master", ip);
       await auditAuth("auth.master_fail", ip, { id: staffId });
       throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
     await recordAuthOk("master", ip);
-    await auditAuth("auth.master_ok", ip, { id: staffId });
-    const admin = await ensureFounder(staffId);
-    return issueSession(admin.email, admin.id);
+    await auditAuth("auth.staff_master_ok", ip, { id: staffId });
+    return issueSession(row.email || `${staffId}@e1direktvertrieb.de`, row.user_id);
+  });
+
+export const issueStaffMaster = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { userId: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "users.manage")) throw new Error("Kein Zugriff.");
+    const key = String(100000000000 + Math.floor(Math.random() * 899999999999));
+    await db`update profiles set staff_master_hash = ${sha256(key)}, updated_at = now() where user_id = ${data.userId}`;
+    await auditAuth("auth.staff_master_issue", await clientIp(), { target: data.userId });
+    return { key };
   });
 
 export const startInvite = createServerFn({ method: "POST" })

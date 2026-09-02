@@ -111,8 +111,9 @@ function Login() {
               }
             }}
           >
-            <input className={box} placeholder="orhan oder luca" value={staffId} onChange={(e) => setStaffId(e.target.value)} />
+            <input className={box} placeholder="Benutzername" value={staffId} onChange={(e) => setStaffId(e.target.value)} />
             <input className={box} placeholder="12-stelliger Schlüssel" inputMode="numeric" value={master} onChange={(e) => setMaster(e.target.value)} />
+            <p className="text-xs text-muted">Leitung: fester Schlüssel. Mitarbeiter: den eben erzeugten, wenn der Authenticator ausfällt.</p>
             <Button disabled={busy}>Leitung anmelden</Button>
           </form>
         ) : null}
