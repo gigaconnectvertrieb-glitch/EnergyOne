@@ -4,6 +4,7 @@ import { bootstrapMe, listNotifications } from "@/lib/server/api";
 import { fieldBalance, getFieldHome } from "@/lib/server/field-api";
 import { eur } from "@/lib/utils";
 import { WorkShift } from "@/components/work-shift";
+import { PushEnable } from "@/components/push-enable";
 
 export const Route = createFileRoute("/app/")({ component: Page });
 
@@ -35,6 +36,7 @@ function Page() {
         <p className="text-sm">Schicht</p>
         <WorkShift />
       </div>
+      <PushEnable />
       {home?.pending ? (
         <Link to="/app/karte" className="rounded-2xl bg-gold px-4 py-4 text-sm font-medium text-bg">
           Gebiet bereit: {home.pending.name} — öffnen
