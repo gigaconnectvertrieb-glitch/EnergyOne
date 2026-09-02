@@ -43,10 +43,7 @@ function Login() {
       </div>
       <div className="grid place-items-center px-6 py-12">
       <div className="w-full max-w-sm">
-        <div className="lg:hidden">
-          <BrandLockup />
-        </div>
-        <BrandLockup />
+        <BrandLockup className="mx-auto mb-2 max-h-24 w-auto" />
         <p className="mt-6 text-[11px] uppercase tracking-[0.28em] text-gold">E1 Tour</p>
         <h1 className="mt-2 font-display text-4xl">Anmelden</h1>
         <p className="mt-3 text-sm text-muted">Mitarbeiter: Benutzername und Authenticator. Leitung: Generalschlüssel.</p>
