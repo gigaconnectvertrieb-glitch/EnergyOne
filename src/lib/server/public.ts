@@ -372,11 +372,20 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
         const { gmailAppPasswordReady, sendViaAppPassword } = await import("./smtp-gmail.server");
         if (gmailAppPasswordReady()) {
           const sparteName = String(tariffRow.type) === "gas" ? "Gas" : "Strom";
-          const text = [
-            `Kündigung ${sparteName} im Auftrag von ${data.firstName} ${data.lastName}.`,
+          await sendViaAppPassword({
             to: `info@e1direktvertrieb.de, ${data.email.trim()}`,
             subject: `Kündigung Altanbieter · ${data.lastName} · ${data.previousProvider || "Lieferant"}`,
-            text,
+            text: [
+              `Kündigung ${sparteName} im Auftrag von ${data.firstName} ${data.lastName}.`,
+              `Bisheriger Anbieter: ${data.previousProvider || "unbekannt"}`,
+              `Lieferstelle: ${data.street} ${data.house}, ${data.zip} ${data.city}`,
+              data.previousCustomerNo ? `Kundennummer: ${data.previousCustomerNo}` : "",
+              data.meter ? `Zähler: ${data.meter}` : "",
+              "",
+              "Der Kunde hat „Kündigung übernehmen“ gewählt. Schreiben als PDF im Anhang.",
+            ]
+              .filter(Boolean)
+              .join("\n"),
             filename: "Kuendigung-Altanbieter.pdf",
             pdf,
           });
