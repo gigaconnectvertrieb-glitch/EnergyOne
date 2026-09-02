@@ -6,6 +6,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
 import { GoalStrip } from "@/components/goal-card";
 import { OfflineBar } from "@/components/offline-bar";
+import { WorkShift } from "@/components/work-shift";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app")({
@@ -47,9 +48,12 @@ function AppShell() {
       <header className="sticky top-0 z-20 flex h-12 items-center gap-2.5 border-b border-white/5 bg-bg/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <BrandMark className="h-7 w-auto" />
         <p className="font-display text-base tracking-wide text-gold">Feld</p>
-        <Link to="/app/mehr" className="ml-auto text-xs text-muted">
-          Mehr
-        </Link>
+        <div className="ml-auto flex items-center gap-2">
+          <WorkShift />
+          <Link to="/app/mehr" className="text-xs text-muted">
+            Mehr
+          </Link>
+        </div>
       </header>
       {pathname.startsWith("/app/mehr") ? null : <GoalStrip />}
       <div className="px-4 pt-2">

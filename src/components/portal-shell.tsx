@@ -54,6 +54,7 @@ function items(role: Role, flags: Record<string, boolean>) {
     { to: "/portal", label: "Dashboard", icon: LayoutDashboard, show: true },
     { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList, show: true },
     { to: "/portal/gebiete", label: "Gebiete", icon: Map, show: flags.field_routing !== false && can(role, "team.view") },
+    { to: "/portal/standort", label: "Standort", icon: Map, show: can(role, "team.view") },
     { to: "/portal/kunden", label: "Kunden", icon: Users, show: true },
     { to: "/portal/postfach", label: "Postfach", icon: Mail, show: true },
     { to: "/portal/provisionen", label: "Provisionen", icon: Wallet, show: true },
