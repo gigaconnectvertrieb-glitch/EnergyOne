@@ -142,12 +142,12 @@ function Page() {
                 <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
               </Field>
             </div>
-            <Field label="IBAN (kann leer bleiben)">
-              <Input value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" />
+            <Field label="IBAN">
+              <Input value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" required />
             </Field>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={sepa} onChange={(e) => setSepa(e.target.checked)} />
-              SEPA, falls IBAN angegeben
+              SEPA-Lastschrift
             </label>
             <label className="flex gap-2 text-sm text-muted">
               <input type="checkbox" checked={kuendigen} onChange={(e) => setKuendigen(e.target.checked)} />
@@ -160,8 +160,16 @@ function Page() {
             <Button
               disabled={busy}
               onClick={async () => {
-                setBusy(true);
-                try {
+                if (!iban.replace(/\s/g, "")) {
+                  toast.error("IBAN ist auf der Website Pflicht.");
+                  setBusy(false);
+                  return;
+                }
+                if (!sepa) {
+                  toast.error("SEPA bestätigen.");
+                  setBusy(false);
+                  return;
+                }
                   await submitE1WebOrder({
                     data: {
                       tariffId,

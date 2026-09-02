@@ -309,6 +309,10 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
       throw new Error("Adresse unvollständig.");
     }
     if (!Number(data.kwh)) throw new Error("Verbrauch in kWh fehlt.");
+    const { optionalIban } = await import("@/lib/iban");
+    const iban = optionalIban(data.iban);
+    if (!iban) throw new Error("IBAN ist auf der Website Pflicht.");
+    if (!data.sepa) throw new Error("SEPA-Lastschrift auf der Website bestätigen.");
     const db = await sql();
     const [tariff] = await db<Record<string, unknown>>`
       select * from tariffs where id = ${data.tariffId}
@@ -356,8 +360,6 @@ export const submitE1WebOrder = createServerFn({ method: "POST" })
         ${data.city.trim()}, ${JSON.stringify({ web: true, kind: data.kind || "privat" })}::jsonb
       )
     `;
-    const { optionalIban } = await import("@/lib/iban");
-    const iban = optionalIban(data.iban);
     await db`
       insert into contracts (
         id, customer_id, user_id, type, tariff_id, status, consumption_kwh,
