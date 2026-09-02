@@ -109,9 +109,7 @@ export function PublicShell({ children, variant }: { children: ReactNode; varian
           <div>
             <Wordmark />
             <p className="mt-3 max-w-xs text-sm text-muted">
-              {firmen
-                ? "Geschäftskundenbetreuung für Strom und Gas. Direkter Draht zur Geschäftsführung."
-                : "Energieberatung für Privathaushalte. Persönlich, vor Ort."}
+              Energieberatung für Privathaushalte und Unternehmen. Persönlich, vor Ort.
             </p>
           </div>
           <div className="text-sm">
