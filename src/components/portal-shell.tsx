@@ -17,6 +17,7 @@ import {
   BarChart3,
   Calculator,
   ClipboardList,
+  ListChecks,
   UserRound,
   Menu,
 } from "lucide-react";
