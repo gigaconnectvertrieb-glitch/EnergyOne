@@ -422,6 +422,7 @@ export const syncMailbox = createServerFn({ method: "POST" })
     const mailbox = data.mailbox.replace(/@.*$/, "");
     assertCanRead(me, mailbox, boxes);
     const { gmailListRecent, folderFromLabels } = await import("./gmail.server");
+    const { mailboxLocalFromRecipients } = await import("@/lib/mailbox");
     const result = await gmailListRecent(mailbox);
     if (!result.ok) {
       await db`
@@ -431,11 +432,14 @@ export const syncMailbox = createServerFn({ method: "POST" })
       `;
       throw new Error(result.error || "Gmail-Sync fehlgeschlagen");
     }
+    const readable = new Set(boxes.map((b) => b.local_part));
     let synced = 0;
     for (const msg of result.messages) {
       const folder = folderFromLabels(msg.label_ids, false);
+      const target = mailboxLocalFromRecipients(msg.to_addresses, msg.cc_addresses);
+      const dest = readable.has(target) ? target : mailbox;
       const out = await ingestMessage(db, {
-        mailbox,
+        mailbox: dest,
         direction: msg.label_ids.includes("SENT") ? "out" : "in",
         from_address: msg.from_address,
         from_name: msg.from_name,
