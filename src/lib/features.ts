@@ -34,10 +34,10 @@ export const DEFAULT_STAFF_FLAGS: Record<string, boolean> = {
   partner_module: false,
   structure_commissions: false,
   white_label: false,
-  digital_signature: false,
-  phase2_own_tariffs: false,
-  phase2_self_service: false,
-  phase2_market_comm: false,
+  digital_signature: true,
+  phase2_own_tariffs: true,
+  phase2_self_service: true,
+  phase2_market_comm: true,
   full_contract: false,
 };
 

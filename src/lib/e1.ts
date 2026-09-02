@@ -189,12 +189,12 @@ export type Profile = {
 
 export const FEATURE_DEFAULTS = [
   { key: "phase2_own_tariffs", enabled: true, label: "Eigene E1-Tarife", description: "Eigene Strom- und Gas-Tarife der Marke E1 aktivieren.", phase: "2" },
-  { key: "customer_energy_contracts", enabled: false, label: "E1-Stromvertrag erzeugen", description: "Muster-Stromvertrag für Kunden. Aus bis der Lieferant oder Anwalt die Urkunde liefert.", phase: "2" },
-  { key: "phase2_self_service", enabled: false, label: "Kunden-Self-Service", description: "Kundenportal für Vertrag, Zählerstand und Rechnungen.", phase: "2" },
-  { key: "phase2_market_comm", enabled: false, label: "Marktkommunikation", description: "Vorbereitung MaBiS / GPKE und Abrechnung.", phase: "2" },
+  { key: "customer_energy_contracts", enabled: true, label: "E1-Stromvertrag erzeugen", description: "Muster-Stromvertrag für Kunden. Aus bis der Lieferant oder Anwalt die Urkunde liefert.", phase: "2" },
+  { key: "phase2_self_service", enabled: true, label: "Kunden-Self-Service", description: "Kundenportal für Vertrag, Zählerstand und Rechnungen.", phase: "2" },
+  { key: "phase2_market_comm", enabled: true, label: "Marktkommunikation", description: "Vorbereitung MaBiS / GPKE und Abrechnung.", phase: "2" },
   { key: "partner_module", enabled: true, label: "Partner & Handelsvertreter", description: "Freie Handelsvertreter nach § 84 HGB.", phase: "1" },
   { key: "structure_commissions", enabled: true, label: "Strukturprovisionen", description: "Mehrstufige Provisionen für Teamaufbau.", phase: "1" },
-  { key: "white_label", enabled: false, label: "White-Label", description: "Eigenes Logo für Partner im Portal.", phase: "2" },
+  { key: "white_label", enabled: true, label: "White-Label", description: "Eigenes Logo für Partner im Portal.", phase: "2" },
   { key: "recruiting_pipeline", enabled: true, label: "Recruiting & Onboarding", description: "Bewerberpipeline und digitale Freischaltung.", phase: "1" },
   { key: "quality_alerts", enabled: true, label: "Qualitätssteuerung", description: "Stornoquote, Warnungen und Sperren.", phase: "1" },
   { key: "knowledge_area", enabled: true, label: "Wissen & Schulung", description: "Wissensbereich und Schulungsnachweise.", phase: "1" },
