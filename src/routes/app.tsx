@@ -11,11 +11,11 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/app")({
   head: () => ({
     meta: [
-      { title: "E1 Feld" },
+      { title: "E1 Tour" },
       { name: "theme-color", content: "#0B0D12" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { name: "apple-mobile-web-app-title", content: "E1 Feld" },
+      { name: "apple-mobile-web-app-title", content: "E1 Tour" },
       { name: "mobile-web-app-capable", content: "yes" },
     ],
     links: [
@@ -46,7 +46,7 @@ function AppShell() {
     <div className="min-h-dvh bg-bg text-ink">
       <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-white/6 bg-[#07080c] px-4 pt-[env(safe-area-inset-top)]">
         <BrandMark className="h-7 w-auto" />
-        <p className="hidden font-display text-[15px] text-gold sm:block">E1 Feld</p>
+        <p className="hidden font-display text-[15px] text-gold sm:block">E1 Tour</p>
         <nav className="ml-4 hidden items-center gap-1 md:flex">
           {TABS.map((t) => {
             const on = "exact" in t && t.exact ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);

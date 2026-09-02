@@ -2,7 +2,7 @@
   "name": "e1-feld",
   "private": true,
   "version": "1.0.0",
-  "description": "E1 Feld für iOS und Android",
+  "description": "E1 Tour für iOS und Android",
   "scripts": {
     "sync": "npx cap sync",
     "android": "npx cap open android",

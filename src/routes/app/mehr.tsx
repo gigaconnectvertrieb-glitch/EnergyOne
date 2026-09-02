@@ -18,7 +18,7 @@ function Page() {
   }, []);
   return (
     <div>
-      <h1 className="font-display text-3xl">E1 Feld</h1>
+      <h1 className="font-display text-3xl">E1 Tour</h1>
       <p className="mt-2 text-sm text-muted">
         {standalone
           ? "App ist auf dem Home-Bildschirm."

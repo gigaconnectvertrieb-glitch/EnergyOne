@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">E1 Feld</string>
-    <string name="title_activity_main">E1 Feld</string>
+    <string name="app_name">E1 Tour</string>
+    <string name="title_activity_main">E1 Tour</string>
     <string name="package_name">de.e1direktvertrieb.feld</string>
     <string name="custom_url_scheme">de.e1direktvertrieb.feld</string>
 </resources>

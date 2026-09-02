@@ -34,7 +34,7 @@ function Login() {
         <BrandLockup className="mx-auto mb-6 h-24 w-auto" />
         <div className="rounded-3xl bg-surface p-6 gold-hairline">
           <h1 className="font-display text-3xl">Leitung</h1>
-          <p className="mt-2 text-sm text-muted">Nur Orhan und Luca. Mitarbeiter nutzen die Feld-App.</p>
+          <p className="mt-2 text-sm text-muted">Nur Orhan und Luca. Mitarbeiter nutzen E1 Tour.</p>
           <form className="mt-5 space-y-4" onSubmit={onAdmin} autoComplete="off">
             <label className="block text-xs text-muted">
               Benutzername

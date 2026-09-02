@@ -6,7 +6,7 @@ import { BrandLockup } from "@/components/logo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/login")({
-  head: () => ({ meta: [{ title: "E1 Feld · Login" }] }),
+  head: () => ({ meta: [{ title: "E1 Tour · Login" }] }),
   component: Login,
 });
 
@@ -47,7 +47,7 @@ function Login() {
           <BrandLockup />
         </div>
         <BrandLockup />
-        <p className="mt-6 text-[11px] uppercase tracking-[0.28em] text-gold">Feld-App</p>
+        <p className="mt-6 text-[11px] uppercase tracking-[0.28em] text-gold">E1 Tour</p>
         <h1 className="mt-2 font-display text-4xl">Anmelden</h1>
         <p className="mt-3 text-sm text-muted">Mitarbeiter: Benutzername und Authenticator. Leitung: Generalschlüssel.</p>
         <div className="mt-6 flex gap-2 text-xs">
@@ -79,7 +79,7 @@ function Login() {
           >
             <input className={box} placeholder="Benutzername" value={staffId} onChange={(e) => setStaffId(e.target.value)} autoCapitalize="none" />
             <input className={box} placeholder="Authenticator" inputMode="numeric" value={totp} onChange={(e) => setTotp(e.target.value)} />
-            <Button disabled={busy}>{busy ? "…" : "In die Feld-App"}</Button>
+            <Button disabled={busy}>{busy ? "…" : "In E1 Tour"}</Button>
           </form>
         ) : null}
         {mode === "reg" ? (

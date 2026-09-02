@@ -1,6 +1,6 @@
 {
-  "name": "E1 Feld",
-  "short_name": "E1 Feld",
+  "name": "E1 Tour",
+  "short_name": "E1 Tour",
   "description": "Gebiet, Route und Nachlauf für E1 Direktvertrieb.",
   "start_url": "/app",
   "scope": "/app",

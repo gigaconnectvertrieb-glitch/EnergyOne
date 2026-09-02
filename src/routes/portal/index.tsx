@@ -69,7 +69,7 @@ function Dashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/app" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-              Feld-App
+              E1 Tour
             </Link>
             {can(data.me.role, "team.view") ? (
               <Link to="/portal/gebiete" className="rounded-xl px-4 py-3 text-sm gold-hairline">
@@ -159,7 +159,7 @@ function Dashboard() {
           Vertrag eingeben
         </Link>
         <Link to="/app" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-          Feld-App
+          E1 Tour
         </Link>
         <Link to="/portal/standort" className="rounded-xl px-4 py-3 text-sm gold-hairline">
           Standort Feld

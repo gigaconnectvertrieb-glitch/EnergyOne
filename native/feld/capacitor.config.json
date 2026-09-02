@@ -1,6 +1,6 @@
 {
   "appId": "de.e1direktvertrieb.feld",
-  "appName": "E1 Feld",
+  "appName": "E1 Tour",
   "webDir": "www",
   "server": {
     "url": "https://e1direktvertrieb.de/app",
