@@ -49,11 +49,11 @@ export async function dropQueued(id: string) {
   });
 }
 
-export async function cacheTariffs(rows: unknown) {
+export async function cacheTariffs(data: unknown) {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(TARIFFS, "readwrite");
-    tx.objectStore(TARIFFS).put(rows, "catalog");
+    tx.objectStore(TARIFFS).put(data, "list");
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -63,7 +63,7 @@ export async function readCachedTariffs<T>() {
   const db = await openDb();
   return new Promise<T | null>((resolve, reject) => {
     const tx = db.transaction(TARIFFS, "readonly");
-    const req = tx.objectStore(TARIFFS).get("catalog");
+    const req = tx.objectStore(TARIFFS).get("list");
     req.onsuccess = () => resolve((req.result as T) || null);
     req.onerror = () => reject(req.error);
   });
@@ -71,4 +71,35 @@ export async function readCachedTariffs<T>() {
 
 export function isOffline() {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+export async function reopenQueued(id: string) {
+  const all = await listQueued();
+  const hit = all.find((q) => q.id === id) || all[0];
+  if (!hit) return false;
+  const d = hit.data;
+  try {
+    localStorage.setItem(
+      "e1_auftrag_entwurf",
+      JSON.stringify({
+        first: d.firstName,
+        last: d.lastName,
+        street: d.street,
+        house: d.houseNumber,
+        zip: d.zip,
+        city: d.city,
+        kwh: String(d.consumptionKwh || ""),
+        tariffId: d.tariffId,
+        iban: d.iban || "",
+        bankOwner: d.bankOwner || "",
+        email: d.email || "",
+        mobile: d.phone || "",
+        providerOld: d.previousProvider || "",
+        meter: d.meterNumber || "",
+      }),
+    );
+  } catch {
+    /* */
+  }
+  return true;
 }

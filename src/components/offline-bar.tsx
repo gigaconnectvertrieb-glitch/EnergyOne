@@ -1,8 +1,10 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listQueued } from "@/lib/offline-queue";
+import { listQueued, reopenQueued } from "@/lib/offline-queue";
 import { flushOfflineContracts } from "@/lib/offline-sync";
 
 export function OfflineBar() {
+  const nav = useNavigate();
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [left, setLeft] = useState(0);
 
@@ -35,8 +37,16 @@ export function OfflineBar() {
 
   if (online && left === 0) return null;
   return (
-    <p className="rounded-xl bg-surface px-3 py-2 text-center text-xs text-gold">
-      {online ? `${left} Abschluss${left === 1 ? "" : "e"} werden nachgeschickt` : "Kein Netz. Aufträge bleiben auf dem Gerät."}
-    </p>
+    <button
+      type="button"
+      className="w-full rounded-xl bg-surface px-3 py-2 text-center text-xs text-gold"
+      onClick={async () => {
+        const ok = await reopenQueued("");
+        if (ok) nav({ to: "/app/abschluss" });
+        else nav({ to: "/app/bilanz" });
+      }}
+    >
+      {online ? `${left} Abschluss${left === 1 ? "" : "e"} werden nachgeschickt · antippen` : "Kein Netz. Aufträge bleiben auf dem Gerät."}
+    </button>
   );
 }

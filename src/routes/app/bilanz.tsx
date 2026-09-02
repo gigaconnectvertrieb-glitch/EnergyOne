@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { fieldBalance } from "@/lib/server/field-api";
-import { listQueued } from "@/lib/offline-queue";
+import { listQueued, reopenQueued } from "@/lib/offline-queue";
 import { flushOfflineContracts } from "@/lib/offline-sync";
 import { eur } from "@/lib/utils";
 
@@ -40,8 +40,17 @@ function Page() {
           <ul className="mt-2 grid gap-1 text-muted">
             {queued.map((q) => (
               <li key={q.id}>
-                {q.data.firstName} {q.data.lastName} · {q.data.zip} {q.data.city}
-                {q.data.parked ? " · geparkt" : " · buchen inkl. New Sales"}
+                <button
+                  type="button"
+                  className="text-left"
+                  onClick={async () => {
+                    await reopenQueued(q.id);
+                    window.location.assign("/app/abschluss");
+                  }}
+                >
+                  {q.data.firstName} {q.data.lastName} · {q.data.zip} {q.data.city}
+                  {q.data.parked ? " · geparkt" : " · wartet aufs Netz"}
+                </button>
               </li>
             ))}
           </ul>
