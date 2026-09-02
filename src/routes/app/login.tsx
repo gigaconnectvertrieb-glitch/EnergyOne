@@ -103,7 +103,7 @@ function Login() {
               setBusy(true);
               try {
                 await loginMaster({ data: { staffId, key: master.replace(/\D+/g, "") } });
-                await go();
+                nav({ to: "/portal" });
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : "Schlüssel ungültig");
               } finally {
@@ -117,9 +117,12 @@ function Login() {
             <Button disabled={busy}>Leitung anmelden</Button>
           </form>
         ) : null}
-        <Link to="/login" className="mt-8 block text-center text-xs text-muted">
+        <a href="/login" className="mt-8 block text-center text-xs text-gold">
           Zum Büro-Portal
-        </Link>
+        </a>
+        <a href="/portal" className="mt-2 block text-center text-xs text-muted">
+          Direkt ins Portal
+        </a>
       </div>
     </main>
   );
