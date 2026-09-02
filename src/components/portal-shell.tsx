@@ -204,21 +204,21 @@ export function PortalShell() {
       </div>
 
       <Link
-        to="/portal/auftraege/neu"
+        to="/app"
         className="fixed bottom-20 right-4 z-40 grid size-14 place-items-center rounded-full bg-gold text-bg shadow-lg lg:bottom-8 lg:right-8"
-        aria-label="Kurz erfassen"
+        aria-label="Feld-App"
       >
-        <Plus className="size-7" />
+        <Map className="size-7" />
       </Link>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface/95 backdrop-blur lg:hidden pb-[env(safe-area-inset-bottom)]">
         {[
           { to: "/portal", label: "Home", icon: LayoutDashboard },
           { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList },
-          { to: "/portal/auftraege/neu", label: "Neu", icon: Plus },
-          can(me.profile.role, "team.view")
-            ? { to: "/portal/gebiete", label: "Gebiete", icon: Map }
-            : { to: "/app", label: "Feld", icon: Map },
+          { to: "/app", label: "Feld", icon: Map },
+          ...(can(me.profile.role, "team.view")
+            ? [{ to: "/portal/gebiete", label: "Gebiete", icon: Map }]
+            : []),
           { to: "/portal/provisionen", label: "Provision", icon: Wallet },
         ].map((i) => (
           <Link

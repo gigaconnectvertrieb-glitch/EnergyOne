@@ -155,8 +155,8 @@ function Dashboard() {
         </div>
       </div>
       <div className="mt-6 flex flex-wrap gap-3">
-        <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-          Eintrag
+        <Link to="/app/abschluss" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
+          Feld-App · Abschluss
         </Link>
         <Link to="/app" className="rounded-xl px-4 py-3 text-sm gold-hairline">
           Feld-App

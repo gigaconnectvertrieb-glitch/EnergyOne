@@ -162,7 +162,7 @@ function Page() {
                     onClick={() => {
                       const first = s.houses[0];
                       nav({
-                        to: "/portal/auftraege/neu",
+                        to: "/app/abschluss",
                         search: { street: s.street, house: first?.house || "", zip: "", city: pack?.name || "" },
                       });
                     }}
