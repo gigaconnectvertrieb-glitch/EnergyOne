@@ -279,6 +279,7 @@ export function ContractCapture({
       ) : null}
 
       {show(1) ? (
+      <>
       <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Lieferadresse & Vertragspartner</p>
         <Field label="Anrede">
@@ -335,9 +336,11 @@ export function ContractCapture({
           </Button>
         ) : null}
       </div>
+      </>
       ) : null}
 
       {show(2) ? (
+      <>
       <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Vergleich</p>
         <Field label="Bisheriger Anbieter">
@@ -473,9 +476,11 @@ export function ContractCapture({
           </Button>
         ) : null}
       </div>
+      </>
       ) : null}
 
       {show(3) || show(4) ? (
+      <>
       <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
         <p className="text-xs uppercase tracking-[0.16em] text-gold">Provision</p>
         {selected ? (
@@ -657,6 +662,7 @@ export function ContractCapture({
         </Button>
         </div>
       </div>
+      </>
       ) : null}
     </div>
   );
