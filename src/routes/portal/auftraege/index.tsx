@@ -55,8 +55,8 @@ function Page() {
           >
             Excel (eine Tabelle)
           </Button>
-          <Link to="/app/abschluss" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-            In der Feld-App aufnehmen
+          <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
+            Vertrag eingeben
           </Link>
         </div>
       </div>

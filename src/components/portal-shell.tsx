@@ -205,9 +205,9 @@ export function PortalShell() {
       </div>
 
       <Link
-        to="/app"
+        to="/portal/auftraege/neu"
         className="fixed bottom-20 right-4 z-40 grid size-14 place-items-center rounded-full bg-gold text-bg shadow-lg lg:bottom-8 lg:right-8"
-        aria-label="Feld-App"
+        aria-label="Vertrag eingeben"
       >
         <Map className="size-7" />
       </Link>

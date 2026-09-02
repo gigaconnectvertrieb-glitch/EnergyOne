@@ -124,16 +124,23 @@ function Login() {
           {mode === "reg" ? (
             <form className="mt-5 space-y-4" onSubmit={onInvite}>
               <label className="block text-xs text-muted">
-                Mitarbeiter-ID
-                <input className={box + " mt-1.5"} name="reg-staff" autoComplete="username" value={staffId} onChange={(e) => setStaffId(e.target.value)} required />
+                5-stellige Mitarbeiter-ID
+                <input className={box + " mt-1.5"} name="reg-staff" inputMode="numeric" autoComplete="username" value={staffId} onChange={(e) => setStaffId(e.target.value.replace(/\D/g, "").slice(0, 5))} required />
               </label>
               <label className="block text-xs text-muted">
-                5-stelliger Code
-                <input className={box + " mt-1.5"} name="reg-code" value={invite} onChange={(e) => setInvite(e.target.value)} required />
+                4-stelliger Invite
+                <input className={box + " mt-1.5"} name="reg-code" inputMode="numeric" value={invite} onChange={(e) => setInvite(e.target.value.replace(/\D/g, "").slice(0, 4))} required />
               </label>
               {setup ? (
                 <>
-                  <p className="text-sm text-muted">Hallo {setup.firstName}. Key für Google Authenticator:</p>
+                  <p className="text-sm text-muted">Hallo {setup.firstName}. QR in Google Authenticator scannen oder Key tippen.</p>
+                  <img
+                    alt="QR Google Authenticator"
+                    className="mx-auto rounded-xl bg-white p-2"
+                    width={180}
+                    height={180}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setup.uri)}`}
+                  />
                   <p className="break-all rounded-2xl bg-elevated px-3 py-3 font-mono text-sm text-gold">{setup.secret}</p>
                   <label className="block text-xs text-muted">
                     Code aus der App

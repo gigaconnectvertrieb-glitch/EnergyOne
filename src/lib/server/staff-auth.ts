@@ -16,6 +16,10 @@ import {
   sha256,
 } from "./auth-guard.server";
 
+function fourDigit() {
+  return String(1000 + Math.floor(Math.random() * 9000));
+}
+
 function fiveDigit() {
   return String(10000 + Math.floor(Math.random() * 90000));
 }
@@ -172,11 +176,21 @@ async function ensureFounder(staffId: string) {
 export async function uniqueInviteCode() {
   const db = await sql();
   for (let i = 0; i < 30; i += 1) {
-    const code = fiveDigit();
+    const code = fourDigit();
     const [hit] = await db`select user_id from profiles where invite_code = ${code}`;
     if (!hit) return code;
   }
-  throw new Error("Kein freier Schlüssel. Bitte erneut versuchen.");
+  throw new Error("Kein freier Invite. Bitte erneut versuchen.");
+}
+
+export async function uniqueStaffId() {
+  const db = await sql();
+  for (let i = 0; i < 40; i += 1) {
+    const id = fiveDigit();
+    const [hit] = await db`select user_id from profiles where staff_id = ${id}`;
+    if (!hit) return id;
+  }
+  throw new Error("Keine freie Mitarbeiter-ID.");
 }
 
 export const loginMaster = createServerFn({ method: "POST" })
@@ -232,11 +246,11 @@ export const startInvite = createServerFn({ method: "POST" })
   .validator((d: { staffId: string; code: string }) => d)
   .handler(async ({ data }) => {
     const staffId = staffIdOf(data.staffId);
-    const code = digitsOnly(data.code, 5);
+    const code = digitsOnly(data.code, 4);
     await assertAuthAllowed("invite", staffId || "x");
-    if (!staffId || code.length !== 5) {
+    if (!staffId || staffId.length !== 5 || code.length !== 4) {
       await recordAuthFail("invite", staffId || "x");
-      throw new Error("Mitarbeiter-ID oder Code ungültig.");
+      throw new Error("5-stellige Mitarbeiter-ID und 4-stelligen Invite eingeben.");
     }
     const db = await sql();
     const [row] = await db<{
@@ -276,7 +290,7 @@ export const finishInvite = createServerFn({ method: "POST" })
   .validator((d: { staffId: string; code: string; totp: string }) => d)
   .handler(async ({ data }) => {
     const staffId = staffIdOf(data.staffId);
-    const code = digitsOnly(data.code, 5);
+    const code = digitsOnly(data.code, 4);
     const totp = digitsOnly(data.totp, 6);
     await assertAuthAllowed("invite-totp", staffId || "x");
     const db = await sql();
@@ -354,12 +368,14 @@ export const createStaff = createServerFn({ method: "POST" })
     if (!can(me.role, "users.manage")) throw new Error("Keine Berechtigung.");
     const first = data.firstName.trim();
     const last = data.lastName.trim();
-    const staffId = staffIdOf(data.staffId);
+    const staffId = staffIdOf(data.staffId) || (await uniqueStaffId());
     const role = (ROLES as readonly string[]).includes(data.role || "")
       ? (data.role as Role)
       : "vertrieb";
     if (!first || !last) throw new Error("Name fehlt.");
-    if (!staffId) throw new Error("Mitarbeiter-ID fehlt.");
+    if (!/^\d{5}$/.test(staffId) && staffId !== "orhan" && staffId !== "luca") {
+      throw new Error("Mitarbeiter-ID muss 5 Ziffern sein.");
+    }
     const [idTaken] = await db`select user_id from profiles where lower(staff_id) = ${staffId}`;
     if (idTaken) throw new Error("Diese Mitarbeiter-ID gibt es schon.");
     const email = (data.email?.trim() || `${staffId}@intern.e1direktvertrieb.de`).toLowerCase();

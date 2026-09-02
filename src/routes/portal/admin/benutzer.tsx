@@ -52,13 +52,12 @@ function Page() {
     <div>
       <h1 className="font-display text-4xl">Benutzer & Rechte</h1>
       <p className="text-sm text-muted">
-        Mitarbeiter anlegen → 5-stelligen Schlüssel mitgeben → der richtet Google Authenticator ein.
-        Aus dem Team entfernen sperrt Login. Löschen nimmt den Dummy komplett raus — Mitarbeiter-ID ist danach wieder frei.
+        Mitarbeiter anlegen → 4-stelligen Invite und 5-stellige ID mitgeben. Der scannt den QR in der App und bestätigt Google Authenticator.
       </p>
 
       <form className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline md:grid-cols-2" onSubmit={onCreate}>
-        <Field label="Mitarbeiter-ID (Benutzername)">
-          <Input value={staffId} onChange={(e) => setStaffId(e.target.value)} required placeholder="z. B. 1001 oder orhan" />
+        <Field label="Mitarbeiter-ID (5 Ziffern, leer = automatisch)">
+          <Input value={staffId} onChange={(e) => setStaffId(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="z. B. 10014" />
         </Field>
         <Field label="Vorname">
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />

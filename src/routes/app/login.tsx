@@ -89,9 +89,21 @@ function Login() {
               }
             }}
           >
-            <input className={box} placeholder="Benutzername" value={staffId} onChange={(e) => setStaffId(e.target.value)} />
-            <input className={box} placeholder="5-stelliger Code" inputMode="numeric" value={invite} onChange={(e) => setInvite(e.target.value)} />
-            {setup ? <input className={box} placeholder="Authenticator" inputMode="numeric" value={totp} onChange={(e) => setTotp(e.target.value)} /> : null}
+            <input className={box} placeholder="5-stellige Mitarbeiter-ID" inputMode="numeric" value={staffId} onChange={(e) => setStaffId(e.target.value.replace(/\D/g, "").slice(0, 5))} />
+            <input className={box} placeholder="4-stelliger Invite" inputMode="numeric" value={invite} onChange={(e) => setInvite(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+            {setup ? (
+              <>
+                <img
+                  alt="QR"
+                  className="mx-auto rounded-xl bg-white p-2"
+                  width={180}
+                  height={180}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setup.uri)}`}
+                />
+                <p className="break-all font-mono text-sm text-gold">{setup.secret}</p>
+                <input className={box} placeholder="Authenticator" inputMode="numeric" value={totp} onChange={(e) => setTotp(e.target.value)} />
+              </>
+            ) : null}
             <Button disabled={busy}>{setup ? "Bestätigen" : "Code prüfen"}</Button>
           </form>
         ) : null}
