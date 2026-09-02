@@ -188,7 +188,7 @@ export type Profile = {
 };
 
 export const FEATURE_DEFAULTS = [
-  { key: "phase2_own_tariffs", enabled: false, label: "Eigene E1-Tarife", description: "Eigene Strom- und Gas-Tarife der Marke E1 aktivieren.", phase: "2" },
+  { key: "phase2_own_tariffs", enabled: true, label: "Eigene E1-Tarife", description: "Eigene Strom- und Gas-Tarife der Marke E1 aktivieren.", phase: "2" },
   { key: "customer_energy_contracts", enabled: false, label: "E1-Stromvertrag erzeugen", description: "Muster-Stromvertrag für Kunden. Aus bis der Lieferant oder Anwalt die Urkunde liefert.", phase: "2" },
   { key: "phase2_self_service", enabled: false, label: "Kunden-Self-Service", description: "Kundenportal für Vertrag, Zählerstand und Rechnungen.", phase: "2" },
   { key: "phase2_market_comm", enabled: false, label: "Marktkommunikation", description: "Vorbereitung MaBiS / GPKE und Abrechnung.", phase: "2" },
