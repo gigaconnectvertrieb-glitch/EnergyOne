@@ -74,8 +74,8 @@ export const nudgeCare = createServerFn({ method: "POST" })
         await notify(db, {
           userId: b.user_id,
           type: "pflege",
-          title: `${n} Kunden vor dem Jahrestag`,
-          message: "Anrufen oder Mail zur Preisreduzierung.",
+          title: `Vergünstigung möglich`,
+          message: `${n} Kunden. Vertrag senden oder anrufen.`,
           link: "/portal/pflege",
         });
         try {
@@ -111,8 +111,8 @@ export const mailCare = createServerFn({ method: "POST" })
     if (!gmailAppPasswordReady()) throw new Error("Mail in Render nicht bereit.");
     await sendViaAppPassword({
       to: row.email,
-      subject: "Ihr Tarif — mögliche Preisreduzierung",
-      text: `Guten Tag ${row.first_name} ${row.last_name},\n\nIhr Vertrag jährt sich. Wir prüfen eine günstigere Lösung zum nächsten Monat. Wir melden uns oder Sie antworten auf diese Mail.\n\nE1 Direktvertrieb\n`,
+      subject: "Ihre Preisgarantie — wir holen die Erhöhung raus",
+      text: `Guten Tag ${row.first_name} ${row.last_name},\n\nIhr Vertrag läuft auf das Jahr zu. In der Praxis steigen viele Tarife nach zwölf Monaten.\n\nWir prüfen für Sie eine neue Preisgarantie und eine Reduzierung zum nächsten Monat. Dafür brauchen wir nur Ihre kurze Bestätigung — den neuen Vertrag senden wir per DocuSign, Sie unterschreiben digital, der Rest läuft bei uns.\n\nFreundliche Grüße\nE1 Direktvertrieb\nOrhan Salo und Luca-Marco Marrancone\n`,
     });
     await db`update customer_care set last_mail_at = now() where id = ${data.id}`;
     return { ok: true };

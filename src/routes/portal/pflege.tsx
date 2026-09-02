@@ -18,7 +18,7 @@ function Page() {
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Leitung</p>
       <h1 className="mt-1 font-display text-4xl">Kundenpflege</h1>
       <p className="mt-2 text-sm text-muted">
-        Ein Jahr nach Abschluss. Ein paar Tage vorher Push. Anrufen oder Mail, dann Maske mit den alten Daten.
+        Das System sieht nur Abschlüsse, die bei uns stehen (manuell oder später New Sales). Jahr rum → Push an euch, Mail an den Kunden, Daten übernehmen, Vertrag senden.
       </p>
       <div className="mt-6 grid gap-2">
         {rows.map((r) => (
@@ -48,7 +48,7 @@ function Page() {
                     }
                   }}
                 >
-                  Mail Reduzierung
+                  Mail an Kunden
                 </Button>
               ) : null}
               <Link
@@ -65,7 +65,7 @@ function Page() {
                 }}
                 className="rounded-full bg-gold px-3 py-2 text-xs text-bg"
               >
-                Daten übernehmen
+                Vertrag senden
               </Link>
               <button
                 type="button"
