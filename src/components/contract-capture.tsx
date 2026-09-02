@@ -75,6 +75,8 @@ export function ContractCapture({
   const [postInvoice, setPostInvoice] = useState(false);
   const [digitalSign, setDigitalSign] = useState(false);
   const [step, setStep] = useState(1);
+  const [lockOn, setLockOn] = useState(true);
+  const [lockPw, setLockPw] = useState("");
 
   useEffect(() => {
     bootstrapMe()
@@ -175,6 +177,7 @@ export function ContractCapture({
           inNewsales: !full,
           fullFlow: full,
           parked,
+          lockPassword: lockOn && lockPw.length >= 6 ? lockPw : undefined,
           iban: iban || undefined,
           bankOwner: bankOwner || undefined,
           bic: bic || undefined,
@@ -201,7 +204,7 @@ export function ContractCapture({
       if (isOffline()) {
         await queueContract(payload);
         toast.success("Im Funkloch gespeichert. Geht raus, sobald Netz da ist.");
-        if (afterTo === "app") nav({ to: "/app/bilanz" });
+        if (afterTo === "app") nav({ to: "/app" });
         return;
       }
       const res = await createContract({
@@ -216,13 +219,13 @@ export function ContractCapture({
             ? `Gebucht · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
             : `Gebucht · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
       );
-      if (afterTo === "app") nav({ to: "/app/bilanz" });
+      if (afterTo === "app") nav({ to: "/app" });
       else nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
       try {
         await queueContract(payload);
         toast.success("Kein Netz. Auftrag liegt auf dem Gerät und wird nachgeschickt.");
-        if (afterTo === "app") nav({ to: "/app/bilanz" });
+        if (afterTo === "app") nav({ to: "/app" });
       } catch {
         toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
       }
@@ -632,13 +635,24 @@ export function ContractCapture({
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-2 rounded-3xl bg-surface p-5 gold-hairline sm:grid-cols-2">
+      <div className="mt-4 grid gap-2 rounded-3xl bg-surface p-5 gold-hairline">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={lockOn} onChange={(e) => setLockOn(e.target.checked)} />
+          Daten passwortgeschützt speichern
+        </label>
+        {lockOn ? (
+          <Field label="Passwort für Kundendaten (min. 6 Zeichen)">
+            <Input type="password" value={lockPw} onChange={(e) => setLockPw(e.target.value)} />
+          </Field>
+        ) : null}
+        <div className="grid gap-2 sm:grid-cols-2">
         <Button variant="outline" className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(true)}>
           {busy ? "Speichert…" : "Parken"}
         </Button>
         <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(false)}>
           {busy ? "Speichert…" : "Auftrag buchen"}
         </Button>
+        </div>
       </div>
       ) : null}
     </div>

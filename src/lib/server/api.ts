@@ -74,6 +74,7 @@ export type ContractDraft = {
   scanBase64?: string;
   scanName?: string;
   parked?: boolean;
+  lockPassword?: string;
   title?: string;
   landline?: string;
   mobile?: string;
@@ -821,6 +822,26 @@ export const createContract = createServerFn({ method: "POST" }).middleware([aut
     }
   } catch {
     /* Handover/Scan optional */
+  }
+  if (data.lockPassword && data.lockPassword.length >= 6) {
+    try {
+      const { lockContract } = await import("./vault.server");
+      await lockContract(db, id, data.lockPassword, {
+        iban: iban || "",
+        bankOwner: data.bankOwner || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        birth: data.birthDate || "",
+        firstName: data.firstName,
+        lastName: data.lastName,
+        street: data.street,
+        house: data.houseNumber,
+        zip: data.zip,
+        city: data.city,
+      });
+    } catch {
+      /* lock optional */
+    }
   }
   return { id, amount, stufe, agency: split.agency, advisor: split.advisor, margin: split.margin, ibanMissing: !iban };
 });
