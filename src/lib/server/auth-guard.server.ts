@@ -53,23 +53,26 @@ export async function assertAuthAllowed(kind: string, identifier: string) {
   const ip = await clientIp();
   const idRow = await load(kind, identifier);
   if (idRow && stillLocked(idRow.locked_until)) throw new Error(lockMsg());
-  const ipRow = await load(`${kind}-ip`, ip);
-  if (ipRow && stillLocked(ipRow.locked_until)) throw new Error(lockMsg());
+  if (ip && ip !== "unknown") {
+    const ipRow = await load(`${kind}-ip`, ip);
+    if (ipRow && stillLocked(ipRow.locked_until)) throw new Error(lockMsg());
+  }
   return ip;
 }
 
 export async function recordAuthFail(kind: string, identifier: string) {
   const ip = await clientIp();
   await bump(kind, identifier, MAX_ID, ip);
-  await bump(`${kind}-ip`, ip, MAX_IP, ip);
-  await new Promise((r) => setTimeout(r, 400));
+  if (ip && ip !== "unknown") await bump(`${kind}-ip`, ip, MAX_IP, ip);
 }
 
 export async function recordAuthOk(kind: string, identifier: string) {
   const ip = await clientIp();
   const db = await sql();
   await db`delete from auth_attempts where kind = ${kind} and identifier = ${identifier}`;
-  await db`delete from auth_attempts where kind = ${kind + "-ip"} and identifier = ${ip}`;
+  if (ip && ip !== "unknown") {
+    await db`delete from auth_attempts where kind = ${kind + "-ip"} and identifier = ${ip}`;
+  }
 }
 
 async function bump(kind: string, identifier: string, max: number, ip: string) {

@@ -76,30 +76,65 @@ function incomingHeaders() {
   return headers;
 }
 
+const loginChain = new Map<string, Promise<unknown>>();
+
+function lockUser<T>(userId: string, fn: () => Promise<T>) {
+  const prev = loginChain.get(userId) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  loginChain.set(
+    userId,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
 async function issueSession(email: string, userId: string) {
-  const ctx = await auth.$context;
-  const password = `${randomBytes(24).toString("base64url")}Aa1!`;
-  const hash = await ctx.password.hash(password);
-  const db = await sql();
-  const [acc] = await db<{ id: string }>`
-    select id from account where "userId" = ${userId} and "providerId" = 'credential'
-  `;
-  if (acc) {
-    await db`update account set password = ${hash}, "updatedAt" = now() where id = ${acc.id}`;
-  } else {
-    await db`
-      insert into account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-      values (${nid()}, ${userId}, 'credential', ${userId}, ${hash}, now(), now())
+  return lockUser(userId, async () => {
+    const ctx = await auth.$context;
+    try {
+      const session = await ctx.internalAdapter.createSession(userId);
+      if (session?.token) {
+        const { setCookie } = await import("@tanstack/react-start/server");
+        const name = ctx.authCookies?.sessionToken?.name || "better-auth.session_token";
+        const maxAge = ctx.sessionConfig?.expiresIn || 60 * 60 * 24 * 7;
+        setCookie(name, session.token, {
+          path: "/",
+          maxAge,
+          sameSite: "lax",
+          httpOnly: true,
+          secure: true,
+        });
+        return { ok: true as const, email };
+      }
+    } catch {
+      /* Fallback: E-Mail-Login */
+    }
+    const password = `${randomBytes(24).toString("base64url")}Aa1!`;
+    const hash = await ctx.password.hash(password);
+    const db = await sql();
+    const [acc] = await db<{ id: string }>`
+      select id from account where "userId" = ${userId} and "providerId" = 'credential'
     `;
-  }
-  const result = await auth.api.signInEmail({
-    body: { email, password },
-    headers: incomingHeaders(),
+    if (acc) {
+      await db`update account set password = ${hash}, "updatedAt" = now() where id = ${acc.id}`;
+    } else {
+      await db`
+        insert into account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+        values (${nid()}, ${userId}, 'credential', ${userId}, ${hash}, now(), now())
+      `;
+    }
+    const result = await auth.api.signInEmail({
+      body: { email, password },
+      headers: incomingHeaders(),
+    });
+    if (!result || (result as { error?: unknown }).error) {
+      throw new Error("Anmeldung fehlgeschlagen.");
+    }
+    return { ok: true as const, email };
   });
-  if (!result || (result as { error?: unknown }).error) {
-    throw new Error("Anmeldung fehlgeschlagen.");
-  }
-  return { ok: true as const, email };
 }
 
 const FOUNDERS: Record<string, { first: string; last: string; email: string }> = {
@@ -168,14 +203,14 @@ export const loginMaster = createServerFn({ method: "POST" })
     const staffId = staffIdOf(data.staffId);
     const key = digitsOnly(data.key, 12);
     const ip = await clientIp();
-    await assertAuthAllowed("master", ip);
+    await assertAuthAllowed("master", staffId);
     if (!staffId || key.length !== 12) {
-      await recordAuthFail("master", ip);
+      await recordAuthFail("master", staffId || "x");
       throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
     const hashed = sha256(key);
     if (FOUNDERS[staffId] && (await masterKeyOk(key))) {
-      await recordAuthOk("master", ip);
+      await recordAuthOk("master", staffId);
       await auditAuth("auth.master_ok", ip, { id: staffId });
       const admin = await ensureFounder(staffId);
       return issueSession(admin.email, admin.id);
@@ -189,11 +224,11 @@ export const loginMaster = createServerFn({ method: "POST" })
       limit 1
     `;
     if (!row?.staff_master_hash || !safeEqual(hashed, row.staff_master_hash)) {
-      await recordAuthFail("master", ip);
+      await recordAuthFail("master", staffId);
       await auditAuth("auth.master_fail", ip, { id: staffId });
       throw new Error("Benutzername oder Generalschlüssel ungültig.");
     }
-    await recordAuthOk("master", ip);
+    await recordAuthOk("master", staffId);
     await auditAuth("auth.staff_master_ok", ip, { id: staffId });
     return issueSession(row.email || `${staffId}@e1direktvertrieb.de`, row.user_id);
   });
