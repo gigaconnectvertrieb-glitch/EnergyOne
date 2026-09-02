@@ -44,7 +44,7 @@ export function WorkShift() {
         /* */
       }
     }
-    const id = window.setInterval(() => void tick(), 180000);
+    const id = window.setInterval(() => void tick(), 60000);
     return () => {
       on = false;
       window.clearInterval(id);

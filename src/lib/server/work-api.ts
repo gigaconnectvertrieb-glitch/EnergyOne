@@ -108,3 +108,23 @@ export const listWorkLive = createServerFn({ method: "GET" })
       last_at: r.last_at ? asStr(r.last_at) : asStr(r.started_at),
     }));
   });
+
+export const listWorkPings = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { shiftId: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view")) throw new Error("Kein Zugriff");
+    const rows = await db<Record<string, unknown>>`
+      select lat, lng, address, created_at
+      from work_pings where shift_id = ${data.shiftId}
+      order by created_at desc limit 40
+    `;
+    return rows.map((r) => ({
+      lat: num(r.lat),
+      lng: num(r.lng),
+      address: asStr(r.address),
+      at: asStr(r.created_at),
+    }));
+  });

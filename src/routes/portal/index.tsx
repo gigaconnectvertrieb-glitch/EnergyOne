@@ -161,8 +161,8 @@ function Dashboard() {
         <Link to="/app" className="rounded-xl px-4 py-3 text-sm gold-hairline">
           Feld-App
         </Link>
-        <Link to="/portal/steuern" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-          Steuerbuch
+        <Link to="/portal/standort" className="rounded-xl px-4 py-3 text-sm gold-hairline">
+          Standort Feld
         </Link>
       </div>
       <div className="mt-6 flex flex-wrap gap-2">
