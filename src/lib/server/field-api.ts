@@ -492,16 +492,17 @@ export const searchFieldAddress = createServerFn({ method: "POST" })
     const db = await sql();
     const me = await requireProfile(db, context.userId);
     const ter = await assignedTerritory(db, me.user_id);
-    if (ter && !can(me.role, "team.view")) {
+    const places = await googlePlacesSearch(q);
+    if (!can(me.role, "team.view") && ter) {
       const doors = await db<{ street: string; house: string; zip: string; city: string; lat: string; lng: string }>`
         select street, house, zip, city, lat::text, lng::text
         from field_doors
         where territory_id = ${asStr(ter.id)}
           and (street ilike ${"%" + q + "%"} or house ilike ${"%" + q + "%"} or zip ilike ${q + "%"})
         order by street, house
-        limit 30
+        limit 20
       `;
-      return doors.map((d) => ({
+      const mine = doors.map((d) => ({
         display: `${d.street} ${d.house}, ${d.zip} ${d.city}`.trim(),
         lat: Number(d.lat),
         lng: Number(d.lng),
@@ -510,8 +511,9 @@ export const searchFieldAddress = createServerFn({ method: "POST" })
         zip: d.zip,
         city: d.city,
       }));
+      return [...mine, ...places];
     }
-    return googlePlacesSearch(q);
+    return places;
   });
 
 export const openFieldObject = createServerFn({ method: "POST" })
@@ -740,8 +742,7 @@ export const claimTerritory = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const db = await sql();
     const me = await requireProfile(db, context.userId);
-    const [ter] = await db<{ id: string }>`select id from territories where id = ${data.id} and active = true`;
-    if (!ter) throw new Error("Gebiet nicht gefunden.");
+    if (!can(me.role, "team.view")) throw new Error("Gebiet spielt die Leitung auf.");
     await db`
       insert into territory_members (territory_id, user_id)
       values (${data.id}, ${me.user_id})
@@ -750,6 +751,88 @@ export const claimTerritory = createServerFn({ method: "POST" })
     if (can(me.role, "team.view")) {
       await db`update territories set user_id = ${me.user_id}, updated_at = now() where id = ${data.id}`;
     }
+    return { ok: true };
+  });
+
+export const requestTerritoryAccess = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { label: string; lat: number; lng: number }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const id = nid();
+    const label = data.label.trim() || "Gebiet";
+    await db`
+      insert into territory_requests (id, user_id, label, lat, lng)
+      values (${id}, ${me.user_id}, ${label}, ${data.lat}, ${data.lng})
+    `;
+    const bosses = await db<{ user_id: string }>`select user_id from profiles where role = 'super_admin' and status = 'active'`;
+    const name = `${me.first_name} ${me.last_name}`.trim();
+    for (const b of bosses) {
+      await notify(db, {
+        userId: b.user_id,
+        type: "gebiet",
+        title: `${name} will Gebiet`,
+        message: label,
+        link: "/portal/gebiete",
+      });
+      try {
+        const { sendPushToUser } = await import("./push.server");
+        await sendPushToUser(db, b.user_id, { title: `${name} will Gebiet`, body: label, url: "/portal/gebiete" });
+      } catch {
+        /* */
+      }
+    }
+    return { ok: true };
+  });
+
+export const listTerritoryRequests = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view")) return [];
+    const rows = await db<Record<string, unknown>>`
+      select r.id, r.label, p.first_name, p.last_name
+      from territory_requests r
+      join profiles p on p.user_id = r.user_id
+      where r.status = 'offen'
+      order by r.created_at desc
+      limit 50
+    `;
+    return rows.map((r) => ({
+      id: asStr(r.id),
+      label: asStr(r.label),
+      name: `${asStr(r.first_name)} ${asStr(r.last_name)}`.trim(),
+    }));
+  });
+
+export const approveTerritoryRequest = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { id: string }) => d)
+  .handler(async ({ context, data }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view")) throw new Error("Nur Leitung");
+    const [req] = await db<{ user_id: string; label: string; lat: number; lng: number }>`
+      select user_id, label, lat, lng from territory_requests where id = ${data.id} and status = 'offen'
+    `;
+    if (!req) throw new Error("Anfrage weg.");
+    const tid = nid();
+    const file = `${(req.label || "gebiet").replace(/\s+/g, "-").toLowerCase()}.json`;
+    await db`
+      insert into territories (id, name, filename, user_id, center_lat, center_lng, active)
+      values (${tid}, ${req.label}, ${file}, ${req.user_id}, ${req.lat}, ${req.lng}, true)
+    `;
+    await db`insert into territory_members (territory_id, user_id) values (${tid}, ${req.user_id})`;
+    await db`update territory_requests set status = 'ok' where id = ${data.id}`;
+    await notify(db, {
+      userId: req.user_id,
+      type: "gebiet",
+      title: "Gebiet freigegeben",
+      message: `${req.label} — in der App herunterladen.`,
+      link: "/app/karte",
+    });
     return { ok: true };
   });
 

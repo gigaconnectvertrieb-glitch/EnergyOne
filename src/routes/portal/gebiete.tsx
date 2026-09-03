@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { listUsers, bootstrapMe } from "@/lib/server/api";
 import { assignWorkDay, deleteWorkPlan, getWorkPlan, importCityPlan, listWorkPlans, searchPlaces, streetsInZone } from "@/lib/server/plan-api";
-import { assignTerritory, deleteTerritory, downloadTerritory, listTerritories } from "@/lib/server/field-api";
+import { approveTerritoryRequest, assignTerritory, deleteTerritory, downloadTerritory, listTerritories, listTerritoryRequests } from "@/lib/server/field-api";
 import { FieldMap } from "@/components/field-map";
 import { bboxAround, bboxFromPoints } from "@/lib/geo-de";
 import { can } from "@/lib/e1";
@@ -111,6 +111,7 @@ function Page() {
       <p className="mt-2 text-sm text-muted">
         Luca und Orhan können hier beides. Orhan führt die Gebiete im Alltag: PLZ oder Stadt laden, Mitarbeiter zuweisen. Der Mitarbeiter arbeitet in der Feld-App.
       </p>
+      <Requests />
 
       <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
         <Field label="PLZ oder Stadt">
@@ -487,6 +488,42 @@ function Page() {
           </ol>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function Requests() {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof listTerritoryRequests>>>([]);
+  function load() {
+    listTerritoryRequests().then(setRows).catch(() => setRows([]));
+  }
+  useEffect(load, []);
+  if (!rows.length) return null;
+  return (
+    <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
+      <p className="text-xs uppercase tracking-[0.16em] text-gold">Freigabe angefragt</p>
+      <ul className="mt-3 grid gap-2">
+        {rows.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
+            <span>
+              {r.name} · {r.label}
+            </span>
+            <Button
+              onClick={async () => {
+                try {
+                  await approveTerritoryRequest({ data: { id: r.id } });
+                  toast.success("Freigegeben. Mitarbeiter kann herunterladen.");
+                  load();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Nicht frei");
+                }
+              }}
+            >
+              Freigeben
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Navigation, Search, X } from "lucide-react";
-import { acceptTerritory, getFieldHome, getTerritoryWalk, logFieldVisit, openFieldObject, searchFieldAddress } from "@/lib/server/field-api";
+import { acceptTerritory, getFieldHome, getTerritoryWalk, logFieldVisit, openFieldObject, requestTerritoryAccess, searchFieldAddress } from "@/lib/server/field-api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -355,7 +355,7 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={planner ? "Stadt und Straße" : "Nur Straßen aus dem Gebiet"}
+              placeholder={planner ? "Stadt und Straße" : "Straße anschauen — Abschluss nur im freigegebenen Gebiet"}
               className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
@@ -498,7 +498,17 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             Wohneinheiten: {selectedHouse && "units" in selectedHouse && selectedHouse.units ? selectedHouse.units : "—"}
           </p>
           <p className="text-xs text-[#666]">Provision erscheint am Haus, sobald der Tarifrechner die API hat.</p>
+          <a
+            className="mt-2 inline-block text-xs text-[#1a73e8]"
+            href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedHouse?.lat ?? obj.lat},${selectedHouse?.lng ?? obj.lng}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Street View
+          </a>
           <div className="mt-4 grid grid-cols-2 gap-2">
+            {planner || obj.inTerritory ? (
+              <>
             <Button
               variant="outline"
               className="border-black/15 text-[#111]"
@@ -530,6 +540,29 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             >
               Abschluss
             </Button>
+              </>
+            ) : (
+              <Button
+                className="col-span-2"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await requestTerritoryAccess({
+                      data: {
+                        label: `${obj.street || ""} ${obj.city || ""}`.trim() || "Gebiet",
+                        lat: obj.lat,
+                        lng: obj.lng,
+                      },
+                    });
+                    toast.success("Freigabe angefragt. Luca oder Orhan bekommen Push.");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Nicht gesendet");
+                  }
+                }}
+              >
+                Freigabe anfordern
+              </Button>
+            )}
           </div>
         </div>
       ) : pack && pack.walk.count ? (
