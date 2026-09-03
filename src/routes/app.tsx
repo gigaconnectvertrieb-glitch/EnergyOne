@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, House, ListChecks, Map } from "lucide-react";
+import { CalendarDays, House, ListChecks, Map, UserRound } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/logo";
@@ -31,6 +31,7 @@ const TABS = [
   { to: "/app", label: "Dashboard", icon: House, exact: true },
   { to: "/app/abschluss", label: "Buchen", icon: CalendarDays },
   { to: "/app/liste", label: "Leads", icon: ListChecks },
+  { to: "/app/bs", label: "BS", icon: UserRound },
 ] as const;
 
 function AppShell() {
@@ -73,7 +74,7 @@ function AppShell() {
       <main className={pathname.startsWith("/app/karte") ? "pb-24 md:pb-4" : "px-4 pb-24 pt-4 md:pb-8"}>
         <Outlet />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/8 bg-[#0b0d12]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         {TABS.map((t) => {
           const on = "exact" in t && t.exact ? pathname === "/app" || pathname === "/app/" : pathname.startsWith(t.to);
           return (

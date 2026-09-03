@@ -61,7 +61,7 @@ function items(role: Role, flags: Record<string, boolean>) {
     { to: "/portal/notfall", label: "Notfall", icon: Bell, show: can(role, "team.view") },
     { to: "/portal/leads", label: "Leads", icon: ListChecks, show: can(role, "team.view") },
     { to: "/portal/pflege", label: "Pflege", icon: Users, show: can(role, "users.manage") },
-    { to: "/portal/bs", label: "BS", icon: UserRound, show: can(role, "team.view") },
+    { to: "/portal/bs", label: "BS", icon: UserRound, show: true },
     { to: "/portal/kunden", label: "Kunden", icon: Users, show: true },
     { to: "/portal/postfach", label: "Postfach", icon: Mail, show: true },
     { to: "/portal/provisionen", label: "Provisionen", icon: Wallet, show: true },

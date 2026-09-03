@@ -12,6 +12,20 @@ export const createRecruit = createServerFn({ method: "POST" })
     if (!first || !last) throw new Error("Name fehlt.");
     if (!data.phone?.trim() && !data.email?.trim()) throw new Error("Telefon oder E-Mail.");
     const db = await sql();
+    await db`
+      create table if not exists recruiting_leads (
+        id text primary key,
+        first_name text not null default '',
+        last_name text not null default '',
+        phone text not null default '',
+        email text not null default '',
+        job text not null default '',
+        note text not null default '',
+        status text not null default 'neu',
+        created_by text,
+        created_at timestamptz not null default now()
+      )
+    `;
     const id = nid();
     await db`
       insert into recruiting_leads (id, first_name, last_name, phone, email, job, note, created_by)

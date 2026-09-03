@@ -10,6 +10,7 @@ function Page() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listWorkLive>>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [alarms, setAlarms] = useState<Awaited<ReturnType<typeof listEmergencies>>>([]);
   const [pings, setPings] = useState<Awaited<ReturnType<typeof listWorkPings>>>([]);
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
