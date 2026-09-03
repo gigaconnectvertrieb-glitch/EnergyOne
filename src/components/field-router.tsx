@@ -33,7 +33,7 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   const [busy, setBusy] = useState(false);
   const [pack, setPack] = useState<Walk | null>(null);
   const [offer, setOffer] = useState<{ id: string; name: string } | null>(null);
-  const [tapStart, setTapStart] = useState(false);
+  const [pano, setPano] = useState<{ lat: number; lng: number } | null>(null);
   const tapStartRef = useRef(false);
 
   useEffect(() => {
@@ -311,6 +311,9 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
         gRef.current?.setZoom(17);
       }
       toast.success(next.street ? `${next.street} geloggt` : "Straße geladen");
+      if (next.street) {
+        setPano({ lat: next.houses[0]?.lat || h.lat, lng: next.houses[0]?.lng || h.lng });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Straße nicht geladen");
     } finally {
@@ -331,6 +334,27 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   return (
     <div className="relative -mx-4 -mt-3 h-[calc(100dvh-7.5rem)] min-h-[28rem] overflow-hidden bg-[#1a1c16]">
       <div ref={ref} className="absolute inset-0" />
+      {pano ? (
+        <div className="absolute inset-0 z-[1150]">
+          <iframe
+            title="Street View"
+            className="h-full w-full border-0"
+            allow="accelerometer; gyroscope; geolocation"
+            src={
+              googleMapsKey()
+                ? `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(googleMapsKey())}&location=${pano.lat},${pano.lng}&heading=90&pitch=0&fov=80`
+                : `https://maps.google.com/maps?q=&layer=c&cbll=${pano.lat},${pano.lng}&cbp=11,0,0,0,0&output=embed`
+            }
+          />
+          <button
+            type="button"
+            className="absolute right-3 top-3 z-[1160] rounded-full bg-[#0b0d12] px-3 py-2 text-xs text-gold"
+            onClick={() => setPano(null)}
+          >
+            Karte
+          </button>
+        </div>
+      ) : null}
       <p className="pointer-events-none absolute bottom-24 left-3 right-3 z-[1100] text-center text-[11px] text-gold/90">
         Zwei Finger nach oben ziehen — Häuser stehen in 3D
       </p>
