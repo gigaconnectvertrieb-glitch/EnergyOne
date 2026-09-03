@@ -42,13 +42,21 @@ export function satellite3dStyle() {
         attribution: SATELLITE_ATTR,
         maxzoom: 19,
       },
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "© OpenStreetMap",
+        maxzoom: 19,
+      },
       openmaptiles: {
         type: "vector",
         url: "https://tiles.openfreemap.org/planet",
       },
     },
     layers: [
-      { id: "sat", type: "raster", source: "satellite" },
+      { id: "osm", type: "raster", source: "osm" },
+      { id: "sat", type: "raster", source: "satellite", paint: { "raster-opacity": 0.92 } },
       {
         id: "3d-buildings",
         source: "openmaptiles",

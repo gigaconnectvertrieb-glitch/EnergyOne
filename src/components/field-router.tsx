@@ -65,8 +65,16 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
       }
       await loadMapLibre();
       if (cancelled || !ref.current || mapRef.current) return;
-      const map = createE1Map(ref.current, center, 15, { controls: false });
+      const map = createE1Map(ref.current, center, 12, { controls: false });
       mapRef.current = map;
+      const resize = () => map.resize();
+      window.setTimeout(resize, 200);
+      window.setTimeout(resize, 800);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => map.jumpTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 }),
+        () => {},
+        { maximumAge: 60000, timeout: 5000 },
+      );
       map.on("load", () => {
         map.resize();
         addOverlayLayers(map);
@@ -321,7 +329,7 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   const selectedHouse = obj?.houses.find((x) => x.house === house);
 
   return (
-    <div className="relative -mx-4 -mt-3 h-[calc(100dvh-7.5rem)] min-h-[28rem] overflow-hidden bg-[#d4e0d4]">
+    <div className="relative -mx-4 -mt-3 h-[calc(100dvh-7.5rem)] min-h-[28rem] overflow-hidden bg-[#1a1c16]">
       <div ref={ref} className="absolute inset-0" />
       <p className="pointer-events-none absolute bottom-24 left-3 right-3 z-[1100] text-center text-[11px] text-gold/90">
         Zwei Finger nach oben ziehen — Häuser stehen in 3D
