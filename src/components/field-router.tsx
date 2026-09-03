@@ -357,14 +357,46 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             </Button>
           </div>
         ) : null}
+        <button
+          type="button"
+          disabled={busy}
+          className="h-12 rounded-xl bg-gold text-sm font-medium text-bg shadow-lg"
+          onClick={async () => {
+            try {
+              if (offer) {
+                await acceptTerritory({ data: { id: offer.id } });
+                setOffer(null);
+              }
+              await loadWalk();
+              toast.success("Straßen geladen");
+              const first = pack?.walk.streets[0]?.houses[0];
+              if (first) {
+                void pick({
+                  lat: first.lat,
+                  lng: first.lng,
+                  street: pack?.walk.streets[0]?.street,
+                  house: first.house,
+                  zip: first.zip || "",
+                  city: first.city || "",
+                  display: `${pack?.walk.streets[0]?.street} ${first.house}`,
+                });
+              }
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Kein Gebiet");
+            }
+          }}
+        >
+          {busy ? "Lädt…" : "Gebiet herunterladen"}
+        </button>
+        {planner ? (
         <div className="overflow-hidden rounded-xl bg-white text-[#1a1a1a] shadow-lg">
           <div className="flex items-center gap-2 px-3">
             <Search className="size-4 text-[#c9a227]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={planner ? "Stadt und Straße" : "Straße anschauen — Abschluss nur im freigegebenen Gebiet"}
-              className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
+              placeholder="Stadt und Straße anschauen"
+              className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none"
             />
             {q ? (
               <button type="button" onClick={() => { setQ(""); setHits([]); }} aria-label="Leeren">
@@ -373,12 +405,12 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             ) : null}
           </div>
           {hits.length ? (
-            <ul className="max-h-56 overflow-auto border-t border-black/8">
+            <ul className="max-h-40 overflow-auto border-t border-black/8">
               {hits.map((h) => (
                 <li key={`${h.lat}-${h.lng}-${h.display}`}>
                   <button
                     type="button"
-                    className="flex min-h-12 w-full items-start px-3 py-2 text-left text-sm hover:bg-black/4"
+                    className="flex min-h-11 w-full items-start px-3 py-2 text-left text-sm"
                     onClick={() => {
                       setQ(h.display);
                       void pick(h);
@@ -391,6 +423,7 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             </ul>
           ) : null}
         </div>
+        ) : null}
         {pack?.walk.streets.length ? (
           <div className="max-h-28 overflow-auto rounded-xl bg-white/95 p-2 text-[#111] shadow">
             <p className="px-1 text-[10px] uppercase tracking-widest text-[#888]">Straßen im Gebiet</p>
@@ -424,10 +457,10 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
                       lat: first.lat,
                       lng: first.lng,
                       street: s.street,
-                      house: "",
+                      house: first.house,
                       zip: first.zip || "",
                       city: first.city || "",
-                      display: s.street,
+                      display: `${s.street} ${first.house}`,
                     });
                   }}
                 >
