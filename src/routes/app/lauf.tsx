@@ -14,7 +14,9 @@ function Page() {
     <div>
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Laufliste</p>
       <h1 className="mt-1 font-display text-3xl">{data?.name || "Gebiet"}</h1>
-      <p className="mt-2 text-sm text-muted">Jedes Haus im aufgespielten Gebiet. Letzter Besuch bleibt stehen.</p>
+      <p className="mt-2 text-sm text-muted">
+        Dein Gebiet. Jedes Haus in der Reihenfolge. Letzter Stand bleibt — niemand läuft blind.
+      </p>
       <ul className="mt-4 divide-y divide-white/6 overflow-hidden rounded-2xl bg-surface">
         {rows.map((r) => (
           <li key={`${r.street}-${r.house}`}>
