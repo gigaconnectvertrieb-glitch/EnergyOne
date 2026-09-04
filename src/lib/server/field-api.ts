@@ -8,8 +8,7 @@ import {
   sortWeekly,
   weekKey,
 } from "@/lib/field";
-import { asStr, nid, num } from "@/lib/utils";
-import { groupStreets, pointInPolygon, applyWalkOrder, haversineMeters } from "@/lib/geo-de";
+import { applyWalkOrder, groupStreets, haversineMeters, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
 import { googlePlacesSearch, overpassHouses } from "./geo.server";
 import { assertCanSeeUser, audit, notify, requireProfile, sql, visibleUserIds } from "./helpers";
 import type { Sql } from "@/lib/db";
@@ -150,7 +149,7 @@ export const listRunSheet = createServerFn({ method: "GET" })
     if (!ter) return { name: "", rows: [] as Array<Record<string, string>> };
     const tid = asStr(ter.id);
     const rows = await db<Record<string, unknown>>`
-      select d.street, d.house, d.zip, d.city, d.units,
+      select d.street, d.house, d.zip, d.city, d.units, d.lat, d.lng,
              (select v.reason from field_visits v
                where v.street = d.street and v.house = d.house
                order by v.created_at desc limit 1) as last_reason,
@@ -165,18 +164,28 @@ export const listRunSheet = createServerFn({ method: "GET" })
       order by d.street, d.house
       limit 800
     `;
-    return {
-      name: asStr(ter.name),
-      rows: rows.map((r) => ({
+    const walk = planHouseWalk(
+      rows.map((r, i) => ({
+        id: String(i),
+        lat: num(r.lat),
+        lng: num(r.lng),
         street: asStr(r.street),
         house: asStr(r.house),
-        zip: asStr(r.zip),
-        city: asStr(r.city),
-        units: asStr(r.units) || asStr(r.we) || "",
-        last: asStr(r.last_reason),
-        last_at: asStr(r.last_at).slice(0, 16),
       })),
-    };
+      { lat: num(ter.center_lat) || 50.1, lng: num(ter.center_lng) || 8.7 },
+    );
+    const order = walk.streets.flatMap((s) => s.houses.map((h) => `${h.street}|${h.house}`));
+    const mapped = rows.map((r) => ({
+      street: asStr(r.street),
+      house: asStr(r.house),
+      zip: asStr(r.zip),
+      city: asStr(r.city),
+      units: asStr(r.units) || asStr(r.we) || "",
+      last: asStr(r.last_reason),
+      last_at: asStr(r.last_at).slice(0, 16),
+    }));
+    mapped.sort((a, b) => order.indexOf(`${a.street}|${a.house}`) - order.indexOf(`${b.street}|${b.house}`));
+    return { name: asStr(ter.name), rows: mapped };
   });
 
 export const downloadMyTerritory = createServerFn({ method: "GET" })
