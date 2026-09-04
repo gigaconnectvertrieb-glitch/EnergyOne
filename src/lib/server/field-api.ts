@@ -396,6 +396,18 @@ export const logFieldVisit = createServerFn({ method: "POST" })
         ${needsFollowup(reason) ? "offen" : "erledigt"}
       )
     `;
+    try {
+      const street = data.street?.trim() || asStr(door?.street);
+      const house = data.house?.trim() || asStr(door?.house);
+      if (street && house && reason === "nicht_angetroffen") {
+        const { getBuilding, setUnitStatus } = await import("./building-api");
+        const b = await getBuilding({ data: { street, house } });
+        const open = b?.units.find((u) => u.status === "offen");
+        if (open) await setUnitStatus({ data: { id: open.id, status: "nicht_angetroffen" } });
+      }
+    } catch {
+      /* */
+    }
     if (data.doorId) {
       const doorStatus = reason === "abschluss" ? "abschluss" : needsFollowup(reason) ? "nachlauf" : "erledigt";
       await db`update field_doors set status = ${doorStatus} where id = ${data.doorId}`;

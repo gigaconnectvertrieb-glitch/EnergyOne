@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Navigation, Search, X } from "lucide-react";
 import { acceptTerritory, getFieldHome, getTerritoryWalk, logFieldVisit, openFieldObject, requestTerritoryAccess, searchFieldAddress } from "@/lib/server/field-api";
-import { Button } from "@/components/ui/button";
+import { BuildingPanel } from "@/components/building-panel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -563,6 +563,7 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
             Wohneinheiten: {selectedHouse && "units" in selectedHouse && selectedHouse.units ? selectedHouse.units : "—"}
           </p>
           <p className="text-xs text-[#666]">Provision erscheint am Haus, sobald der Tarifrechner die API hat.</p>
+          <BuildingPanel street={obj.street} house={house || obj.house} zip={obj.zip} city={obj.city} />
           <a
             className="mt-2 inline-block text-xs text-[#1a73e8]"
             href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedHouse?.lat ?? obj.lat},${selectedHouse?.lng ?? obj.lng}`}
