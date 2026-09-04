@@ -166,7 +166,7 @@ export const listRunSheet = createServerFn({ method: "GET" })
       limit 800
     `;
     return {
-      name: asStr(mine.name),
+      name: asStr(ter.name),
       rows: rows.map((r) => ({
         street: asStr(r.street),
         house: asStr(r.house),
