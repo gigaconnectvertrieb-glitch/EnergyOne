@@ -15,7 +15,7 @@ function Page() {
       <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Laufliste</p>
       <h1 className="mt-1 font-display text-3xl">{data?.name || "Gebiet"}</h1>
       <p className="mt-2 text-sm text-muted">
-        Dein Gebiet. Jedes Haus in der Reihenfolge. Letzter Stand bleibt — niemand läuft blind.
+        Dein Gebiet, kürzester Weg von Straße zu Straße. Letzter Stand bleibt — niemand läuft blind.
       </p>
       <ul className="mt-4 divide-y divide-white/6 overflow-hidden rounded-2xl bg-surface">
         {rows.map((r) => (

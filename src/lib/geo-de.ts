@@ -291,6 +291,38 @@ export function groupStreets(houses: HouseStop[]) {
     .sort((a, b) => a.street.localeCompare(b.street, "de"));
 }
 
+function pathMeters<T extends { lat: number; lng: number }>(items: T[]) {
+  let m = 0;
+  for (let i = 1; i < items.length; i++) m += haversineMeters(items[i - 1]!, items[i]!);
+  return m;
+}
+
+/** 2-opt: kreuzende Teilstücke tauschen, kürzerer Weg. */
+function twoOpt<T extends { lat: number; lng: number }>(items: T[]): T[] {
+  if (items.length < 4) return items;
+  const pts = [...items];
+  let improved = true;
+  let guard = 0;
+  while (improved && guard++ < 40) {
+    improved = false;
+    for (let i = 1; i < pts.length - 2; i++) {
+      for (let k = i + 1; k < pts.length - 1; k++) {
+        const a = pts[i - 1]!;
+        const b = pts[i]!;
+        const c = pts[k]!;
+        const d = pts[k + 1]!;
+        const now = haversineMeters(a, b) + haversineMeters(c, d);
+        const swap = haversineMeters(a, c) + haversineMeters(b, d);
+        if (swap + 2 < now) {
+          pts.splice(i, k - i + 1, ...pts.slice(i, k + 1).reverse());
+          improved = true;
+        }
+      }
+    }
+  }
+  return pts;
+}
+
 function nnOrder<T extends { lat: number; lng: number }>(items: T[], start: { lat: number; lng: number }): T[] {
   const leftover = [...items];
   const ordered: T[] = [];
@@ -309,7 +341,7 @@ function nnOrder<T extends { lat: number; lng: number }>(items: T[], start: { la
     ordered.push(next);
     cursor = next;
   }
-  return ordered;
+  return twoOpt(ordered);
 }
 
 /** Straßen nacheinander, in jeder Straße die Häuser — ab Startpunkt. */
@@ -349,7 +381,8 @@ export function planHouseWalk(houses: HouseStop[], start: { lat: number; lng: nu
     out.push({ street: st.street, houses: ordered, meters: Math.round(meters) });
     cursor = ordered.at(-1) || cursor;
   }
-  return { streets: out, meters: Math.round(total), count: houses.length };
+  const tuned = twoOpt(out.map((s) => ({ ...s, lat: s.houses[0]?.lat ?? 0, lng: s.houses[0]?.lng ?? 0 })));
+  return { streets: tuned, meters: Math.round(pathMeters(tuned.flatMap((s) => s.houses))), count: houses.length };
 }
 
 export type WalkPlan = ReturnType<typeof planHouseWalk>;
