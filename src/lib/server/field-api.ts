@@ -138,6 +138,47 @@ export const getMyTerritory = createServerFn({ method: "GET" })
     };
   });
 
+export const listRunSheet = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    const mine = await assignedTerritory(db, me.user_id);
+    const ter = mine || (can(me.role, "team.view")
+      ? (await db<Record<string, unknown>>`select * from territories where active = true order by updated_at desc limit 1`)[0]
+      : null);
+    if (!ter) return { name: "", rows: [] as Array<Record<string, string>> };
+    const tid = asStr(ter.id);
+    const rows = await db<Record<string, unknown>>`
+      select d.street, d.house, d.zip, d.city, d.units,
+             (select v.reason from field_visits v
+               where v.street = d.street and v.house = d.house
+               order by v.created_at desc limit 1) as last_reason,
+             (select v.created_at::text from field_visits v
+               where v.street = d.street and v.house = d.house
+               order by v.created_at desc limit 1) as last_at,
+             (select count(*)::text from field_units u
+               join field_buildings b on b.id = u.building_id
+               where b.street = d.street and b.house = d.house) as we
+      from field_doors d
+      where d.territory_id = ${tid}
+      order by d.street, d.house
+      limit 800
+    `;
+    return {
+      name: asStr(mine.name),
+      rows: rows.map((r) => ({
+        street: asStr(r.street),
+        house: asStr(r.house),
+        zip: asStr(r.zip),
+        city: asStr(r.city),
+        units: asStr(r.units) || asStr(r.we) || "",
+        last: asStr(r.last_reason),
+        last_at: asStr(r.last_at).slice(0, 16),
+      })),
+    };
+  });
+
 export const downloadMyTerritory = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

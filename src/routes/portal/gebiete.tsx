@@ -109,7 +109,7 @@ function Page() {
       <p className="text-xs uppercase tracking-[0.2em] text-gold">Feld</p>
       <h1 className="mt-1 font-display text-4xl">Gebiete</h1>
       <p className="mt-2 text-sm text-muted">
-        Luca und Orhan können hier beides. Orhan führt die Gebiete im Alltag: PLZ oder Stadt laden, Mitarbeiter zuweisen. Der Mitarbeiter arbeitet in der Feld-App.
+        Luca und Orhan können hier beides. Orhan führt die Gebiete im Alltag. Die Laufliste in der App zeigt jedes Haus plus letzten Besuch.
       </p>
       <Requests />
 
