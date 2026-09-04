@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Navigation, Search, X } from "lucide-react";
 import { acceptTerritory, getFieldHome, getTerritoryWalk, logFieldVisit, openFieldObject, requestTerritoryAccess, searchFieldAddress } from "@/lib/server/field-api";
 import { BuildingPanel } from "@/components/building-panel";
-import { toast } from "sonner";
+import { cachePack, isOffline, queueVisit, readPack } from "@/lib/offline-queue";
 import { cn } from "@/lib/utils";
 import {
   addOverlayLayers,
@@ -127,12 +127,27 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
   async function loadWalk(lat?: number, lng?: number) {
     setBusy(true);
     try {
+      if (isOffline()) {
+        const cached = await readPack<Walk>("walk");
+        if (cached) {
+          setPack(cached);
+          paint(cached);
+          toast.message("Gebiet vom Gerät (kein Netz)");
+          return;
+        }
+      }
       const next = await getTerritoryWalk({ data: { lat, lng } });
       setPack(next);
       paint(next);
+      await cachePack("walk", next);
       if (lat && lng) toast.success("Laufweg neu berechnet");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gebiet nicht geladen");
+      const cached = await readPack<Walk>("walk");
+      if (cached) {
+        setPack(cached);
+        paint(cached);
+        toast.message("Gebiet vom Gerät");
+      } else toast.error(e instanceof Error ? e.message : "Gebiet nicht geladen");
     } finally {
       setBusy(false);
     }
@@ -580,18 +595,27 @@ export function FieldRouter({ center, planner = false }: { center: { lat: number
               className="border-black/15 text-[#111]"
               disabled={busy}
               onClick={async () => {
-                await logFieldVisit({
-                  data: {
-                    reason: "nicht_angetroffen",
-                    street: obj.street,
-                    house,
-                    zip: obj.zip,
-                    city: obj.city,
-                    lat: selectedHouse?.lat ?? obj.lat,
-                    lng: selectedHouse?.lng ?? obj.lng,
-                  },
-                });
-                toast.success("Nicht angetroffen");
+                const payload = {
+                  reason: "nicht_angetroffen" as const,
+                  street: obj.street,
+                  house,
+                  zip: obj.zip,
+                  city: obj.city,
+                  lat: selectedHouse?.lat ?? obj.lat,
+                  lng: selectedHouse?.lng ?? obj.lng,
+                };
+                try {
+                  if (isOffline()) {
+                    await queueVisit(payload);
+                    toast.success("Ohne Netz gespeichert. Geht raus mit Empfang.");
+                  } else {
+                    await logFieldVisit({ data: payload });
+                    toast.success("Nicht angetroffen");
+                  }
+                } catch (e) {
+                  await queueVisit(payload);
+                  toast.success("Auf dem Gerät gespeichert");
+                }
               }}
             >
               Nicht angetroffen

@@ -16,7 +16,7 @@ self.addEventListener("fetch", (event) => {
     fetch(req)
       .then((res) => {
         const copy = res.clone();
-        caches.open("e1-feld-v1").then((c) => c.put(req, copy)).catch(() => {});
+        caches.open("e1-feld-v2").then((c) => c.put(req, copy)).catch(() => {});
         return res;
       })
       .catch(() => caches.match(req).then((hit) => hit || Promise.reject("offline"))),

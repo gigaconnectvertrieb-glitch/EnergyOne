@@ -8,11 +8,13 @@ type Queued = { id: string; at: string; data: ContractDraft };
 
 function openDb() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
+    const req = indexedDB.open(DB, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(QUEUE)) db.createObjectStore(QUEUE, { keyPath: "id" });
       if (!db.objectStoreNames.contains(TARIFFS)) db.createObjectStore(TARIFFS);
+      if (!db.objectStoreNames.contains("cache")) db.createObjectStore("cache");
+      if (!db.objectStoreNames.contains("visits")) db.createObjectStore("visits", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -71,6 +73,64 @@ export async function readCachedTariffs<T>() {
 
 export function isOffline() {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+export async function cachePack(key: string, data: unknown) {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("cache", "readwrite");
+    tx.objectStore("cache").put(data, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function readPack<T>(key: string) {
+  const db = await openDb();
+  return new Promise<T | null>((resolve, reject) => {
+    if (!db.objectStoreNames.contains("cache")) {
+      resolve(null);
+      return;
+    }
+    const tx = db.transaction("cache", "readonly");
+    const req = tx.objectStore("cache").get(key);
+    req.onsuccess = () => resolve((req.result as T) || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function queueVisit(data: Record<string, unknown>) {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("visits", "readwrite");
+    tx.objectStore("visits").put({ id: `v-${Date.now()}`, data });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function listVisits() {
+  const db = await openDb();
+  return new Promise<Array<{ id: string; data: Record<string, unknown> }>>((resolve, reject) => {
+    if (!db.objectStoreNames.contains("visits")) {
+      resolve([]);
+      return;
+    }
+    const tx = db.transaction("visits", "readonly");
+    const req = tx.objectStore("visits").getAll();
+    req.onsuccess = () => resolve((req.result || []) as Array<{ id: string; data: Record<string, unknown> }>);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function dropVisit(id: string) {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("visits", "readwrite");
+    tx.objectStore("visits").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function reopenQueued(id: string) {
