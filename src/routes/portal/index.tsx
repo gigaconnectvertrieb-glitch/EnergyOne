@@ -1,89 +1,145 @@
+/**
+ * E1 Portal – Dashboard „Heute“
+ * -----------------------------
+ * Einheitlich für Feld + Büro.
+ * Tour, Gebiet, offene Nachläufe, schnelle Aktionen, eigene Zahlen.
+ * Leitung sieht zusätzlich Agentur-KPIs.
+ *
+ * Ersetzt: src/routes/portal/index.tsx
+ */
+
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getDashboard } from "@/lib/server/api";
-import { downloadMyTerritory, getFieldHome } from "@/lib/server/field-api";
+import { downloadMyTerritory, getFieldHome, fieldBalance } from "@/lib/server/field-api";
 import { can, STATUS_LABELS, type ContractStatus } from "@/lib/e1";
 import { eur } from "@/lib/utils";
 import { vatOn } from "@/lib/steuer";
 import { StatusBadge } from "@/components/status-badge";
-import { AuthChip } from "@/components/mail-status";
 import { GoalCard } from "@/components/goal-card";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { WorkShift } from "@/components/work-shift";
+import { PushEnable } from "@/components/push-enable";
 import { toast } from "sonner";
+import {
+  Map,
+  Plus,
+  ClipboardList,
+  Users,
+  ChevronRight,
+  Download,
+  AlertCircle,
+} from "lucide-react";
 
-export const Route = createFileRoute("/portal/")({ component: Dashboard });
+export const Route = createFileRoute("/portal/")({ component: Heute });
 
-function Dashboard() {
+function Heute() {
   const [data, setData] = useState<Awaited<ReturnType<typeof getDashboard>> | null>(null);
   const [field, setField] = useState<Awaited<ReturnType<typeof getFieldHome>> | null>(null);
+  const [bal, setBal] = useState<Awaited<ReturnType<typeof fieldBalance>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
   useEffect(() => {
     getDashboard()
       .then(setData)
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : "Fehler"));
-    getFieldHome().then(setField).catch(() => setField(null));
+    getFieldHome()
+      .then(setField)
+      .catch(() => setField(null));
+    fieldBalance()
+      .then(setBal)
+      .catch(() => setBal(null));
   }, []);
-  if (err) return <p className="text-danger">{err}</p>;
-  if (!data) return <div className="h-48 animate-pulse rounded-3xl bg-surface" />;
 
-  const pipe = Object.entries(data.pipeline).map(([k, v]) => ({
-    name: STATUS_LABELS[k as ContractStatus] ?? k,
-    n: v,
-  }));
+  if (err) return <p className="text-danger">{err}</p>;
+  if (!data) {
+    return <div className="h-48 animate-pulse rounded-3xl bg-surface" />;
+  }
+
+  const hour = new Date().getHours();
+  const hi = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
+  const isLead =
+    data.me.role === "super_admin" ||
+    data.me.role === "buchhaltung" ||
+    data.me.role === "gebietsleiter";
+
+  const openFollowups = field?.openFollowups ?? 0;
+  const territoryName = field?.pending?.name || field?.territory?.name || null;
+  const hasPendingTerritory = Boolean(field?.pending);
 
   return (
-    <div>
-      <p className="text-xs uppercase tracking-[0.22em] text-gold">Willkommen zurück</p>
-      <h1 className="mt-1 font-display text-4xl">
-        {data.me.first_name}, hier ist Ihr Stand.
-      </h1>
-      {data.mail && !data.mail.ready ? (
-        <Link
-          to="/portal/admin/mail"
-          className="mt-6 flex flex-col gap-2 rounded-3xl bg-surface p-5 gold-hairline"
-        >
-          <p className="text-xs uppercase tracking-[0.16em] text-warn">E-Mail-Sicherheit</p>
-          <p className="font-medium">Versand als @e1direktvertrieb.de ist gesperrt.</p>
-          <p className="text-sm text-muted">{data.mail.block_reason}</p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <span className="flex items-center gap-2 text-xs text-muted">
-              SPF <AuthChip state={data.mail.spf} />
-            </span>
-            <span className="flex items-center gap-2 text-xs text-muted">
-              DKIM <AuthChip state={data.mail.dkim} />
-            </span>
-            <span className="flex items-center gap-2 text-xs text-muted">
-              DMARC <AuthChip state={data.mail.dmarc} />
-            </span>
-          </div>
-        </Link>
-      ) : null}
-      {field?.territory ? (
-        <div className="mt-6 flex flex-col gap-3 rounded-3xl bg-surface p-5 gold-hairline sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-3xl">
+      {/* Begrüßung */}
+      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Heute</p>
+      <h1 className="mt-1 font-display text-4xl leading-none">{hi}</h1>
+      <p className="mt-2 text-sm text-muted">
+        {data.me.first_name}
+        {data.me.role === "vertrieb" || data.me.role === "partner"
+          ? ` · Stufe ${data.me.commission_stufe || 1}`
+          : data.me.role === "super_admin"
+            ? " · Leitung"
+            : ""}
+      </p>
+
+      {/* Schicht + Push */}
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 gold-hairline">
+          <span className="text-sm text-muted">Schicht</span>
+          <WorkShift />
+        </div>
+        <PushEnable />
+      </div>
+
+      {/* Gebiet / Tour */}
+      <section className="mt-5 rounded-3xl bg-surface p-5 gold-hairline">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-gold">Ihr Gebiet</p>
-            <p className="mt-1 font-medium">{field.territory.name}</p>
-            <p className="text-sm text-muted">
-              {field.openFollowups} offene Nachläufe · {field.week}
-            </p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-gold">Gebiet & Tour</p>
+            {hasPendingTerritory ? (
+              <>
+                <p className="mt-2 font-medium">Neues Gebiet bereit</p>
+                <p className="text-sm text-muted">{field?.pending?.name}</p>
+              </>
+            ) : territoryName ? (
+              <>
+                <p className="mt-2 font-medium">{territoryName}</p>
+                <p className="text-sm text-muted">
+                  {field?.week ? `Woche ${field.week}` : "Aktives Gebiet"}
+                  {openFollowups > 0 ? ` · ${openFollowups} Nachläufe` : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 font-medium text-muted">Kein Gebiet zugewiesen</p>
+                <p className="text-sm text-muted">
+                  Orhan oder die Leitung spielt Straßen auf.
+                </p>
+              </>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link to="/app" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-              E1 Tour
+          <Map className="size-5 shrink-0 text-gold/80" />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {hasPendingTerritory || territoryName ? (
+            <Link
+              to="/portal/gebiete"
+              className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-medium text-bg"
+            >
+              <Map className="size-4" />
+              Tour öffnen
             </Link>
-            {can(data.me.role, "team.view") ? (
-              <Link to="/portal/gebiete" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-                Gebiete aufspielen
-              </Link>
-            ) : null}
+          ) : null}
+          {territoryName ? (
             <button
               type="button"
-              className="rounded-xl px-4 py-3 text-sm gold-hairline"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm gold-hairline"
               onClick={async () => {
                 try {
                   const file = await downloadMyTerritory();
                   const a = document.createElement("a");
-                  a.href = URL.createObjectURL(new Blob([file.json], { type: "application/geo+json" }));
+                  a.href = URL.createObjectURL(
+                    new Blob([file.json], { type: "application/geo+json" }),
+                  );
                   a.download = file.filename;
                   a.click();
                 } catch (e) {
@@ -91,57 +147,174 @@ function Dashboard() {
                 }
               }}
             >
-              Gebiet herunterladen
+              <Download className="size-4" />
+              Offline laden
             </button>
-            <Link to="/portal/feld/woche" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-              Wochenliste
+          ) : null}
+          {can(data.me.role, "team.view") ? (
+            <Link
+              to="/portal/gebiete"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm gold-hairline"
+            >
+              Gebiete aufspielen
             </Link>
-          </div>
+          ) : null}
         </div>
+      </section>
+
+      {/* Offene Nachläufe */}
+      {openFollowups > 0 ? (
+        <Link
+          to="/portal/auftraege"
+          search={{ filter: "nachlauf" } as never}
+          className="mt-4 flex items-center gap-3 rounded-2xl border border-warn/30 bg-warn/5 px-4 py-3.5"
+        >
+          <AlertCircle className="size-5 shrink-0 text-warn" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">
+              {openFollowups} offene Nachläufe
+            </p>
+            <p className="text-xs text-muted">Kunden erneut ansprechen</p>
+          </div>
+          <ChevronRight className="size-4 text-muted" />
+        </Link>
       ) : null}
-      <div className="mt-6">
-        <GoalCard />
-      </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Dein Umsatz" value={eur(data.myTurnover || 0)} hint={`netto · zzgl. 19% = ${eur(vatOn(data.myTurnover || 0).gross)} brutto`} />
-        <Kpi label="Abschlüsse Monat" value={String(data.monthWon)} hint={`Ziel ${data.target}`} />
-        <Kpi label="Neue Aufträge" value={String(data.monthCount)} hint="diesen Monat" />
-        <Kpi label="Provision offen" value={eur(data.commissionOpen)} hint={`netto · brutto ${eur(vatOn(data.commissionOpen).gross)} · frei ${eur(data.commissionApproved)}`} />
-        {data.me.role === "super_admin" || data.me.role === "buchhaltung" ? (
-          <>
-            <Kpi label="Agentur New Sales" value={eur(data.agencyGross || 0)} hint={`Stufe 13 netto · brutto ${eur(vatOn(data.agencyGross || 0).gross)}`} />
-            <Kpi label="An Mitarbeiter" value={eur(data.agencyAdvisor || 0)} hint={`deren Stufen netto · brutto ${eur(vatOn(data.agencyAdvisor || 0).gross)}`} />
-            <Kpi label="E1-Marge" value={eur(data.agencyMargin || 0)} hint={`netto · brutto ${eur(vatOn(data.agencyMargin || 0).gross)} · abzgl. Fix ${eur(data.agencyFix || 0)}`} />
-          </>
-        ) : null}
-        <Kpi label="Stornos gesamt" value={String(data.storno)} hint={`${data.total} Aufträge`} />
-        <Link to="/portal/postfach" className="block sm:col-span-2 xl:col-span-1">
-          <Kpi
-            label="Ungelesene Mails"
-            value={String(data.mailUnread ?? 0)}
-            hint="Firmenpostfach"
-          />
+
+      {/* Schnellaktionen */}
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        <Link
+          to="/portal/auftraege/neu"
+          className="flex flex-col items-center gap-2 rounded-2xl bg-gold px-3 py-4 text-center text-bg"
+        >
+          <Plus className="size-5" />
+          <span className="text-xs font-medium">Erfassen</span>
+        </Link>
+        <Link
+          to="/portal/auftraege"
+          className="flex flex-col items-center gap-2 rounded-2xl bg-surface px-3 py-4 text-center gold-hairline"
+        >
+          <ClipboardList className="size-5 text-gold" />
+          <span className="text-xs font-medium">Aufträge</span>
+        </Link>
+        <Link
+          to="/portal/kunden"
+          className="flex flex-col items-center gap-2 rounded-2xl bg-surface px-3 py-4 text-center gold-hairline"
+        >
+          <Users className="size-5 text-gold" />
+          <span className="text-xs font-medium">Kunden</span>
         </Link>
       </div>
-      <div className="mt-6 grid gap-4 lg:grid-cols-5">
-        <div className="rounded-3xl bg-surface p-5 gold-hairline lg:col-span-3">
-          <h2 className="mb-4 text-sm font-medium">Pipeline</h2>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={pipe}>
-                <XAxis dataKey="name" tick={{ fill: "#9a9588", fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: "#9a9588", fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "#181c24", border: "1px solid #2a2d36" }} />
-                <Bar dataKey="n" fill="#c9a227" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+
+      {/* Eigene Zahlen */}
+      <section className="mt-5">
+        <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted">
+          Deine Zahlen
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <Stat
+            label="Heute"
+            value={bal ? eur(bal.tag.eur) : eur(0)}
+            sub={bal ? `${bal.tag.n} Abschluss` : "—"}
+          />
+          <Stat
+            label="Woche"
+            value={bal ? eur(bal.woche.eur) : eur(0)}
+            sub={bal ? `${bal.woche.n}` : "—"}
+          />
+          <Stat
+            label="Monat"
+            value={bal ? eur(bal.monat.eur) : eur(data.myTurnover || 0)}
+            sub={
+              bal
+                ? `${bal.monat.n}`
+                : `${data.monthWon} / Ziel ${data.target}`
+            }
+          />
+        </div>
+      </section>
+
+      {/* Ziel */}
+      <div className="mt-5">
+        <GoalCard />
+      </div>
+
+      {/* Pipeline kompakt */}
+      <section className="mt-5 rounded-3xl bg-surface p-5 gold-hairline">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-medium">Pipeline</p>
+          <Link to="/portal/auftraege" className="text-xs text-gold">
+            Alle →
+          </Link>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(data.pipeline) as ContractStatus[]).map((s) => {
+            const n = data.pipeline[s];
+            if (!n) return null;
+            return (
+              <Link
+                key={s}
+                to="/portal/auftraege"
+                className="flex items-center gap-2 rounded-full bg-elevated px-3 py-1.5 text-xs"
+              >
+                <StatusBadge status={s} />
+                <span className="tabular-nums text-muted">{n}</span>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-muted">Neue Aufträge Monat</p>
+            <p className="mt-0.5 font-display text-2xl tabular-nums">{data.monthCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted">Provision offen</p>
+            <p className="mt-0.5 font-display text-2xl tabular-nums">
+              {eur(data.commissionOpen)}
+            </p>
+            <p className="text-[10px] text-muted">
+              frei {eur(data.commissionApproved)}
+            </p>
           </div>
         </div>
-        <div className="rounded-3xl bg-surface p-5 gold-hairline lg:col-span-2">
-          <h2 className="mb-3 text-sm font-medium">Ranking Monat</h2>
+      </section>
+
+      {/* Leitung: Agentur (Stufe 13) */}
+      {isLead ? (
+        <section className="mt-5 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-gold">
+            Agentur · Stufe 13
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Kpi
+              label="New Sales brutto"
+              value={eur(data.agencyGross || 0)}
+              hint={`netto ${eur(vatOn(data.agencyGross || 0).net)}`}
+            />
+            <Kpi
+              label="An Mitarbeiter"
+              value={eur(data.agencyAdvisor || 0)}
+              hint="deren Stufen 1–3"
+            />
+            <Kpi
+              label="E1-Marge"
+              value={eur(data.agencyMargin || 0)}
+              hint={`abzgl. Fix ${eur(data.agencyFix || 0)}`}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {/* Ranking (wenn Team sichtbar) */}
+      {data.ranking?.length > 0 && can(data.me.role, "team.view") ? (
+        <section className="mt-5 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="mb-3 text-sm font-medium">Ranking Monat</p>
           <ol className="space-y-2">
-            {data.ranking.map((r, i) => (
-              <li key={r.user_id} className="flex items-center justify-between text-sm">
+            {data.ranking.slice(0, 8).map((r, i) => (
+              <li
+                key={r.user_id}
+                className="flex items-center justify-between text-sm"
+              >
                 <span>
                   <span className="mr-2 text-gold">{i + 1}.</span>
                   {r.name}
@@ -152,36 +325,44 @@ function Dashboard() {
               </li>
             ))}
           </ol>
-        </div>
-      </div>
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-          Vertrag eingeben
-        </Link>
-        <Link to="/app" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-          E1 Tour
-        </Link>
-        <Link to="/portal/standort" className="rounded-xl px-4 py-3 text-sm gold-hairline">
-          Standort Feld
-        </Link>
-      </div>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {(Object.keys(data.pipeline) as Array<keyof typeof data.pipeline>).map((s) => (
-          <span key={s} className="flex items-center gap-2 text-xs text-muted">
-            <StatusBadge status={s} /> {data.pipeline[s]}
-          </span>
-        ))}
-      </div>
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint: string }) {
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
   return (
-    <div className="rounded-3xl bg-surface p-5 gold-hairline">
-      <p className="text-xs uppercase tracking-[0.16em] text-muted">{label}</p>
-      <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-muted">{hint}</p>
+    <div className="rounded-2xl bg-surface p-3 gold-hairline">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-muted">{label}</p>
+      <p className="mt-1 font-display text-xl tabular-nums leading-none">{value}</p>
+      <p className="mt-1 text-[10px] text-muted">{sub}</p>
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 font-display text-2xl tabular-nums">{value}</p>
+      <p className="text-[10px] text-muted">{hint}</p>
     </div>
   );
 }

@@ -1,15 +1,33 @@
+/**
+ * E1 Erfassung – Hauptweg
+ * -----------------------
+ * Auftrag vollständig bei E1 erfassen (Kunde, Tarif, Bank, Unterschrift).
+ * Danach: parken oder an New Sales übergeben.
+ * Offline-fähig, mobil + Desktop, gleiche Maske im Portal.
+ *
+ * Ersetzt: src/components/contract-capture.tsx
+ */
+
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, CheckboxRow } from "@/components/ui/field";
 import { SignaturePad } from "@/components/signature-pad";
-import { bootstrapMe, compareTariffs, createContract, listBookableStaff, listTariffs, quoteCommission } from "@/lib/server/api";
+import {
+  bootstrapMe,
+  compareTariffs,
+  createContract,
+  listBookableStaff,
+  listTariffs,
+  quoteCommission,
+} from "@/lib/server/api";
 import { toast } from "sonner";
 import { NettoBrutto } from "@/components/netto-brutto";
 import { vatOn } from "@/lib/steuer";
 import { eur } from "@/lib/utils";
 import { deBankFromIban } from "@/lib/iban";
 import { cacheTariffs, isOffline, queueContract, readCachedTariffs } from "@/lib/offline-queue";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 
 export type CapturePre = {
   street?: string;
@@ -23,6 +41,7 @@ export type CapturePre = {
 };
 
 const DRAFT = "e1_auftrag_entwurf";
+const STEPS = ["Kunde", "Lieferstelle", "Tarif", "Bank", "Abschluss"] as const;
 
 export function ContractCapture({
   afterTo,
@@ -33,62 +52,73 @@ export function ContractCapture({
 }) {
   const nav = useNavigate();
   const start = pre || {};
+  const [step, setStep] = useState(0);
+
+  // Kunde
   const [first, setFirst] = useState(start.first || "");
   const [last, setLast] = useState(start.last || "");
   const [salutation, setSalutation] = useState("Herr");
   const [birth, setBirth] = useState("");
   const [landline, setLandline] = useState("");
   const [mobile, setMobile] = useState(start.phone || "");
+  const [email, setEmail] = useState(start.email || "");
+
+  // Lieferstelle
   const [street, setStreet] = useState(start.street || "");
   const [house, setHouse] = useState(start.house || "");
   const [zip, setZip] = useState(start.zip || "");
   const [city, setCity] = useState(start.city || "");
-  const [provider, setProvider] = useState("");
-  const [type, setType] = useState("strom");
-  const [q, setQ] = useState("");
-  const [tariffId, setTariffId] = useState("");
-  const [kwh, setKwh] = useState("");
-  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({ providers: [], items: [] });
-  const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
-  const [compare, setCompare] = useState<Awaited<ReturnType<typeof compareTariffs>> | null>(null);
-  const [comparing, setComparing] = useState(false);
-  const [stufe, setStufe] = useState(1);
-  const [role, setRole] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
-  const [forStaff, setForStaff] = useState("");
-  const [full, setFull] = useState(false);
-  const [canFull, setCanFull] = useState(false);
-  const [iban, setIban] = useState("");
-  const [bankOwner, setBankOwner] = useState("");
-  const [sepa, setSepa] = useState(false);
-  const [privacy, setPrivacy] = useState(false);
-  const [sign, setSign] = useState("");
-  const [email, setEmail] = useState(start.email || "");
-  const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
   const [meter, setMeter] = useState("");
   const [providerOld, setProviderOld] = useState("");
-  const [oldArbeit, setOldArbeit] = useState("");
-  const [oldGrund, setOldGrund] = useState("");
   const [deliveryKind, setDeliveryKind] = useState<"wechsel" | "neueinzug">("wechsel");
   const [startDate, setStartDate] = useState("");
-  const [signedAt, setSignedAt] = useState(new Date().toISOString().slice(0, 10));
-  const [oldEnd, setOldEnd] = useState("");
-  const [prevNo, setPrevNo] = useState("");
+  const [kwh, setKwh] = useState("");
   const [melo, setMelo] = useState("");
   const [malo, setMalo] = useState("");
   const [grid, setGrid] = useState("");
+  const [prevNo, setPrevNo] = useState("");
+  const [oldEnd, setOldEnd] = useState("");
+
+  // Tarif
+  const [type, setType] = useState("strom");
+  const [provider, setProvider] = useState("");
+  const [q, setQ] = useState("");
+  const [tariffId, setTariffId] = useState("");
+  const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof listTariffs>>>({
+    providers: [],
+    items: [],
+  });
+  const [quote, setQuote] = useState<Awaited<ReturnType<typeof quoteCommission>> | null>(null);
+  const [compare, setCompare] = useState<Awaited<ReturnType<typeof compareTariffs>> | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [oldArbeit, setOldArbeit] = useState("");
+  const [oldGrund, setOldGrund] = useState("");
+
+  // Bank
+  const [iban, setIban] = useState("");
+  const [bankOwner, setBankOwner] = useState("");
   const [bic, setBic] = useState("");
-  const [blz, setBlz] = useState("");
-  const [account, setAccount] = useState("");
   const [bankName, setBankName] = useState("");
+  const [sepa, setSepa] = useState(false);
+
+  // Abschluss
+  const [privacy, setPrivacy] = useState(false);
+  const [sign, setSign] = useState("");
+  const [digitalSign, setDigitalSign] = useState(false);
+  const [signedAt, setSignedAt] = useState(new Date().toISOString().slice(0, 10));
   const [early, setEarly] = useState(false);
   const [postInvoice, setPostInvoice] = useState(false);
-  const [digitalSign, setDigitalSign] = useState(false);
-  const [step, setStep] = useState(1);
+  const [scan, setScan] = useState<{ name: string; base64: string } | null>(null);
   const [lockOn, setLockOn] = useState(true);
   const [lockPw, setLockPw] = useState("");
 
+  // Meta
+  const [stufe, setStufe] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [staff, setStaff] = useState<Awaited<ReturnType<typeof listBookableStaff>>>([]);
+  const [forStaff, setForStaff] = useState("");
+
+  // Draft laden
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT);
@@ -116,6 +146,7 @@ export function ContractCapture({
     }
   }, []);
 
+  // Draft speichern
   useEffect(() => {
     const t = window.setTimeout(() => {
       try {
@@ -127,7 +158,7 @@ export function ContractCapture({
           }),
         );
       } catch {
-        /* voll */
+        /* */
       }
     }, 400);
     return () => window.clearTimeout(t);
@@ -137,9 +168,7 @@ export function ContractCapture({
     bootstrapMe()
       .then((m) => {
         setStufe(m.profile.commission_stufe || 1);
-        setRole(m.profile.role);
         setForStaff(m.profile.user_id);
-        setCanFull(Boolean(m.flags.full_contract || m.flags.phase2_own_tariffs));
       })
       .catch(() => setStufe(1));
     listBookableStaff()
@@ -163,11 +192,10 @@ export function ContractCapture({
     return () => window.clearTimeout(t);
   }, [q, provider, type]);
 
-  const selected = useMemo(() => catalog.items.find((i) => i.id === tariffId) || null, [catalog.items, tariffId]);
-  const ownTariff = Boolean(selected && selected.provider === "E1");
-  useEffect(() => {
-    setFull(canFull && ownTariff);
-  }, [canFull, ownTariff]);
+  const selected = useMemo(
+    () => catalog.items.find((i) => i.id === tariffId) || null,
+    [catalog.items, tariffId],
+  );
 
   useEffect(() => {
     if (!tariffId || !Number(kwh)) {
@@ -180,81 +208,112 @@ export function ContractCapture({
       .catch(() => setQuote(null));
   }, [tariffId, kwh, forStaff, staff, stufe]);
 
-  async function save(parked: boolean) {
-    if (!first.trim() || !last.trim()) {
-      toast.error("Name fehlt.");
+  // IBAN → Bankdaten
+  useEffect(() => {
+    const cleaned = iban.replace(/\s+/g, "");
+    if (cleaned.length < 15) return;
+    try {
+      const info = deBankFromIban(cleaned);
+      if (info?.bic) setBic(info.bic);
+      if (info?.name) setBankName(info.name);
+    } catch {
+      /* */
+    }
+  }, [iban]);
+
+  function validateStep(s: number): string | null {
+    if (s === 0) {
+      if (!first.trim() || !last.trim()) return "Name fehlt.";
+      if (!mobile.trim() && !landline.trim()) return "Telefon oder Mobilnummer angeben.";
+    }
+    if (s === 1) {
+      if (!street.trim() || !house.trim() || !zip.trim() || !city.trim()) return "Adresse unvollständig.";
+      if (!Number(kwh)) return "Jahresverbrauch in kWh fehlt.";
+    }
+    if (s === 2) {
+      if (!tariffId) return "Tarif wählen.";
+    }
+    if (s === 3) {
+      if (iban.trim() && !sepa) return "SEPA bestätigen, wenn IBAN angegeben ist.";
+    }
+    return null;
+  }
+
+  function next() {
+    const err = validateStep(step);
+    if (err) {
+      toast.error(err);
       return;
     }
-    if (!mobile.trim() && !landline.trim()) {
-      toast.error("Telefon oder Mobilnummer angeben.");
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  }
+
+  function back() {
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function save(mode: "park" | "newsales") {
+    for (let s = 0; s <= 2; s++) {
+      const err = validateStep(s);
+      if (err) {
+        toast.error(err);
+        setStep(s);
+        return;
+      }
+    }
+    if (iban.trim() && !sepa) {
+      toast.error("SEPA bestätigen.");
+      setStep(3);
       return;
     }
-    if (!street.trim() || !house.trim() || !zip.trim() || !city.trim()) {
-      toast.error("Adresse unvollständig.");
-      return;
-    }
-    if (!tariffId) {
-      toast.error("Tarif wählen.");
-      return;
-    }
-    if (!Number(kwh)) {
-      toast.error("Verbrauch in kWh fehlt — für die Provision.");
-      return;
-    }
-    if (full && !privacy) {
-      toast.error("Datenschutz muss bestätigt sein.");
-      return;
-    }
-    if (full && iban.trim() && !sepa) {
-      toast.error("SEPA muss bestätigt sein, wenn eine IBAN angegeben ist.");
-      return;
-    }
+
     setBusy(true);
     const payload = {
-          firstName: first,
-          lastName: last,
-          salutation,
-          birthDate: birth || undefined,
-          phone: mobile || landline,
-          landline: landline || undefined,
-          mobile: mobile || undefined,
-          email: email || undefined,
-          street,
-          houseNumber: house,
-          zip,
-          city,
-          tariffId,
-          consumptionKwh: Number(kwh),
-          meterNumber: meter || undefined,
-          previousProvider: providerOld || undefined,
-          startDate: startDate || undefined,
-          forStaffId: forStaff || undefined,
-          inNewsales: !full,
-          fullFlow: full,
-          parked,
-          lockPassword: lockOn && lockPw.length >= 6 ? lockPw : undefined,
-          iban: iban || undefined,
-          bankOwner: bankOwner || undefined,
-          bic: bic || undefined,
-          bankName: bankName || undefined,
-          blz: blz || undefined,
-          accountNo: account || undefined,
-          deliveryKind,
-          meloId: melo || undefined,
-          maloId: malo || undefined,
-          gridOperator: grid || undefined,
-          previousCustomerNo: prevNo || undefined,
-          oldContractEnd: oldEnd || undefined,
-          signedAt: signedAt || undefined,
-          digitalSignWanted: digitalSign,
-          earlyDelivery: early,
-          invoiceByPost: postInvoice,
-          sepaConfirmed: sepa,
-          privacyConfirmed: full ? privacy : undefined,
-          signatureData: full ? sign : undefined,
-          scanBase64: scan?.base64,
-          scanName: scan?.name,
+      firstName: first,
+      lastName: last,
+      salutation,
+      birthDate: birth || undefined,
+      phone: mobile || landline,
+      landline: landline || undefined,
+      mobile: mobile || undefined,
+      email: email || undefined,
+      street,
+      houseNumber: house,
+      zip,
+      city,
+      tariffId,
+      consumptionKwh: Number(kwh),
+      meterNumber: meter || undefined,
+      previousProvider: providerOld || undefined,
+      startDate: startDate || undefined,
+      forStaffId: forStaff || undefined,
+      // Hauptweg: bei E1 erfasst, für New Sales bestimmt
+      inNewsales: mode === "newsales",
+      fullFlow: true,
+      parked: mode === "park",
+      source: mode === "newsales" ? "e1_to_newsales" : "e1_parked",
+      lockPassword: lockOn && lockPw.length >= 6 ? lockPw : undefined,
+      iban: iban || undefined,
+      bankOwner: bankOwner || undefined,
+      bic: bic || undefined,
+      bankName: bankName || undefined,
+      deliveryKind,
+      meloId: melo || undefined,
+      maloId: malo || undefined,
+      gridOperator: grid || undefined,
+      previousCustomerNo: prevNo || undefined,
+      oldContractEnd: oldEnd || undefined,
+      signedAt: signedAt || undefined,
+      digitalSignWanted: digitalSign,
+      earlyDelivery: early,
+      invoiceByPost: postInvoice,
+      sepaConfirmed: sepa,
+      privacyConfirmed: privacy || undefined,
+      signatureData: sign || undefined,
+      scanBase64: scan?.base64,
+      scanName: scan?.name,
     };
+
     try {
       if (isOffline()) {
         await queueContract(payload);
@@ -263,34 +322,36 @@ export function ContractCapture({
         } catch {
           /* */
         }
-        toast.success("Im Funkloch gespeichert. Geht raus, sobald Netz da ist.");
-        if (afterTo === "app") nav({ to: "/app" });
+        toast.success("Offline gespeichert. Wird gesendet, sobald Netz da ist.");
+        goBack();
         return;
       }
-      const res = await createContract({
-        data: payload,
-      });
+      const res = await createContract({ data: payload });
       try {
         localStorage.removeItem(DRAFT);
       } catch {
         /* */
       }
-      toast.success(
-        parked
-          ? res.margin
-            ? `Geparkt · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
-            : `Geparkt · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`
-          : res.margin
-            ? `Gebucht · Berater ${eur(res.advisor)} netto / ${eur(vatOn(res.advisor).gross)} brutto`
-            : `Gebucht · ${eur(res.amount)} netto / ${eur(vatOn(res.amount).gross)} brutto`,
-      );
+      if (mode === "park") {
+        toast.success(
+          res.margin
+            ? `Geparkt · Berater ${eur(res.advisor)} netto`
+            : `Geparkt · ${eur(res.amount)} netto`,
+        );
+      } else {
+        toast.success(
+          res.margin
+            ? `An New Sales · Berater ${eur(res.advisor)} netto`
+            : `Auftrag erfasst · ${eur(res.amount)} netto`,
+        );
+      }
       if (afterTo === "app") nav({ to: "/app" });
       else nav({ to: "/portal/auftraege/$id", params: { id: res.id } });
     } catch (e) {
       try {
         await queueContract(payload);
         toast.success("Kein Netz. Auftrag liegt auf dem Gerät und wird nachgeschickt.");
-        if (afterTo === "app") nav({ to: "/app" });
+        goBack();
       } catch {
         toast.error(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
       }
@@ -299,445 +360,484 @@ export function ContractCapture({
     }
   }
 
-  const field = afterTo === "app";
-  const show = (n: number) => !field || step === n;
+  function goBack() {
+    if (afterTo === "app") nav({ to: "/app" });
+    else nav({ to: "/portal" });
+  }
 
   return (
-    <div className="mx-auto max-w-3xl pb-16">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Abschluss</p>
-      <h1 className="mt-1 font-display text-4xl">Vertrag</h1>
-      {street || house ? (
+    <div className="mx-auto max-w-xl pb-24">
+      <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Erfassung</p>
+      <h1 className="mt-1 font-display text-3xl sm:text-4xl">Neuer Auftrag</h1>
+      {(street || house) && (
         <p className="mt-2 text-sm text-muted">
           {street} {house}
           {zip || city ? ` · ${zip} ${city}` : ""}
         </p>
-      ) : (
-        <p className="mt-2 text-sm text-muted">Adresse aus der Karte oder hier eintragen.</p>
       )}
-      {afterTo === "app" ? (
-        <div className="mt-5 flex gap-1 text-[11px] uppercase tracking-[0.12em]">
-          {["Kunde", "Verbrauch", "Vergleich", "Fertig"].map((l, i) => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => setStep(i + 1)}
-              className={`rounded-full px-3 py-1 ${step === i + 1 ? "bg-gold text-bg" : "text-muted"}`}
-            >
-              {i + 1} {l}
-            </button>
-          ))}
-        </div>
-      ) : null}
 
-      {staff.length > 1 && show(1) ? (
-        <div className="mt-6 rounded-3xl bg-surface p-5 gold-hairline">
-          <Field label="Buchen auf Mitarbeiter-ID">
-            <Select value={forStaff} onChange={(e) => setForStaff(e.target.value)}>
-              {staff.map((s) => (
-                <option key={s.user_id} value={s.user_id}>
-                  {s.staff_id ? `${s.staff_id} · ${s.name}` : s.name} · Stufe {s.commission_stufe || 1}
+      {/* Steps */}
+      <div className="mt-5 flex gap-1 overflow-x-auto pb-1">
+        {STEPS.map((label, i) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => {
+              if (i < step) setStep(i);
+              else if (i === step + 1) next();
+            }}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] transition-colors ${
+              i === step
+                ? "bg-gold text-bg"
+                : i < step
+                  ? "bg-elevated text-gold"
+                  : "text-muted"
+            }`}
+          >
+            {i < step ? <Check className="mr-1 inline size-3" /> : null}
+            {i + 1} {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Schritt 0: Kunde */}
+      {step === 0 && (
+        <section className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Kunde</p>
+          {staff.length > 1 && (
+            <Field label="Buchen auf Mitarbeiter">
+              <Select value={forStaff} onChange={(e) => setForStaff(e.target.value)}>
+                {staff.map((s) => (
+                  <option key={s.user_id} value={s.user_id}>
+                    {s.staff_id ? `${s.staff_id} · ${s.name}` : s.name} · Stufe{" "}
+                    {s.commission_stufe || 1}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field label="Anrede">
+            <Select value={salutation} onChange={(e) => setSalutation(e.target.value)}>
+              <option>Herr</option>
+              <option>Frau</option>
+              <option>Divers</option>
+            </Select>
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Vorname *">
+              <Input
+                value={first}
+                onChange={(e) => setFirst(e.target.value)}
+                autoComplete="given-name"
+              />
+            </Field>
+            <Field label="Nachname *">
+              <Input
+                value={last}
+                onChange={(e) => setLast(e.target.value)}
+                autoComplete="family-name"
+              />
+            </Field>
+          </div>
+          <Field label="Geburtsdatum">
+            <Input
+              type="date"
+              value={birth}
+              onChange={(e) => setBirth(e.target.value)}
+            />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Mobil *">
+              <Input
+                type="tel"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                autoComplete="tel"
+              />
+            </Field>
+            <Field label="Festnetz">
+              <Input
+                type="tel"
+                value={landline}
+                onChange={(e) => setLandline(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Field label="E-Mail">
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </Field>
+        </section>
+      )}
+
+      {/* Schritt 1: Lieferstelle */}
+      {step === 1 && (
+        <section className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Lieferstelle</p>
+          <div className="grid gap-3 sm:grid-cols-[1fr_5rem]">
+            <Field label="Straße *">
+              <Input value={street} onChange={(e) => setStreet(e.target.value)} />
+            </Field>
+            <Field label="Nr. *">
+              <Input value={house} onChange={(e) => setHouse(e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[7rem_1fr]">
+            <Field label="PLZ *">
+              <Input value={zip} onChange={(e) => setZip(e.target.value)} inputMode="numeric" />
+            </Field>
+            <Field label="Ort *">
+              <Input value={city} onChange={(e) => setCity(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Jahresverbrauch kWh *">
+            <Input
+              value={kwh}
+              onChange={(e) => setKwh(e.target.value.replace(/\D/g, ""))}
+              inputMode="numeric"
+              placeholder="z. B. 3500"
+            />
+          </Field>
+          <Field label="Zählernummer">
+            <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
+          </Field>
+          <Field label="Art">
+            <Select
+              value={deliveryKind}
+              onChange={(e) => setDeliveryKind(e.target.value as "wechsel" | "neueinzug")}
+            >
+              <option value="wechsel">Anbieterwechsel</option>
+              <option value="neueinzug">Neueinzug</option>
+            </Select>
+          </Field>
+          <Field label="Bisheriger Anbieter">
+            <Input
+              value={providerOld}
+              onChange={(e) => setProviderOld(e.target.value)}
+              placeholder="optional"
+            />
+          </Field>
+          <Field label="Gewünschter Lieferbeginn">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </Field>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted">Weitere Felder (MaLo, MeLo, Netz…)</summary>
+            <div className="mt-3 grid gap-3">
+              <Field label="Marktlokation (MaLo)">
+                <Input value={malo} onChange={(e) => setMalo(e.target.value)} />
+              </Field>
+              <Field label="Messlokation (MeLo)">
+                <Input value={melo} onChange={(e) => setMelo(e.target.value)} />
+              </Field>
+              <Field label="Netzbetreiber">
+                <Input value={grid} onChange={(e) => setGrid(e.target.value)} />
+              </Field>
+              <Field label="Alte Kundennummer">
+                <Input value={prevNo} onChange={(e) => setPrevNo(e.target.value)} />
+              </Field>
+              <Field label="Ende alter Vertrag">
+                <Input type="date" value={oldEnd} onChange={(e) => setOldEnd(e.target.value)} />
+              </Field>
+            </div>
+          </details>
+        </section>
+      )}
+
+      {/* Schritt 2: Tarif */}
+      {step === 2 && (
+        <section className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Tarif</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Sparte">
+              <Select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="strom">Strom</option>
+                <option value="gas">Gas</option>
+              </Select>
+            </Field>
+            <Field label="Anbieter filtern">
+              <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
+                <option value="">Alle</option>
+                {catalog.providers.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Suche">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Tarifname…"
+            />
+          </Field>
+          <Field label="Tarif wählen *">
+            <Select value={tariffId} onChange={(e) => setTariffId(e.target.value)}>
+              <option value="">— bitte wählen —</option>
+              {catalog.items.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.provider} · {t.name}
+                  {t.work_price != null ? ` · ${t.work_price} ct` : ""}
                 </option>
               ))}
             </Select>
           </Field>
-        </div>
-      ) : null}
-
-      {show(1) ? (
-      <>
-      <div className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Lieferadresse & Vertragspartner</p>
-        <Field label="Anrede">
-          <Select value={salutation} onChange={(e) => setSalutation(e.target.value)}>
-            <option>Herr</option>
-            <option>Frau</option>
-            <option>Divers</option>
-          </Select>
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Vorname">
-            <Input value={first} onChange={(e) => setFirst(e.target.value)} autoComplete="given-name" />
-          </Field>
-          <Field label="Nachname">
-            <Input value={last} onChange={(e) => setLast(e.target.value)} autoComplete="family-name" />
-          </Field>
-        </div>
-        <div className="grid grid-cols-[1fr_5.5rem] gap-3">
-          <Field label="Straße">
-            <Input value={street} onChange={(e) => setStreet(e.target.value)} autoComplete="address-line1" />
-          </Field>
-          <Field label="Nr.">
-            <Input value={house} onChange={(e) => setHouse(e.target.value)} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-[7rem_1fr] gap-3">
-          <Field label="PLZ">
-            <Input value={zip} onChange={(e) => setZip(e.target.value.replace(/[^\d]/g, "").slice(0, 5))} inputMode="numeric" autoComplete="postal-code" />
-          </Field>
-          <Field label="Ort">
-            <Input value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
-          </Field>
-        </div>
-        <Field label="Geburtstag">
-          <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
-        </Field>
-      </div>
-
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Kontaktdaten</p>
-        <Field label="Festnetz">
-          <Input value={landline} onChange={(e) => setLandline(e.target.value)} inputMode="tel" />
-        </Field>
-        <Field label="Mobilfunknummer">
-          <Input value={mobile} onChange={(e) => setMobile(e.target.value)} inputMode="tel" autoComplete="tel" />
-        </Field>
-        <p className="text-xs text-muted">Mindestens eine Nummer.</p>
-        <Field label="E-Mail">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
-        </Field>
-        {field ? (
-          <Button type="button" onClick={() => setStep(2)}>
-            Weiter zu Verbrauch
-          </Button>
-        ) : null}
-      </div>
-      </>
-      ) : null}
-
-      {show(2) ? (
-      <>
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Vergleich</p>
-        <Field label="Bisheriger Anbieter">
-          <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} placeholder="Steht auf der Rechnung" />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Arbeitspreis bisher ct/kWh">
-            <Input
-              value={oldArbeit}
-              onChange={(e) => setOldArbeit(e.target.value.replace(/[^\d,.]/g, ""))}
-              inputMode="decimal"
-              placeholder="z. B. 32,14"
-            />
-          </Field>
-          <Field label="Grundpreis bisher EUR / Jahr">
-            <Input
-              value={oldGrund}
-              onChange={(e) => setOldGrund(e.target.value.replace(/[^\d,.]/g, ""))}
-              inputMode="decimal"
-              placeholder="z. B. 156,00"
-            />
-          </Field>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Sparte">
-            <Select value={type} onChange={(e) => setType(e.target.value === "gas" ? "gas" : "strom")}>
-              <option value="strom">Strom</option>
-              <option value="gas">Gas</option>
-            </Select>
-          </Field>
-          <Field label="Jahresverbrauch kWh">
-            <Input value={kwh} onChange={(e) => setKwh(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" />
-          </Field>
-        </div>
-        <Button
-          type="button"
-          disabled={comparing}
-          onClick={async () => {
-            if (zip.replace(/\D/g, "").length !== 5) {
-              toast.error("Zuerst PLZ und Adresse.");
-              return;
-            }
-            if (!Number(kwh)) {
-              toast.error("Verbrauch in kWh angeben.");
-              return;
-            }
-            const arbeit = Number(oldArbeit.replace(",", "."));
-            const grund = Number(oldGrund.replace(",", "."));
-            if (!arbeit) {
-              toast.error("Arbeitspreis von der letzten Rechnung.");
-              return;
-            }
-            if (!Number.isFinite(grund) || oldGrund.trim() === "") {
-              toast.error("Grundpreis von der letzten Rechnung (EUR im Jahr).");
-              return;
-            }
-            setComparing(true);
-            try {
-              const res = await compareTariffs({
-                data: {
-                  zip,
-                  kwh: Number(kwh),
-                  type: type === "gas" ? "gas" : "strom",
-                  stufe: staff.length ? staff.find((s) => s.user_id === forStaff)?.commission_stufe || stufe : stufe,
-                  previousProvider: providerOld,
-                  currentArbeitCt: arbeit,
-                  currentGrundYear: grund,
-                },
-              });
-              setCompare(res);
-              if (res.winner) {
-                setTariffId(res.winner.tariffId);
-                setType(res.winner.type);
-                setProvider(res.winner.provider);
-              } else {
-                toast.error("Kein Tarif im Katalog für diesen Verbrauch.");
-              }
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Vergleich fehlgeschlagen");
-            } finally {
-              setComparing(false);
-            }
-          }}
-        >
-          {comparing ? "Prüft…" : "Vergleich starten"}
-        </Button>
-        {compare?.winner ? (
-          <article className="rounded-2xl bg-elevated p-4 gold-hairline">
-            <p className="text-xs uppercase tracking-[0.18em] text-gold">Preis-Leistung</p>
-            <p className="mt-2 text-lg font-medium">
-              {compare.winner.provider} · {compare.winner.name}
-            </p>
-            <p className="mt-3 font-display text-3xl tabular-nums">{eur(compare.winner.advisor)}</p>
-            <p className="mt-1 text-sm text-muted">
-              netto · + {eur(compare.winner.advisorGross - compare.winner.advisor)} USt 19% = {eur(compare.winner.advisorGross)} brutto
-            </p>
-            <p className="mt-2 text-xs text-muted">
-              Berater Stufe {compare.winner.stufe} · Liste netto, zzgl. 19% USt
-            </p>
-            <p className="mt-3 text-sm">
-              Heute {eur(compare.currentYear)} / Jahr. Vergleich {eur(compare.winner.yearEur)} / Jahr.
-              {compare.saveYear > 0 ? ` Ersparnis ca. ${eur(compare.saveYear)} / Jahr.` : compare.saveYear < 0 ? ` Vergleich liegt ${eur(Math.abs(compare.saveYear))} höher.` : ""}
-            </p>
-            {!compare.live ? (
-              <p className="mt-2 text-xs text-muted">
-                Vergleich aus dem Katalog. Sobald TARIFRECHNER_API_URL steht, kommen die echten PLZ-Preise.
+          {selected && (
+            <div className="rounded-2xl bg-elevated p-3 text-sm">
+              <p className="font-medium">
+                {selected.provider} · {selected.name}
               </p>
-            ) : null}
-          </article>
-        ) : null}
-      </div>
-
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <Field label="Tarif suchen">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name oder Nummer" />
-        </Field>
-        <Field label="Tarif">
-          <Select value={tariffId} onChange={(e) => setTariffId(e.target.value)}>
-            <option value="">Bitte wählen</option>
-            {catalog.items.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.provider} · {t.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Jahresverbrauch kWh" hint="Nur für die Provision im Portal">
-          <Input inputMode="numeric" value={kwh} onChange={(e) => setKwh(e.target.value.replace(/[^\d]/g, ""))} />
-        </Field>
-        {field ? (
-          <Button type="button" onClick={() => setStep(3)}>
-            Weiter zum Abschluss
-          </Button>
-        ) : null}
-      </div>
-      </>
-      ) : null}
-
-      {show(3) ? (
-      <>
-      <div className="mt-4 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Provision</p>
-        {selected ? (
-          <p className="mt-2 text-sm">
-            {selected.provider} · {selected.name}
-          </p>
-        ) : (
-          <p className="mt-2 text-sm text-muted">Tarif und Verbrauch wählen.</p>
-        )}
-        {quote?.ok ? (
-          <>
-            <div className="mt-3">
-              <NettoBrutto net={quote.advisor} />
+              {quote?.ok && (
+                <p className="mt-1 text-muted">
+                  Provision ca.{" "}
+                  <NettoBrutto net={quote.amount} />
+                </p>
+              )}
             </div>
-            <p className="text-sm text-muted">Berater Stufe {quote.stufe} · Liste netto, zzgl. 19% USt</p>
-            {quote.margin > 0 && (role === "super_admin" || role === "buchhaltung" || role === "gebietsleiter") ? (
-              <>
-                <p className="mt-2 text-sm">
-                  Agentur NS 13 {eur(quote.agency)} netto / {eur(vatOn(quote.agency).gross)} brutto
-                </p>
-                <p className="text-sm text-gold">
-                  E1-Marge {eur(quote.margin)} netto / {eur(vatOn(quote.margin).gross)} brutto
-                </p>
-              </>
-            ) : null}
-          </>
-        ) : null}
-        {quote && !quote.ok ? <p className="mt-3 text-sm text-danger">{quote.reason}</p> : null}
-        {field ? (
-          <Button className="mt-4" type="button" onClick={() => setStep(4)}>
-            Weiter zu Fertig
-          </Button>
-        ) : null}
-      </div>
-      </>
-      ) : null}
-
-      {show(4) ? (
-      <>
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Bankverbindung — optional</p>
-        <p className="text-sm text-muted">Leer lassen geht. Prüfen füllt BLZ und Konto aus der IBAN.</p>
-        <Field label="IBAN">
-          <Input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} autoComplete="off" />
-        </Field>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              try {
-                const p = deBankFromIban(iban);
-                if (!p.blz) {
-                  toast.error("IBAN unvollständig");
-                  return;
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Alter Arbeitspreis (ct)">
+              <Input value={oldArbeit} onChange={(e) => setOldArbeit(e.target.value)} />
+            </Field>
+            <Field label="Alter Grundpreis (€)">
+              <Input value={oldGrund} onChange={(e) => setOldGrund(e.target.value)} />
+            </Field>
+          </div>
+          {Number(kwh) > 0 && (oldArbeit || oldGrund) && tariffId && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={comparing}
+              onClick={async () => {
+                setComparing(true);
+                try {
+                  const r = await compareTariffs({
+                    data: {
+                      tariffId,
+                      consumptionKwh: Number(kwh),
+                      oldWorkPrice: oldArbeit ? Number(oldArbeit) : undefined,
+                      oldBasePrice: oldGrund ? Number(oldGrund) : undefined,
+                    },
+                  });
+                  setCompare(r);
+                } catch {
+                  setCompare(null);
+                } finally {
+                  setComparing(false);
                 }
-                setBlz(p.blz);
-                setAccount(p.account);
-                if (!bankOwner.trim()) setBankOwner(`${first} ${last}`.trim());
-                toast.success("BLZ und Konto aus IBAN");
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "IBAN ungültig");
-              }
-            }}
-          >
-            prüfen
-          </Button>
-        </div>
-        <Field label="Kontoinhaber">
-          <Input value={bankOwner} onChange={(e) => setBankOwner(e.target.value)} />
-        </Field>
-        <Field label="BIC">
-          <Input value={bic} onChange={(e) => setBic(e.target.value.toUpperCase())} />
-        </Field>
-        <Field label="Name der Bank">
-          <Input value={bankName} onChange={(e) => setBankName(e.target.value)} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="BLZ">
-            <Input value={blz} onChange={(e) => setBlz(e.target.value)} />
+              }}
+            >
+              {comparing ? "Rechnet…" : "Ersparnis vergleichen"}
+            </Button>
+          )}
+          {compare && (
+            <p className="text-sm text-muted">
+              Vergleichsergebnis hinterlegt
+              {"savings" in compare && compare.savings != null
+                ? ` · ca. ${eur(Number(compare.savings))} / Jahr`
+                : ""}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Schritt 3: Bank */}
+      {step === 3 && (
+        <section className="mt-6 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+          <p className="text-xs uppercase tracking-[0.16em] text-gold">Bank & SEPA</p>
+          <Field label="IBAN">
+            <Input
+              value={iban}
+              onChange={(e) => setIban(e.target.value.toUpperCase())}
+              placeholder="DE…"
+              autoComplete="off"
+            />
           </Field>
-          <Field label="Konto">
-            <Input value={account} onChange={(e) => setAccount(e.target.value)} />
+          <Field label="Kontoinhaber">
+            <Input
+              value={bankOwner}
+              onChange={(e) => setBankOwner(e.target.value)}
+              placeholder={`${first} ${last}`.trim()}
+            />
           </Field>
-        </div>
-        {iban.trim() ? (
+          {(bic || bankName) && (
+            <p className="text-xs text-muted">
+              {bankName}
+              {bic ? ` · BIC ${bic}` : ""}
+            </p>
+          )}
           <CheckboxRow checked={sepa} onChange={setSepa}>
             SEPA-Lastschriftmandat erteilt
           </CheckboxRow>
-        ) : null}
-      </div>
+          <p className="text-xs text-muted">
+            IBAN kann leer bleiben und später nachgetragen werden – dann ohne SEPA.
+          </p>
+        </section>
+      )}
 
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <p className="text-xs uppercase tracking-[0.16em] text-gold">Liefertermin & Vorversorger</p>
-        <Field label="Art">
-          <Select value={deliveryKind} onChange={(e) => setDeliveryKind(e.target.value as "wechsel" | "neueinzug")}>
-            <option value="wechsel">Lieferantenwechsel</option>
-            <option value="neueinzug">Neueinzug</option>
-          </Select>
-        </Field>
-        <Field label="gew. Lieferdatum">
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </Field>
-        <Field label="Zählernummer">
-          <Input value={meter} onChange={(e) => setMeter(e.target.value)} />
-        </Field>
-        <Field label="MeLo-ID">
-          <Input value={melo} onChange={(e) => setMelo(e.target.value)} />
-        </Field>
-        <Field label="MaLo-ID">
-          <Input value={malo} onChange={(e) => setMalo(e.target.value)} />
-        </Field>
-        <Field label="abw. Messstellennetzbetreiber">
-          <Input value={grid} onChange={(e) => setGrid(e.target.value)} />
-        </Field>
-        <Field label="Bish. Kundennummer">
-          <Input value={prevNo} onChange={(e) => setPrevNo(e.target.value)} />
-        </Field>
-        <Field label="Vorversorger">
-          <Input value={providerOld} onChange={(e) => setProviderOld(e.target.value)} />
-        </Field>
-        <Field label="Altvertrag gekündigt zum">
-          <Input type="date" value={oldEnd} onChange={(e) => setOldEnd(e.target.value)} />
-        </Field>
-        <Field label="Datum der Unterschrift">
-          <Input type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} />
-        </Field>
-      </div>
+      {/* Schritt 4: Abschluss */}
+      {step === 4 && (
+        <section className="mt-6 grid gap-4">
+          <div className="rounded-3xl bg-surface p-5 gold-hairline">
+            <p className="text-xs uppercase tracking-[0.16em] text-gold">Zusammenfassung</p>
+            <dl className="mt-3 space-y-1.5 text-sm">
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted">Kunde</dt>
+                <dd className="text-right font-medium">
+                  {salutation} {first} {last}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted">Adresse</dt>
+                <dd className="text-right">
+                  {street} {house}, {zip} {city}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted">Verbrauch</dt>
+                <dd className="text-right tabular-nums">{kwh} kWh</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted">Tarif</dt>
+                <dd className="text-right">
+                  {selected ? `${selected.provider} · ${selected.name}` : "—"}
+                </dd>
+              </div>
+              {quote?.ok && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Provision</dt>
+                  <dd className="text-right">
+                    {eur(quote.amount)} netto
+                    <span className="block text-[10px] text-muted">
+                      brutto {eur(vatOn(quote.amount).gross)}
+                    </span>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
 
-      <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-        <CheckboxRow checked={digitalSign} onChange={setDigitalSign}>
-          Kunde wünscht die digitale Unterschrift
-        </CheckboxRow>
-        <CheckboxRow checked={early} onChange={setEarly}>
-          Lieferung vor Ablauf der Widerrufsfrist möglich — Widerrufsrecht bleibt
-        </CheckboxRow>
-        <CheckboxRow checked={postInvoice} onChange={setPostInvoice}>
-          Rechnung per Post (kann Kosten verursachen)
-        </CheckboxRow>
-        <Field label="Vertrag / Scan">
-          <input
-            type="file"
-            accept="image/*,.pdf,application/pdf"
-            className="mt-1 block w-full text-sm"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (!f) {
-                setScan(null);
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = () => setScan({ name: f.name, base64: String(reader.result || "") });
-              reader.readAsDataURL(f);
-            }}
-          />
-          {scan ? <p className="mt-1 text-xs text-muted">{scan.name}</p> : null}
-        </Field>
-      </div>
+          <div className="grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
+            <p className="text-xs uppercase tracking-[0.16em] text-gold">Unterschrift & Optionen</p>
+            <Field label="Unterschriftsdatum">
+              <Input
+                type="date"
+                value={signedAt}
+                onChange={(e) => setSignedAt(e.target.value)}
+              />
+            </Field>
+            <CheckboxRow checked={privacy} onChange={setPrivacy}>
+              Datenschutz / AGB zur Kenntnis genommen
+            </CheckboxRow>
+            <CheckboxRow checked={digitalSign} onChange={setDigitalSign}>
+              Digitale Unterschrift per E-Mail (DocuSign) anfordern
+            </CheckboxRow>
+            <CheckboxRow checked={early} onChange={setEarly}>
+              Lieferung vor Ablauf der Widerrufsfrist möglich
+            </CheckboxRow>
+            <CheckboxRow checked={postInvoice} onChange={setPostInvoice}>
+              Rechnung per Post
+            </CheckboxRow>
+            <p className="text-sm text-muted">Unterschrift vor Ort (Tablet)</p>
+            <SignaturePad value={sign} onChange={setSign} />
+            <Field label="Scan / Foto (optional)">
+              <input
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                className="mt-1 block w-full text-sm"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) {
+                    setScan(null);
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () =>
+                    setScan({ name: f.name, base64: String(reader.result || "") });
+                  reader.readAsDataURL(f);
+                }}
+              />
+              {scan ? <p className="mt-1 text-xs text-muted">{scan.name}</p> : null}
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={lockOn}
+                onChange={(e) => setLockOn(e.target.checked)}
+              />
+              Kundendaten passwortgeschützt speichern
+            </label>
+            {lockOn && (
+              <Field label="Passwort (min. 6 Zeichen)">
+                <Input
+                  type="password"
+                  value={lockPw}
+                  onChange={(e) => setLockPw(e.target.value)}
+                />
+              </Field>
+            )}
+          </div>
 
-      {full ? (
-        <div className="mt-4 grid gap-3 rounded-3xl bg-surface p-5 gold-hairline">
-          <p className="text-xs uppercase tracking-[0.16em] text-gold">Eigener E1-Strom · AGB</p>
-          <CheckboxRow checked={privacy} onChange={setPrivacy}>
-            Datenschutz / AGB akzeptiert
-          </CheckboxRow>
-          <p className="text-sm text-muted">Unterschrift am Tablet (optional)</p>
-          <SignaturePad value={sign} onChange={setSign} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void save("park")}
+            >
+              {busy ? "Speichert…" : "Nur parken"}
+            </Button>
+            <Button
+              className="w-full"
+              disabled={busy}
+              onClick={() => void save("newsales")}
+            >
+              {busy ? "Speichert…" : "Erfassen → New Sales"}
+            </Button>
+          </div>
+          <p className="text-center text-xs text-muted">
+            „Erfassen → New Sales“ speichert den Auftrag bei E1 und markiert ihn zur
+            Übergabe an New Sales.
+          </p>
+        </section>
+      )}
+
+      {/* Navigation unten */}
+      {step < 4 && (
+        <div className="mt-6 flex gap-2">
+          {step > 0 ? (
+            <Button type="button" variant="outline" className="flex-1" onClick={back}>
+              <ChevronLeft className="mr-1 size-4" />
+              Zurück
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" className="flex-1" onClick={goBack}>
+              Abbrechen
+            </Button>
+          )}
+          <Button type="button" className="flex-1" onClick={next}>
+            Weiter
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
         </div>
-      ) : null}
-
-      <div className="mt-4 grid gap-2 rounded-3xl bg-surface p-5 gold-hairline">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={lockOn} onChange={(e) => setLockOn(e.target.checked)} />
-          Daten passwortgeschützt speichern
-        </label>
-        {lockOn ? (
-          <Field label="Passwort für Kundendaten (min. 6 Zeichen)">
-            <Input type="password" value={lockPw} onChange={(e) => setLockPw(e.target.value)} />
-          </Field>
-        ) : null}
-        <div className="grid gap-2 sm:grid-cols-2">
-        <Button variant="outline" className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(true)}>
-          {busy ? "Speichert…" : "Parken"}
-        </Button>
-        <Button className="w-full" disabled={busy || !quote?.ok} onClick={() => void save(false)}>
-          {busy ? "Speichert…" : "Auftrag buchen"}
-        </Button>
+      )}
+      {step === 4 && (
+        <div className="mt-4">
+          <Button type="button" variant="outline" className="w-full" onClick={back}>
+            <ChevronLeft className="mr-1 size-4" />
+            Zurück
+          </Button>
         </div>
-      </div>
-      </>
-      ) : null}
+      )}
     </div>
   );
 }

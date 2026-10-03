@@ -1,12 +1,21 @@
+/**
+ * E1 Aufträge – Liste
+ * -------------------
+ * Pipeline aus E1-Erfassung. Filter, Suche, Übergang an New Sales.
+ *
+ * Ersetzt: src/routes/portal/auftraege/index.tsx
+ */
+
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { listContracts, exportOpsCsv, sendParkedContract } from "@/lib/server/api";
 import { STATUSES, STATUS_LABELS, type ContractStatus } from "@/lib/e1";
-import { deDate } from "@/lib/utils";
+import { deDate, eur } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { Input, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Plus, Search } from "lucide-react";
 
 export const Route = createFileRoute("/portal/auftraege/")({ component: Page });
 
@@ -16,6 +25,7 @@ function Page() {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listContracts>>>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function load() {
     listContracts({ data: { status: status || undefined, type: type || undefined, q } })
@@ -27,151 +37,176 @@ function Page() {
     load();
   }, [status, type, q]);
 
-  const parked = rows.filter((r) => r.status === "erfasst" || r.source === "geparkt");
+  const readyForNewsales = rows.filter(
+    (r) =>
+      r.status === "erfasst" ||
+      r.status === "in_pruefung" ||
+      (r as { source?: string }).source === "e1_to_newsales" ||
+      (r as { source?: string }).source === "geparkt",
+  );
 
   return (
-    <div>
+    <div className="mx-auto max-w-3xl">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-4xl">Aufträge</h1>
-          <p className="text-sm text-muted">Kurzliste aus dem Portal. Verträge selbst stehen in New Sales.</p>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-gold">Pipeline</p>
+          <h1 className="mt-1 font-display text-4xl">Aufträge</h1>
+          <p className="mt-1 text-sm text-muted">
+            Bei E1 erfasst · an New Sales übergeben · Status nachverfolgen
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            onClick={async () => {
-              try {
-                const file = await exportOpsCsv({ data: "auftraege" });
-                const blob = new Blob([`\uFEFF${file.csv}`], { type: "text/csv;charset=utf-8" });
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = file.filename;
-                a.click();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Excel fehlgeschlagen");
-              }
-            }}
-          >
-            Excel (eine Tabelle)
-          </Button>
-          <Link to="/portal/auftraege/neu" className="rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg">
-            Vertrag eingeben
-          </Link>
-        </div>
+        <Link
+          to="/portal/auftraege/neu"
+          className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg"
+        >
+          <Plus className="size-4" />
+          Erfassen
+        </Link>
       </div>
-      <div className="mt-5 grid gap-2 sm:grid-cols-3">
-        <Input placeholder="Suche Name, PLZ, Zähler…" value={q} onChange={(e) => setQ(e.target.value)} />
+
+      {/* Filter */}
+      <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_8rem_9rem_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <Input
+            className="pl-9"
+            placeholder="Name, Adresse, Tarif…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        <Select value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="">Sparte</option>
+          <option value="strom">Strom</option>
+          <option value="gas">Gas</option>
+        </Select>
         <Select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Alle Status</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {STATUS_LABELS[s]}
+              {STATUS_LABELS[s as ContractStatus]}
             </option>
           ))}
         </Select>
-        <Select value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="">Strom & Gas</option>
-          <option value="strom">Strom</option>
-          <option value="gas">Gas</option>
-        </Select>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={async () => {
+            try {
+              const file = await exportOpsCsv({ data: "auftraege" });
+              const blob = new Blob([`\uFEFF${file.csv}`], {
+                type: "text/csv;charset=utf-8",
+              });
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = file.filename;
+              a.click();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Export fehlgeschlagen");
+            }
+          }}
+        >
+          Excel
+        </Button>
       </div>
-      {parked.length ? (
-        <div className="mt-6">
-          <h2 className="font-display text-2xl">Geparkt</h2>
-          <div className="mt-3 grid gap-2">
-            {parked.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-surface px-4 py-3 gold-hairline">
-                <div>
-                  <p className="font-medium">{r.customer_name}</p>
-                  <p className="text-xs text-muted">
-                    {r.product_name} · {r.zip} {r.city}
+
+      {/* Hinweis geparkte / bereit */}
+      {readyForNewsales.length > 0 && !status && (
+        <p className="mt-4 text-sm text-muted">
+          <span className="text-gold tabular-nums">{readyForNewsales.length}</span>{" "}
+          bereit zur Übergabe oder geparkt
+        </p>
+      )}
+
+      {err && <p className="mt-4 text-danger">{err}</p>}
+
+      {/* Liste */}
+      <ul className="mt-4 space-y-2">
+        {rows.length === 0 && !err && (
+          <li className="rounded-2xl bg-surface p-8 text-center text-sm text-muted gold-hairline">
+            Keine Aufträge.{" "}
+            <Link to="/portal/auftraege/neu" className="text-gold">
+              Ersten erfassen
+            </Link>
+          </li>
+        )}
+        {rows.map((r) => {
+          const name =
+            (r as { customer_name?: string }).customer_name ||
+            [ (r as { first_name?: string }).first_name, (r as { last_name?: string }).last_name ]
+              .filter(Boolean)
+              .join(" ") ||
+            "Kunde";
+          const addr =
+            (r as { address?: string }).address ||
+            [
+              (r as { street?: string }).street,
+              (r as { house_number?: string }).house_number,
+              (r as { zip?: string }).zip,
+              (r as { city?: string }).city,
+            ]
+              .filter(Boolean)
+              .join(" ");
+          const canSend =
+            r.status === "erfasst" ||
+            r.status === "in_pruefung" ||
+            (r as { source?: string }).source === "e1_to_newsales";
+
+          return (
+            <li key={r.id} className="rounded-2xl bg-surface gold-hairline">
+              <Link
+                to="/portal/auftraege/$id"
+                params={{ id: r.id }}
+                className="flex flex-col gap-1 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{name}</p>
+                  <p className="truncate text-xs text-muted">
+                    {addr}
+                    {r.type ? ` · ${r.type}` : ""}
+                    {r.created_at ? ` · ${deDate(r.created_at)}` : ""}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <Link
-                    to="/portal/auftraege/$id"
-                    params={{ id: r.id }}
-                    className="rounded-xl border border-line px-3 py-2 text-sm"
-                  >
-                    Bearbeiten
-                  </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  {(r as { commission_amount?: number }).commission_amount != null && (
+                    <span className="text-xs tabular-nums text-muted">
+                      {eur(Number((r as { commission_amount?: number }).commission_amount))}
+                    </span>
+                  )}
+                  <StatusBadge status={r.status as ContractStatus} />
+                </div>
+              </Link>
+              {canSend && (
+                <div className="border-t border-line px-4 py-2">
                   <Button
-                    size="sm"
-                    onClick={async () => {
+                    type="button"
+                    variant="outline"
+                    className="h-9 text-xs"
+                    disabled={busyId === r.id}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      setBusyId(r.id);
                       try {
                         await sendParkedContract({ data: { id: r.id } });
-                        toast.success("Gesendet");
+                        toast.success("An New Sales übergeben");
                         load();
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Senden fehlgeschlagen");
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Übergabe fehlgeschlagen",
+                        );
+                      } finally {
+                        setBusyId(null);
                       }
                     }}
                   >
-                    Senden
+                    {busyId === r.id ? "Sendet…" : "An New Sales senden"}
                   </Button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <div className="mt-4 hidden overflow-x-auto rounded-2xl bg-surface gold-hairline md:block">
-        <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase tracking-wide text-muted">
-            <tr>
-              <th className="px-4 py-3">Kunde</th>
-              <th>Produkt</th>
-              <th>Status</th>
-              <th>Berater</th>
-              <th>Datum</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-line hover:bg-elevated">
-                <td className="px-4 py-3">
-                  <Link to="/portal/auftraege/$id" params={{ id: r.id }} className="font-medium">
-                    {r.customer_name}
-                  </Link>
-                  <div className="text-xs text-muted">
-                    {r.zip} {r.city} · {r.type}
-                  </div>
-                </td>
-                <td>{r.product_name}</td>
-                <td>
-                  <StatusBadge status={r.status as ContractStatus} />
-                </td>
-                <td className="text-muted">{r.advisor_name}</td>
-                <td className="text-muted">{deDate(r.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-4 grid gap-2 md:hidden">
-        {rows.map((r) => (
-          <Link
-            key={r.id}
-            to="/portal/auftraege/$id"
-            params={{ id: r.id }}
-            className="rounded-2xl bg-surface p-4 gold-hairline"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-medium">{r.customer_name}</p>
-                <p className="text-xs text-muted">
-                  {r.product_name} · {r.zip} {r.city}
-                </p>
-              </div>
-              <StatusBadge status={r.status as ContractStatus} />
-            </div>
-          </Link>
-        ))}
-      </div>
-      {rows.length === 0 ? (
-        <p className="mt-10 text-center text-sm text-muted">Keine Aufträge in dieser Ansicht.</p>
-      ) : null}
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
