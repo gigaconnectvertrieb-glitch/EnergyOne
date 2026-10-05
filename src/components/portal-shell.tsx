@@ -91,7 +91,7 @@ function adminItems(role: Role, flags: Record<string, boolean>) {
     },
     {
       to: "/portal/gebiete",
-      label: "Gebiete aufspielen",
+      label: "Gebietsplanung",
       icon: Map,
       show: can(role, "team.view"),
       hint: "Straßen zuweisen",
