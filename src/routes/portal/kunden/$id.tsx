@@ -90,27 +90,6 @@ function Page() {
         )}
       </div>
 
-      <div className="mt-6">
-        <Link
-          to="/portal/auftraege/neu"
-          search={
-            {
-              first: c.first_name,
-              last: c.last_name,
-              phone: c.phone || undefined,
-              email: c.email || undefined,
-              street: c.street || undefined,
-              house: c.house_number || undefined,
-              zip: c.zip || undefined,
-              city: c.city || undefined,
-            } as never
-          }
-          className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg"
-        >
-          <Plus className="size-4" />
-          Neuer Auftrag für diesen Kunden
-        </Link>
-      </div>
 
       <h2 className="mt-8 text-sm font-medium">Verträge</h2>
       <div className="mt-2 grid gap-2">

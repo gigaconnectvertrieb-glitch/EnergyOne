@@ -180,15 +180,8 @@ function Heute() {
         </Link>
       ) : null}
 
-      {/* Schnellaktionen */}
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <Link
-          to="/portal/auftraege/neu"
-          className="flex flex-col items-center gap-2 rounded-2xl bg-gold px-3 py-4 text-center text-bg"
-        >
-          <Plus className="size-5" />
-          <span className="text-xs font-medium">Erfassen</span>
-        </Link>
+      {/* Schnellaktionen – Vertragseingabe vorerst ausgeblendet */}
+      <div className="mt-5 grid grid-cols-2 gap-2">
         <Link
           to="/portal/auftraege"
           className="flex flex-col items-center gap-2 rounded-2xl bg-surface px-3 py-4 text-center gold-hairline"

@@ -2,7 +2,7 @@
  * E1 Portal Shell – einheitlich für Feld + Büro
  * ------------------------------------------------
  * - Ein Login für alle
- * - Mitarbeiter: Heute, Erfassen, Aufträge, Kunden, Mehr
+ * - Mitarbeiter: Heute, Aufträge, Kunden, Gebiete, Mehr
  * - Orhan + Super-Admin: zusätzlich Steuerung (Mitarbeiter, Gebiete aufspielen, Tarife, System)
  * - Übersichtlich, professionell, mobil tauglich
  *
@@ -127,9 +127,9 @@ function adminItems(role: Role, flags: Record<string, boolean>) {
 const MOBILE_TABS = [
   { to: "/portal", label: "Heute", icon: Home, exact: true },
   { to: "/portal/auftraege", label: "Aufträge", icon: ClipboardList },
-  { to: "/portal/auftraege/neu", label: "Erfassen", icon: Plus, primary: true },
   { to: "/portal/kunden", label: "Kunden", icon: Users },
   { to: "/portal/gebiete", label: "Gebiete", icon: Map },
+  { to: "/portal/provisionen", label: "Provision", icon: Wallet },
 ] as const;
 
 export function PortalShell() {
@@ -299,20 +299,6 @@ export function PortalShell() {
           const on = "exact" in t && t.exact
             ? pathname === "/portal" || pathname === "/portal/"
             : pathname === t.to || pathname.startsWith(`${t.to}/`);
-          if ("primary" in t && t.primary) {
-            return (
-              <Link
-                key={t.to}
-                to={t.to}
-                className="flex min-h-14 flex-1 flex-col items-center justify-center -mt-3"
-                aria-label="Erfassen"
-              >
-                <span className="grid size-12 place-items-center rounded-full bg-gold text-bg shadow-lg">
-                  <Plus className="size-6" />
-                </span>
-              </Link>
-            );
-          }
           return (
             <Link
               key={t.to}

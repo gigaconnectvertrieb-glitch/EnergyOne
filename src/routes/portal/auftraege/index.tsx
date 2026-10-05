@@ -55,13 +55,6 @@ function Page() {
             Bei E1 erfasst · an New Sales übergeben · Status nachverfolgen
           </p>
         </div>
-        <Link
-          to="/portal/auftraege/neu"
-          className="inline-flex items-center gap-2 rounded-xl bg-gold px-4 py-3 text-sm font-medium text-bg"
-        >
-          <Plus className="size-4" />
-          Erfassen
-        </Link>
       </div>
 
       {/* Filter */}
@@ -124,10 +117,7 @@ function Page() {
       <ul className="mt-4 space-y-2">
         {rows.length === 0 && !err && (
           <li className="rounded-2xl bg-surface p-8 text-center text-sm text-muted gold-hairline">
-            Keine Aufträge.{" "}
-            <Link to="/portal/auftraege/neu" className="text-gold">
-              Ersten erfassen
-            </Link>
+            Keine Aufträge.
           </li>
         )}
         {rows.map((r) => {
