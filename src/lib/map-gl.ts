@@ -105,6 +105,25 @@ export function satellite3dStyle() {
           "text-halo-width": 1.2,
         },
       },
+      {
+        id: "place-label",
+        type: "symbol",
+        source: "openmaptiles",
+        "source-layer": "place",
+        minzoom: 3,
+        filter: ["in", ["get", "class"], ["literal", ["city", "town", "village", "suburb", "hamlet"]]],
+        layout: {
+          "text-field": ["coalesce", ["get", "name:de"], ["get", "name"]],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 4, 11, 8, 14, 12, 16],
+          "text-anchor": "center",
+        },
+        paint: {
+          "text-color": "#f7f4ec",
+          "text-halo-color": "#0b0d12",
+          "text-halo-width": 1.4,
+        },
+      },
     ],
   };
 }
