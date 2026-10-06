@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
 import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, readAreaHouses, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
-import { planTerritoryAgent, readStreetHouses } from "@/lib/server/territory-agent";
+import { planTerritoryAgent, readAreaAddresses, readStreetHouses } from "@/lib/server/territory-agent";
 import { toast } from "sonner";
 
 type Point = { lat: number; lng: number };
@@ -125,6 +125,10 @@ export function StreetManager() /* deploy-marker: ganze-strasse */ {
       const near = addresses.filter((a) => a.lat && Math.hypot((a.lat - lat) * 111000, (a.lng - lng) * 70000) < 35).sort((a, b) => Math.hypot(a.lat - lat, a.lng - lng) - Math.hypot(b.lat - lat, b.lng - lng))[0];
       const tags = el.tags || {};
       found.push({ street: tags["addr:street"] || near?.street || name || "Ohne Straße", house: tags["addr:housenumber"] || near?.house || "ohne Nr.", lat, lng, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" });
+    }
+    if (!found.length) {
+      const google = await readAreaAddresses({ data: { points: pts } }).catch(() => []);
+      found.push(...(google as Door[]).map((d) => ({ ...d, kind: "unsicher" as const })));
     }
     setDoors([...found]);
     setBusy(`${found.length} Häuser gelesen`);
