@@ -13,5 +13,14 @@ function Page() {
       .then((m) => setPlanner(can(m.profile.role, "team.view")))
       .catch(() => setPlanner(false));
   }, []);
-  return <FieldRouter center={{ lat: 51.16, lng: 10.45 }} planner={planner} />;
+  return (
+    <div className="grid gap-3">
+      {planner ? (
+        <a className="rounded-2xl bg-surface px-4 py-3 text-sm font-medium" href="/portal/gebiete">
+          Gebiete planen und Mitarbeitern aufspielen
+        </a>
+      ) : null}
+      <FieldRouter center={{ lat: 51.16, lng: 10.45 }} planner={planner} />
+    </div>
+  );
 }
