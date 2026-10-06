@@ -16,7 +16,7 @@ function Page() {
   return (
     <div className="grid gap-3">
       {planner ? (
-        <a className="rounded-2xl bg-surface px-4 py-3 text-sm font-medium" href="/portal/gebiete">
+        <a className="rounded-2xl bg-surface px-4 py-3 text-sm font-medium" href="/app/gebiete">
           Gebiete planen und Mitarbeitern aufspielen
         </a>
       ) : null}
