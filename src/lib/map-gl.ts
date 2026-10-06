@@ -157,7 +157,7 @@ export function createE1Map(
   const draw = Boolean(opts?.draw);
   return new ML.Map({
     container: el,
-    style: satellite3dStyle(),
+    style: "https://tiles.openfreemap.org/styles/liberty",
     center: [center.lng, center.lat],
     zoom,
     pitch: 0,
