@@ -293,7 +293,7 @@ function Page() {
       {tab === "planen" && (
         <div className="mt-6">
           <StreetManager />
-          
+        </div>
       )}
     </div>
   );
