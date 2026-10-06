@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
-import { assignTerritory, downloadTerritory, listTerritories, uploadTerritory } from "@/lib/server/field-api";
+import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
 import { toast } from "sonner";
 
@@ -114,11 +114,15 @@ export function StreetManager() {
     const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
     const data = await res.json();
     const addresses = (data.elements || []).filter((el) => el.tags?.["addr:housenumber"]).map((el) => ({ street: el.tags["addr:street"] || name, house: el.tags["addr:housenumber"], lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon }));
-    const found: Door[] = [];
+    const saved = await listSavedDoors().catch(() => []);
+    const found: Door[] = (saved as { street: string; house: string; lat: number; lng: number }[])
+      .filter((d) => d.lat && inside({ ...d, kind: "unsicher" }, pts))
+      .map((d) => ({ street: d.street, house: d.house, lat: Number(d.lat), lng: Number(d.lng), kind: "unsicher" as const }));
     for (const el of data.elements || []) {
       if (!el.tags?.building) continue;
       const lat = el.center?.lat, lng = el.center?.lon;
       if (!lat || !inside({ lat, lng, street: "", house: "", kind: "unsicher" }, pts)) continue;
+      if (found.some((d) => Math.hypot((d.lat - lat) * 111000, (d.lng - lng) * 70000) < 12)) continue;
       const near = addresses.filter((a) => a.lat && Math.hypot((a.lat - lat) * 111000, (a.lng - lng) * 70000) < 35).sort((a, b) => Math.hypot(a.lat - lat, a.lng - lng) - Math.hypot(b.lat - lat, b.lng - lng))[0];
       const tags = el.tags || {};
       found.push({ street: tags["addr:street"] || near?.street || name || "Ohne Straße", house: tags["addr:housenumber"] || near?.house || "ohne Nr.", lat, lng, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" });
