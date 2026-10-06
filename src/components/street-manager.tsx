@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
-import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, uploadTerritory } from "@/lib/server/field-api";
+import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, readAreaHouses, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
 import { toast } from "sonner";
 
@@ -110,9 +110,7 @@ export function StreetManager() {
     const pts = pointsRef.current;
     const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
     const south = Math.min(...lats), west = Math.min(...lngs), north = Math.max(...lats), east = Math.max(...lngs);
-    const query = `[out:json][timeout:25];(way["building"](${south},${west},${north},${east});node["addr:housenumber"](${south},${west},${north},${east}););out center tags;`;
-    const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
-    const data = await res.json();
+    const data = await readAreaHouses({ data: { south, west, north, east } }).catch(() => ({ elements: [] }));
     const addresses = (data.elements || []).filter((el) => el.tags?.["addr:housenumber"]).map((el) => ({ street: el.tags["addr:street"] || name, house: el.tags["addr:housenumber"], lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon }));
     const saved = await listSavedDoors().catch(() => []);
     const found: Door[] = (saved as { street: string; house: string; lat: number; lng: number }[])
