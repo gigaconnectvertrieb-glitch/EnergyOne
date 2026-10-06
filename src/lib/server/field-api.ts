@@ -10,6 +10,7 @@ import {
 } from "@/lib/field";
 import { applyWalkOrder, groupStreets, haversineMeters, planHouseWalk, pointInPolygon } from "@/lib/geo-de";
 import { googlePlacesSearch, overpassHouses } from "./geo.server";
+import { nid } from "@/lib/server/helpers";
 import { assertCanSeeUser, audit, notify, requireProfile, sql, visibleUserIds } from "./helpers";
 import type { Sql } from "@/lib/db";
 
