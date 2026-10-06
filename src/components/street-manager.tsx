@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
-import { assignTerritory, uploadTerritory } from "@/lib/server/field-api";
+import { assignTerritory, downloadTerritory, listTerritories, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
 import { toast } from "sonner";
 
@@ -35,6 +35,8 @@ export function StreetManager() {
   const [doors, setDoors] = useState<Door[]>([]);
   const [name, setName] = useState("");
   const [users, setUsers] = useState<User[]>([]);
+  const [areas, setAreas] = useState<{ id: string; name: string }[]>([]);
+  const [areaId, setAreaId] = useState("");
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState("");
   const pointsRef = useRef(points);
@@ -60,7 +62,7 @@ export function StreetManager() {
     doors.forEach((d) => overlays.current.push(new g.Marker({ map, position: d, label: d.kind === "mfh" ? "M" : d.kind === "efh" ? "E" : "?" })));
   }
 
-  useEffect(() => { listUsers().then((rows) => setUsers(rows as User[])).catch(() => setUsers([])); }, []);
+  useEffect(() => { listUsers().then((rows) => setUsers(rows as User[])).catch(() => setUsers([])); listTerritories().then((rows) => setAreas((rows as { id: string; name: string }[]).map((r) => ({ id: r.id, name: r.name })))).catch(() => setAreas([])); }, []);
   useEffect(() => {
     const el = host.current;
     if (!el) return;
@@ -168,6 +170,18 @@ export function StreetManager() {
     setDoors(found);
     setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
   }
+  async function openSaved(id: string) {
+    setAreaId(id);
+    if (!id) return;
+    setBusy("Gespeicherte Häuser werden geladen");
+    const file = await downloadTerritory({ data: { id } });
+    const json = JSON.parse(file.geojson) as { features: { geometry: { type: string; coordinates: number[] }; properties: { street?: string; house?: string } }[] };
+    const loaded = json.features.filter((f) => f.geometry?.type === "Point").map((f) => ({ street: f.properties.street || "", house: f.properties.house || "", lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], kind: "unsicher" as const }));
+    setDoors(loaded);
+    setName(file.name);
+    if (loaded[0]) mapRef.current?.setCenter(loaded[0]);
+    setBusy(`${loaded.length} gespeicherte Häuser`);
+  }
   async function save() {
     if (!doors.length) return toast.error("Zuerst Häuser lesen");
     setBusy("Speichern");
@@ -188,13 +202,14 @@ export function StreetManager() {
       <p className="text-xs font-medium uppercase tracking-[0.18em] text-gold">Planung</p>
       <h2 className="mt-1 font-serif text-3xl">Gebiet setzen</h2>
       <p className="mt-1 text-sm text-muted-foreground">Straße wählen, goldene Markierung, Punkte setzen, Häuser lesen, zuweisen.</p>
-      <input className="mt-4 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
+      <select className="mt-4 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={areaId} onChange={(e) => void openSaved(e.target.value)}><option value="">Gespeichertes Gebiet wählen</option>{areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+      <input className="mt-2 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
       {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => choose(hit)}>{hit.display_name}</button>)}</div> : null}
       <div ref={host} className="mt-4 h-[28rem] overflow-hidden rounded-3xl border border-white/10" />
       <div className="relative z-20 mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
-        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy("Lesen abgebrochen, vorhandene Häuser bleiben stehen"))}>Häuser lesen</button>
+        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy(doors.length ? `${doors.length} Häuser bleiben sichtbar` : "Lesen nicht möglich"))}>Häuser lesen</button>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
       <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
