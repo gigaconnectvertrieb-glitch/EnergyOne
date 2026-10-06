@@ -661,7 +661,7 @@ export const getTerritoryWalk = createServerFn({ method: "POST" })
       ring = [];
     }
     const doors = await db<Record<string, unknown>>`
-      select id, street, house, zip, city, lat, lng, units from field_doors where territory_id = ${asStr(ter.id)} order by street, house
+      select id, street, house, zip, city, lat, lng, units from field_doors where territory_id = ${asStr(ter.id)} order by note nulls last, street, house
     `;
     const houses = doors.map((d) => ({
       id: asStr(d.id),
