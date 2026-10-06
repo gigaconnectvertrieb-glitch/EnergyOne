@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG CACHEBUST=ganze-strasse-e59b034
+ARG CACHEBUST=ganze-strasse-53e7bb7
 RUN echo "cachebust ${CACHEBUST}"
 ENV RENDER=true
 ENV VITE_AUTH_ENABLED=true
