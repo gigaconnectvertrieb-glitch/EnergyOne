@@ -29,7 +29,7 @@ export const Route = createFileRoute("/app")({
 const TABS = [
   { to: "/app/karte", label: "Routing", icon: Map },
   { to: "/app", label: "Dashboard", icon: House, exact: true },
-  { to: "/portal/gebiete", label: "Gebiete", icon: Map },
+  { to: "/app/gebiete", label: "Gebiete", icon: Map },
   { to: "/app/abschluss", label: "Buchen", icon: CalendarDays },
   { to: "/app/liste", label: "Leads", icon: ListChecks },
   { to: "/app/bs", label: "BS", icon: UserRound },
