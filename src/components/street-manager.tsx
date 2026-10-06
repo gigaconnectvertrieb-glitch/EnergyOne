@@ -23,7 +23,7 @@ function inside(door: Door, poly: Point[]) {
   return n;
 }
 
-export function StreetManager() {
+export function StreetManager() /* Google planner */ {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [street, setStreet] = useState<Hit | null>(null);
