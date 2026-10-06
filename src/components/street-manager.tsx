@@ -138,13 +138,21 @@ export function StreetManager() {
     }
     localStorage.setItem("e1-address-cache", JSON.stringify(cache));
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
+    const route: Door[] = [];
+    for (const street of [...new Set(found.map((d) => d.street))]) {
+      const side = found.filter((d) => d.street === street);
+      const odd = side.filter((d) => Number.parseInt(d.house, 10) % 2 === 1);
+      const even = side.filter((d) => Number.parseInt(d.house, 10) % 2 === 0).reverse();
+      route.push(...odd, ...even);
+    }
+    found.splice(0, found.length, ...route);
     setDoors(found);
     setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
   }
   async function save() {
     if (!doors.length) return toast.error("Zuerst Häuser lesen");
     setBusy("Speichern");
-    const features = doors.map((d) => ({ type: "Feature", geometry: { type: "Point", coordinates: [d.lng, d.lat] }, properties: { street: d.street, house: d.house, kind: d.kind } }));
+    const features = doors.map((d, i) => ({ type: "Feature", geometry: { type: "Point", coordinates: [d.lng, d.lat] }, properties: { street: d.street, house: d.house, kind: d.kind, stop: i + 1 } }));
     const created = await uploadTerritory({ data: { name: name || "Gebiet", filename: "gebiet.geojson", text: JSON.stringify({ type: "FeatureCollection", features }), userId: userId || undefined } });
     const id = created && typeof created === "object" && "id" in created ? String(created.id) : "";
     if (id && userId) await assignTerritory({ data: { id, userId } });
