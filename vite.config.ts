@@ -181,6 +181,7 @@ export default defineConfig(({ command, isPreview }) => ({
             // Grok-Preview bleibt Vercel. Render setzt RENDER=true und braucht den Node-Server.
             preset: process.env.RENDER ? "node-server" : "vercel",
             minify: false,
+            prerender: process.env.RENDER ? { crawlLinks: false, routes: [] } : undefined,
             // Auto-registers server/middleware/* (the PWA install page +
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
