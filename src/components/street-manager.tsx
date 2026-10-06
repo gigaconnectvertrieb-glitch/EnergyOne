@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
 import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, readAreaHouses, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
+import { planTerritoryAgent } from "@/lib/server/territory-agent";
 import { toast } from "sonner";
 
 type Point = { lat: number; lng: number };
@@ -175,10 +176,10 @@ export function StreetManager() {
   async function propose() {
     const place = q.trim();
     if (place.length < 3) { setBusy("Ort oder Straße nennen"); return; }
-    setBusy("Gebiet wird gesucht");
-    const rows = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&limit=8&q=${encodeURIComponent(place + " Wohnstraße")}`).then((res) => res.json()) as Hit[];
-    const hit = rows.find((row) => row.geojson?.type === "LineString") || rows[0];
-    if (!hit) { setBusy("Kein Gebiet gefunden"); return; }
+    setBusy("Agent sucht das Gebiet");
+    const planned = await planTerritoryAgent({ data: { place } });
+    if (!planned.ok) { setBusy(planned.reason); return; }
+    const hit = { display_name: planned.display_name, lat: planned.lat, lon: planned.lon } as Hit;
     choose(hit);
     const lat = Number(hit.lat), lng = Number(hit.lon);
     setPoints([
