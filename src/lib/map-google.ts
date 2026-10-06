@@ -50,7 +50,7 @@ export function createGoogleMap(el: HTMLElement, center: { lat: number; lng: num
     rotateControl: true,
     tiltInteractionEnabled: true,
     headingInteractionEnabled: true,
-    streetViewControl: false,
+    streetViewControl: true,
     mapTypeControl: true,
     fullscreenControl: false,
   }) as GoogleMap;
