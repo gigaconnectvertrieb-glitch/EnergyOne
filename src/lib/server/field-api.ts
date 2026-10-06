@@ -335,6 +335,17 @@ export const assignTerritory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const readAreaHouses = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { south: number; west: number; north: number; east: number }) => d)
+  .handler(async ({ context, data }) => {
+    await requireProfile(await sql(), context.userId);
+    const query = `[out:json][timeout:25];(way["building"](${data.south},${data.west},${data.north},${data.east});node["addr:housenumber"](${data.south},${data.west},${data.north},${data.east}););out center tags;`;
+    const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
+    if (!res.ok) return { elements: [] };
+    return res.json();
+  });
+
 export const listSavedDoors = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
