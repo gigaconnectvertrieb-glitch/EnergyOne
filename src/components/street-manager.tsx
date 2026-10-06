@@ -107,16 +107,19 @@ export function StreetManager() {
     setBusy("Häuser werden gelesen");
     const pts = pointsRef.current;
     const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
-    const query = `[out:json][timeout:25];way["building"](${Math.min(...lats)},${Math.min(...lngs)},${Math.max(...lats)},${Math.max(...lngs)});out center tags;`;
+    const south = Math.min(...lats), west = Math.min(...lngs), north = Math.max(...lats), east = Math.max(...lngs);
+    const query = `[out:json][timeout:25];(way["building"](${south},${west},${north},${east});node["addr:housenumber"](${south},${west},${north},${east}););out center tags;`;
     const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
     const data = await res.json();
+    const addresses = (data.elements || []).filter((el) => el.tags?.["addr:housenumber"]).map((el) => ({ street: el.tags["addr:street"] || name, house: el.tags["addr:housenumber"], lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon }));
     const found: Door[] = [];
     for (const el of data.elements || []) {
+      if (!el.tags?.building) continue;
+      const lat = el.center?.lat, lng = el.center?.lon;
+      if (!lat || !inside({ lat, lng, street: "", house: "", kind: "unsicher" }, pts)) continue;
+      const near = addresses.filter((a) => a.lat && Math.hypot((a.lat - lat) * 111000, (a.lng - lng) * 70000) < 35).sort((a, b) => Math.hypot(a.lat - lat, a.lng - lng) - Math.hypot(b.lat - lat, b.lng - lng))[0];
       const tags = el.tags || {};
-      const streetName = tags["addr:street"] || name || "Ohne Straße";
-      const door: Door = { street: streetName, house: tags["addr:housenumber"] || "ohne Nr.", lat: el.center?.lat, lng: el.center?.lon, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" };
-      if (!door.lat || !inside(door, pts)) continue;
-      found.push(door);
+      found.push({ street: tags["addr:street"] || near?.street || name || "Ohne Straße", house: tags["addr:housenumber"] || near?.house || "ohne Nr.", lat, lng, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" });
     }
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
     setDoors(found);
