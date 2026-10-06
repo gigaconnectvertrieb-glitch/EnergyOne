@@ -6,6 +6,7 @@ import {
   setGeojson,
   type MapLibreMap,
 } from "@/lib/map-gl";
+import { loadHessianBuildings } from "@/lib/lod2";
 
 export type WalkStop = {
   id: string;
@@ -92,6 +93,19 @@ export function FieldMap({ center, corners = [], stops = [], draw, onTap, onStop
       await loadMapLibre();
       if (cancelled || !ref.current || mapRef.current) return;
       const map = createE1Map(ref.current, center, 16, { draw });
+      map.on("load", () => {
+        if (!map.getSource("e1-lod2")) {
+          map.addSource("e1-lod2", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          map.addLayer({ id: "e1-lod2", type: "fill-extrusion", source: "e1-lod2", paint: { "fill-extrusion-color": "#d9d9d4", "fill-extrusion-height": ["get", "height"], "fill-extrusion-opacity": 0.9 } });
+        }
+        const pull = async () => {
+          const b = (map as unknown as { getBounds: () => { getWest: () => number; getSouth: () => number; getEast: () => number; getNorth: () => number } }).getBounds();
+          const data = await loadHessianBuildings([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]).catch(() => null);
+          if (data) map.getSource("e1-lod2")?.setData(data);
+        };
+        map.on("moveend", () => void pull());
+        void pull();
+      });
       mapRef.current = map;
       map.on("load", () => {
         map.resize();
