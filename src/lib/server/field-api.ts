@@ -335,6 +335,18 @@ export const assignTerritory = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const listSavedDoors = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const db = await sql();
+    const me = await requireProfile(db, context.userId);
+    if (!can(me.role, "team.view") && me.role !== "super_admin") throw new Error("Kein Zugriff");
+    return db<{ street: string; house: string; lat: number; lng: number }>`
+      select street, house, lat, lng from field_doors
+      where lat is not null and lng is not null
+    `;
+  });
+
 export const downloadTerritory = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: { id: string }) => d)
