@@ -172,6 +172,23 @@ export function StreetManager() {
     setDoors(found);
     setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
   }
+  async function propose() {
+    const place = q.trim();
+    if (place.length < 3) { setBusy("Ort oder Straße nennen"); return; }
+    setBusy("Gebiet wird gesucht");
+    const rows = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&limit=8&q=${encodeURIComponent(place + " Wohnstraße")}`).then((res) => res.json()) as Hit[];
+    const hit = rows.find((row) => row.geojson?.type === "LineString") || rows[0];
+    if (!hit) { setBusy("Kein Gebiet gefunden"); return; }
+    choose(hit);
+    const lat = Number(hit.lat), lng = Number(hit.lon);
+    setPoints([
+      { lat: lat + 0.0012, lng: lng - 0.0016 },
+      { lat: lat + 0.0012, lng: lng + 0.0016 },
+      { lat: lat - 0.0012, lng: lng + 0.0016 },
+      { lat: lat - 0.0012, lng: lng - 0.0016 },
+    ]);
+    setBusy("Gebiet vorgeschlagen, Häuser werden gelesen");
+  }
   async function openSaved(id: string) {
     setAreaId(id);
     if (!id) return;
@@ -211,6 +228,7 @@ export function StreetManager() {
       <div className="relative z-20 mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
+        <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => void propose()}>Gebiet vorschlagen</button>
         <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy(doors.length ? `${doors.length} Häuser bleiben sichtbar` : "Lesen nicht möglich"))}>Häuser lesen</button>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
