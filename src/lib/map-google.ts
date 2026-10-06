@@ -18,7 +18,7 @@ export type GoogleMap = {
 };
 
 export function googleMapsKey() {
-  return String((import.meta as { env?: { VITE_GOOGLE_MAPS_KEY?: string } }).env?.VITE_GOOGLE_MAPS_KEY || "").trim();
+  return String((import.meta as { env?: { VITE_GOOGLE_MAPS_KEY?: string } }).env?.VITE_GOOGLE_MAPS_KEY || "AIzaSyBIlujIrecGRQUpllxMNgcpnaXNyvD4TDU").trim();
 }
 
 export function loadGoogleMaps(key: string) {
