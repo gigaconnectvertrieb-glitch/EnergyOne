@@ -27,6 +27,7 @@ import {
   approveTerritoryRequest,
 } from "@/lib/server/field-api";
 import { FieldMap } from "@/components/field-map";
+import { StreetManager } from "@/components/street-manager";
 import { bboxAround, bboxFromPoints } from "@/lib/geo-de";
 import { can } from "@/lib/e1";
 import { toast } from "sonner";
@@ -291,6 +292,7 @@ function Page() {
       {/* ========== PLANEN ========== */}
       {tab === "planen" && (
         <div className="mt-6">
+          <StreetManager />
           {/* Step indicators */}
           <div className="mb-5 flex flex-wrap gap-1">
             {["Ort", "Zone", "Straßen", "Team", "Aufspielen"].map((label, i) => {
