@@ -113,7 +113,8 @@ export function StreetManager() {
     const found: Door[] = [];
     for (const el of data.elements || []) {
       const tags = el.tags || {};
-      const door: Door = { street: tags["addr:street"] || "Ohne Straße", house: tags["addr:housenumber"] || "?", lat: el.center?.lat, lng: el.center?.lon, kind: tags.building === "apartments" || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" ? "efh" : "unsicher" };
+      const streetName = tags["addr:street"] || name || "Ohne Straße";
+      const door: Door = { street: streetName, house: tags["addr:housenumber"] || "ohne Nr.", lat: el.center?.lat, lng: el.center?.lon, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" };
       if (!door.lat || !inside(door, pts)) continue;
       found.push(door);
     }
@@ -143,7 +144,7 @@ export function StreetManager() {
       <div className="relative z-20 mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
-        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy("Häuser konnten nicht gelesen werden"))}>Häuser lesen</button>
+        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy("Lesen abgebrochen, vorhandene Häuser bleiben stehen"))}>Häuser lesen</button>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
       <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
