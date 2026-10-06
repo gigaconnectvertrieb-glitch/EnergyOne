@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FieldMap } from "@/components/field-map";
+import { createGoogleMap, googleMapsKey, loadGoogleMaps } from "@/lib/map-google";
 import { assignTerritory, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
 import { toast } from "sonner";
@@ -113,9 +113,7 @@ export function StreetManager() {
       </form>
       {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => { setStreet(hit); setQ(hit.display_name); setHits([]); setName(hit.display_name.split(",")[0]); }}>{hit.display_name}</button>)}</div> : null}
       {street ? <p className="mt-3 text-sm text-gold">{line.length ? "Straße geladen" : "Ort geladen"} · {street.display_name}</p> : null}
-      <div className="mt-4 h-96 overflow-hidden rounded-3xl border border-white/10">
-        <FieldMap center={center} corners={points.length ? points : line.slice(0, 80)} stops={doors.map((d) => ({ id: `${d.street}-${d.house}`, street: d.street, house: d.house, lat: d.lat, lng: d.lng }))} draw onTap={addPoint} />
-      </div>
+      <div className="mt-4 h-96 overflow-hidden rounded-3xl border border-white/10" ref={(el) => { if (!el || el.dataset.ready) return; el.dataset.ready = "1"; void loadGoogleMaps(googleMapsKey()).then(() => { const map = createGoogleMap(el, center); window.google?.maps.event.addListener(map, "click", (e: { latLng: { lat: () => number; lng: () => number } }) => addPoint({ lat: e.latLng.lat(), lng: e.latLng.lng() })); }); }} />
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => { setPoints([]); setStreet(null); setDoors([]); }}>Markierung löschen</button>
