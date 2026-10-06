@@ -25,7 +25,7 @@ function inside(door: Door, poly: Point[]) {
   return n;
 }
 
-export function StreetManager() {
+export function StreetManager() /* deploy-marker: ganze-strasse */ {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GoogleMap | null>(null);
   const overlays = useRef<Overlay[]>([]);
