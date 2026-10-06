@@ -146,16 +146,20 @@ export function StreetManager() {
       route.push(...odd, ...even);
     }
     found.splice(0, found.length, ...route);
-    const path: Point[] = [];
-    const service = new (window.google?.maps as unknown as { DirectionsService: new () => { route: (o: Record<string, unknown>) => Promise<{ routes: { overview_path: Point[] }[] }> } }).DirectionsService();
-    for (let i = 0; i < found.length - 1; i += 20) {
-      const chunk = found.slice(i, i + 21);
-      const result = await service.route({ origin: chunk[0], destination: chunk[chunk.length - 1], waypoints: chunk.slice(1, -1).map((d) => ({ location: d, stopover: true })), travelMode: "WALKING" }).catch(() => null);
-      path.push(...(result?.routes?.[0]?.overview_path || []));
-    }
-    if (path.length > 1) {
-      const g = window.google?.maps as unknown as { Polyline: new (o: Record<string, unknown>) => Overlay };
-      overlays.current.push(new g.Polyline({ map: mapRef.current, path, strokeColor: "#1a73e8", strokeWeight: 4 }));
+    try {
+      const path: Point[] = [];
+      const service = new (window.google?.maps as unknown as { DirectionsService: new () => { route: (o: Record<string, unknown>) => Promise<{ routes: { overview_path: Point[] }[] }> } }).DirectionsService();
+      for (let i = 0; i < found.length - 1; i += 20) {
+        const chunk = found.slice(i, i + 21);
+        const result = await service.route({ origin: chunk[0], destination: chunk[chunk.length - 1], waypoints: chunk.slice(1, -1).map((d) => ({ location: d, stopover: true })), travelMode: "WALKING" }).catch(() => null);
+        path.push(...(result?.routes?.[0]?.overview_path || []));
+      }
+      if (path.length > 1) {
+        const g = window.google?.maps as unknown as { Polyline: new (o: Record<string, unknown>) => Overlay };
+        overlays.current.push(new g.Polyline({ map: mapRef.current, path, strokeColor: "#1a73e8", strokeWeight: 4 }));
+      }
+    } catch {
+      /* Route darf das Speichern nicht abbrechen */
     }
     setDoors(found);
     setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
@@ -164,11 +168,15 @@ export function StreetManager() {
     if (!doors.length) return toast.error("Zuerst Häuser lesen");
     setBusy("Speichern");
     const features = doors.map((d, i) => ({ type: "Feature", geometry: { type: "Point", coordinates: [d.lng, d.lat] }, properties: { street: d.street, house: d.house, kind: d.kind, stop: i + 1, note: `Halt ${String(i + 1).padStart(3, "0")}` } }));
-    const created = await uploadTerritory({ data: { name: name || "Gebiet", filename: "gebiet.geojson", text: JSON.stringify({ type: "FeatureCollection", features }), userId: userId || undefined } });
-    const id = created && typeof created === "object" && "id" in created ? String(created.id) : "";
-    if (id && userId) await assignTerritory({ data: { id, userId } });
-    setBusy("");
-    toast.success(userId ? "Gebiet aufgespielt und zugewiesen" : "Gebiet aufgespielt");
+    try {
+      const created = await uploadTerritory({ data: { name: name || "Gebiet", filename: "gebiet.geojson", text: JSON.stringify({ type: "FeatureCollection", features }), userId: userId || undefined } });
+      const id = created && typeof created === "object" && "id" in created ? String(created.id) : "";
+      if (id && userId) await assignTerritory({ data: { id, userId } });
+      setBusy(id ? "Gebiet gespeichert" : "Speichern ohne Bestätigung");
+      toast.success(userId ? "Gebiet aufgespielt und zugewiesen" : "Gebiet aufgespielt");
+    } catch (err) {
+      setBusy(err instanceof Error ? err.message : "Gebiet nicht gespeichert");
+    }
   }
 
   return (
