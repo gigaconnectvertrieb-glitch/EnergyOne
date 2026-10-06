@@ -55,9 +55,7 @@ export function StreetManager() {
     const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` }).catch(() => null);
     const data = res ? await res.json() : { elements: [] };
     const el = data.elements?.[0];
-    const lat = el?.center?.lat || p.lat;
-    const lng = el?.center?.lon || p.lng;
-    setPoints((old) => [...old, { lat, lng }]);
+    setPoints((old) => [...old, { lat: el?.center?.lat || p.lat, lng: el?.center?.lon || p.lng }]);
   }
 
   async function readHouses() {
@@ -77,7 +75,7 @@ export function StreetManager() {
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
     setDoors(found);
     setBusy("");
-    toast.success(`${found.length} Häuser, unsichere bleiben unsicher`);
+    toast.success(`${found.length} Häuser gelesen`);
   }
 
   async function save() {
@@ -94,32 +92,33 @@ export function StreetManager() {
   }
 
   return (
-    <section className="rounded-3xl border border-gold/40 p-4">
-      <h2 className="text-lg font-semibold">Gebietsmanager</h2>
-      <p className="text-sm text-muted-foreground">Eine Planung. Straße, Fläche, Häuser, Mitarbeiter.</p>
-      <form className="mt-3 flex gap-2" onSubmit={search}>
-        <input className="min-h-11 flex-1 rounded-xl border bg-transparent px-3" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
-        <button className="rounded-xl bg-gold px-3 text-bg" type="submit">Suchen</button>
+    <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-gold">Planung</p>
+      <h2 className="mt-1 font-serif text-3xl">Gebiet setzen</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Straße suchen, Punkte auf die Karte, Häuser lesen, Mitarbeiter zuweisen.</p>
+      <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={search}>
+        <input className="min-h-12 flex-1 rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
+        <button className="min-h-12 rounded-full bg-gold px-5 font-medium text-bg" type="submit">Suchen</button>
       </form>
-      {street ? <p className="mt-2 text-sm text-red-400">{line.length ? "Straße geladen" : "Ort geladen"}: {street.display_name}</p> : null}
-      <div className="mt-3 h-96 overflow-hidden rounded-2xl">
+      {street ? <p className="mt-3 text-sm text-gold">{line.length ? "Straße geladen" : "Ort geladen"} · {street.display_name}</p> : null}
+      <div className="mt-4 h-96 overflow-hidden rounded-3xl border border-white/10">
         <FieldMap center={center} corners={points.length ? points : line.slice(0, 80)} stops={doors.map((d) => ({ id: `${d.street}-${d.house}`, street: d.street, house: d.house, lat: d.lat, lng: d.lng }))} draw onTap={addPoint} />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded-xl border px-3 py-2" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
-        <button className="rounded-xl border px-3 py-2" type="button" onClick={() => { setPoints([]); setStreet(null); setDoors([]); }}>Markierung löschen</button>
-        <button className="rounded-xl border px-3 py-2" type="button" onClick={readHouses}>Häuser lesen</button>
+        <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
+        <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => { setPoints([]); setStreet(null); setDoors([]); }}>Markierung löschen</button>
+        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={readHouses}>Häuser lesen</button>
       </div>
-      <p className="mt-2 text-sm">{busy || `${points.length} Punkte · ${doors.length} Häuser`}</p>
-      <div className="mt-2 max-h-40 overflow-auto text-sm">
-        {doors.slice(0, 30).map((d) => <div key={`${d.street}-${d.house}-${d.lat}`}>{d.street} {d.house} · {d.kind}</div>)}
+      <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser`}</p>
+      <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
+        {doors.slice(0, 40).map((d) => <div key={`${d.street}-${d.house}-${d.lat}`}>{d.street} {d.house} · {d.kind === "mfh" ? "Mehrfamilie" : d.kind === "efh" ? "Einfamilie" : "unsicher"}</div>)}
       </div>
-      <input className="mt-2 min-h-11 w-full rounded-xl border bg-transparent px-3" value={name} onChange={(e) => setName(e.target.value)} placeholder="Gebietsname" />
-      <select className="mt-2 min-h-11 w-full rounded-xl border bg-transparent px-3" value={userId} onChange={(e) => setUserId(e.target.value)}>
-        <option value="">Nicht zuweisen</option>
+      <input className="mt-3 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={name} onChange={(e) => setName(e.target.value)} placeholder="Gebietsname" />
+      <select className="mt-2 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={userId} onChange={(e) => setUserId(e.target.value)}>
+        <option value="">Mitarbeiter wählen</option>
         {users.map((u) => <option key={u.user_id} value={u.user_id}>{u.first_name} {u.last_name}</option>)}
       </select>
-      <button className="mt-2 rounded-xl bg-gold px-3 py-2 text-bg" type="button" onClick={save}>Aufspielen</button>
+      <button className="mt-3 min-h-12 rounded-full bg-gold px-5 font-medium text-bg" type="button" onClick={save}>Aufspielen</button>
     </section>
   );
 }
