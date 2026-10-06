@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
 import { assignTerritory, downloadTerritory, listSavedDoors, listTerritories, readAreaHouses, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
-import { planTerritoryAgent } from "@/lib/server/territory-agent";
+import { planTerritoryAgent, readStreetHouses } from "@/lib/server/territory-agent";
 import { toast } from "sonner";
 
 type Point = { lat: number; lng: number };
@@ -189,6 +189,17 @@ export function StreetManager() {
       { lat: lat - 0.0012, lng: lng - 0.0016 },
     ]);
     setBusy("Gebiet vorgeschlagen, Häuser werden gelesen");
+  }
+  async function wholeStreet() {
+    if (!street) { setBusy("Zuerst eine Straße wählen"); return; }
+    setBusy("Ganze Straße wird gelesen");
+    const rows = await readStreetHouses({ data: { street: street.display_name.split(",")[0], lat: Number(street.lat), lng: Number(street.lon) } });
+    const doors = (rows as Door[]).sort((a, b) => a.house.localeCompare(b.house, "de", { numeric: true }));
+    const odd = doors.filter((d) => Number.parseInt(d.house, 10) % 2 === 1);
+    const even = doors.filter((d) => Number.parseInt(d.house, 10) % 2 === 0).reverse();
+    setDoors([...odd, ...even].map((d) => ({ ...d, kind: "unsicher" })));
+    setName(street.display_name.split(",")[0]);
+    setBusy(`${doors.length} Häuser, Laufroute gesetzt`);
   }
   async function openSaved(id: string) {
     setAreaId(id);
