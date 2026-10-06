@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
-import { createGoogleMap, googleMapsKey, loadGoogleMaps } from "@/lib/map-google";
+import { useEffect, useRef, useState } from "react";
+import { createGoogleMap, googleMapsKey, loadGoogleMaps, type GoogleMap } from "@/lib/map-google";
 import { assignTerritory, uploadTerritory } from "@/lib/server/field-api";
 import { listUsers } from "@/lib/server/api";
 import { toast } from "sonner";
 
 type Point = { lat: number; lng: number };
 type Door = { street: string; house: string; lat: number; lng: number; kind: "efh" | "mfh" | "unsicher" };
-type Hit = { display_name: string; lat: string; lon: string; addresstype?: string; geojson?: { type: string; coordinates: unknown } };
+type Hit = { display_name: string; lat: string; lon: string; geojson?: { type: string; coordinates: number[][] } };
 type User = { user_id: string; first_name?: string; last_name?: string };
+type Overlay = { setMap: (m: GoogleMap | null) => void };
 
 function lineOf(hit: Hit | null): Point[] {
   const geo = hit?.geojson;
   if (!geo || geo.type !== "LineString" || !Array.isArray(geo.coordinates)) return [];
-  return (geo.coordinates as number[][]).map(([lng, lat]) => ({ lat, lng }));
+  return geo.coordinates.map(([lng, lat]) => ({ lat, lng }));
 }
 function inside(door: Door, poly: Point[]) {
   let n = false;
@@ -23,7 +24,10 @@ function inside(door: Door, poly: Point[]) {
   return n;
 }
 
-export function StreetManager() /* Google planner */ {
+export function StreetManager() {
+  const host = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<GoogleMap | null>(null);
+  const overlays = useRef<Overlay[]>([]);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [street, setStreet] = useState<Hit | null>(null);
@@ -33,46 +37,76 @@ export function StreetManager() /* Google planner */ {
   const [users, setUsers] = useState<User[]>([]);
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState("");
-  const line = lineOf(street);
-  const center = street ? { lat: Number(street.lat), lng: Number(street.lon) } : points[0] || { lat: 49.98, lng: 8.83 };
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+
+  function clearOverlays() {
+    overlays.current.forEach((item) => item.setMap(null));
+    overlays.current = [];
+  }
+  function draw() {
+    const map = mapRef.current;
+    const g = window.google?.maps as unknown as {
+      Polyline: new (o: Record<string, unknown>) => Overlay;
+      Polygon: new (o: Record<string, unknown>) => Overlay;
+      Marker: new (o: Record<string, unknown>) => Overlay;
+    } | undefined;
+    if (!map || !g) return;
+    clearOverlays();
+    const line = lineOf(street);
+    if (line.length > 1) overlays.current.push(new g.Polyline({ map, path: line, strokeColor: "#d4a017", strokeWeight: 6 }));
+    if (points.length > 2) overlays.current.push(new g.Polygon({ map, paths: points, strokeColor: "#d4a017", strokeWeight: 2, fillColor: "#d4a017", fillOpacity: 0.16 }));
+    points.forEach((p) => overlays.current.push(new g.Marker({ map, position: p })));
+    doors.forEach((d) => overlays.current.push(new g.Marker({ map, position: d, label: d.kind === "mfh" ? "M" : d.kind === "efh" ? "E" : "?" })));
+  }
 
   useEffect(() => { listUsers().then((rows) => setUsers(rows as User[])).catch(() => setUsers([])); }, []);
   useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    let gone = false;
+    void loadGoogleMaps(googleMapsKey()).then(() => {
+      if (gone || mapRef.current) return;
+      const map = createGoogleMap(el, { lat: 49.98, lng: 8.83 });
+      mapRef.current = map;
+      window.google?.maps.event.addListener(map, "click", (e: { latLng: { lat: () => number; lng: () => number } }) => {
+        setPoints((old) => [...old, { lat: e.latLng.lat(), lng: e.latLng.lng() }]);
+      });
+    }).catch(() => toast.error("Google Maps nicht geladen"));
+    return () => { gone = true; };
+  }, []);
+  useEffect(() => { draw(); }, [street, points, doors]);
+  useEffect(() => {
     if (q.trim().length < 3) { setHits([]); return; }
     const timer = setTimeout(() => {
-      fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`)
-        .then((res) => res.json())
-        .then((rows: Hit[]) => setHits(rows))
-        .catch(() => setHits([]));
+      fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&limit=6&q=${encodeURIComponent(q)}`)
+        .then((res) => res.json()).then((rows: Hit[]) => setHits(rows)).catch(() => setHits([]));
     }, 250);
     return () => clearTimeout(timer);
   }, [q]);
 
-  async function search(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy("Suche");
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&limit=1&q=${encodeURIComponent(q)}`);
-    const [hit] = await res.json() as Hit[];
-    setStreet(hit || null);
+  function choose(hit: Hit) {
+    setStreet(hit);
+    setHits([]);
+    setQ(hit.display_name);
+    setName(hit.display_name.split(",")[0]);
     setPoints([]);
     setDoors([]);
-    setName(hit ? hit.display_name.split(",")[0] : "");
-    setBusy("");
-    if (!hit) toast.error("Straße nicht gefunden");
+    mapRef.current?.setCenter({ lat: Number(hit.lat), lng: Number(hit.lon) });
+    mapRef.current?.setZoom(17);
   }
-
-  async function addPoint(p: Point) {
-    const query = `[out:json][timeout:12];way["building"](around:28,${p.lat},${p.lng});out center tags;`;
-    const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` }).catch(() => null);
-    const data = res ? await res.json() : { elements: [] };
-    const el = data.elements?.[0];
-    setPoints((old) => [...old, { lat: el?.center?.lat || p.lat, lng: el?.center?.lon || p.lng }]);
+  function clearMark() {
+    setStreet(null);
+    setPoints([]);
+    setDoors([]);
+    setQ("");
+    clearOverlays();
   }
-
   async function readHouses() {
-    if (points.length < 3) return toast.error("Mindestens drei Punkte auf der Karte");
+    if (pointsRef.current.length < 3) return toast.error("Mindestens drei Punkte");
     setBusy("Häuser");
-    const lats = points.map((p) => p.lat), lngs = points.map((p) => p.lng);
+    const pts = pointsRef.current;
+    const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
     const query = `[out:json][timeout:25];way["building"](${Math.min(...lats)},${Math.min(...lngs)},${Math.max(...lats)},${Math.max(...lngs)});out center tags;`;
     const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
     const data = await res.json();
@@ -80,7 +114,7 @@ export function StreetManager() /* Google planner */ {
     for (const el of data.elements || []) {
       const tags = el.tags || {};
       const door: Door = { street: tags["addr:street"] || "Ohne Straße", house: tags["addr:housenumber"] || "?", lat: el.center?.lat, lng: el.center?.lon, kind: tags.building === "apartments" || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" ? "efh" : "unsicher" };
-      if (!door.lat || !inside(door, points)) continue;
+      if (!door.lat || !inside(door, pts)) continue;
       found.push(door);
     }
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
@@ -88,7 +122,6 @@ export function StreetManager() /* Google planner */ {
     setBusy("");
     toast.success(`${found.length} Häuser gelesen`);
   }
-
   async function save() {
     if (!doors.length) return toast.error("Zuerst Häuser lesen");
     setBusy("Speichern");
@@ -97,8 +130,6 @@ export function StreetManager() /* Google planner */ {
     const id = created && typeof created === "object" && "id" in created ? String(created.id) : "";
     if (id && userId) await assignTerritory({ data: { id, userId } });
     setBusy("");
-    setPoints([]);
-    setDoors([]);
     toast.success(userId ? "Gebiet aufgespielt und zugewiesen" : "Gebiet aufgespielt");
   }
 
@@ -106,20 +137,16 @@ export function StreetManager() /* Google planner */ {
     <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
       <p className="text-xs font-medium uppercase tracking-[0.18em] text-gold">Planung</p>
       <h2 className="mt-1 font-serif text-3xl">Gebiet setzen</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Straße suchen, Punkte auf die Karte, Häuser lesen, Mitarbeiter zuweisen.</p>
-      <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={search}>
-        <input className="min-h-12 flex-1 rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
-        <button className="min-h-12 rounded-full bg-gold px-5 font-medium text-bg" type="submit">Suchen</button>
-      </form>
-      {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => { setStreet(hit); setQ(hit.display_name); setHits([]); setName(hit.display_name.split(",")[0]); }}>{hit.display_name}</button>)}</div> : null}
-      {street ? <p className="mt-3 text-sm text-gold">{line.length ? "Straße geladen" : "Ort geladen"} · {street.display_name}</p> : null}
-      <div className="mt-4 h-96 overflow-hidden rounded-3xl border border-white/10" ref={(el) => { if (!el || el.dataset.ready) return; el.dataset.ready = "1"; void loadGoogleMaps(googleMapsKey()).then(() => { const map = createGoogleMap(el, center); window.google?.maps.event.addListener(map, "click", (e: { latLng: { lat: () => number; lng: () => number } }) => addPoint({ lat: e.latLng.lat(), lng: e.latLng.lng() })); }); }} />
+      <p className="mt-1 text-sm text-muted-foreground">Straße wählen, goldene Markierung, Punkte setzen, Häuser lesen, zuweisen.</p>
+      <input className="mt-4 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
+      {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => choose(hit)}>{hit.display_name}</button>)}</div> : null}
+      <div ref={host} className="mt-4 h-[28rem] overflow-hidden rounded-3xl border border-white/10" />
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
-        <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => { setPoints([]); setStreet(null); setDoors([]); }}>Markierung löschen</button>
+        <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
         <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={readHouses}>Häuser lesen</button>
       </div>
-      <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser`}</p>
+      <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
       <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
         {doors.slice(0, 40).map((d) => <div key={`${d.street}-${d.house}-${d.lat}`}>{d.street} {d.house} · {d.kind === "mfh" ? "Mehrfamilie" : d.kind === "efh" ? "Einfamilie" : "unsicher"}</div>)}
       </div>
