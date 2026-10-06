@@ -199,10 +199,10 @@ export const auth = betterAuth({
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
   secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
   database,
+  rateLimit: { enabled: false },
   advanced: {
     ipAddress: {
-      ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
-      trustedProxies: ["loopback", "uniquelocal", "linklocal"],
+      ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"],
     },
   },
 
