@@ -146,6 +146,24 @@ export function loadMapLibre() {
   return loadP;
 }
 
+
+export function schematic3dStyle() {
+  return {
+    version: 8,
+    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+    sources: { openmaptiles: { type: "vector", url: "https://tiles.openfreemap.org/planet" } },
+    layers: [
+      { id: "background", type: "background", paint: { "background-color": "#dcecc4" } },
+      { id: "landuse", type: "fill", source: "openmaptiles", "source-layer": "landuse", paint: { "fill-color": "#c9e2a4", "fill-opacity": 0.7 } },
+      { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water", paint: { "fill-color": "#b7d8ef" } },
+      { id: "roads", type: "line", source: "openmaptiles", "source-layer": "transportation", paint: { "line-color": "#f7f7f4", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 16, 3] } },
+      { id: "buildings", type: "fill-extrusion", source: "openmaptiles", "source-layer": "building", minzoom: 14, paint: { "fill-extrusion-color": "#e4e4e0", "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 8], "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0], "fill-extrusion-opacity": 0.96 } },
+      { id: "road-label", type: "symbol", source: "openmaptiles", "source-layer": "transportation_name", minzoom: 13, layout: { "text-field": ["coalesce", ["get", "name:de"], ["get", "name"]], "text-font": ["Noto Sans Regular"], "text-size": 12, "symbol-placement": "line" }, paint: { "text-color": "#4d5648", "text-halo-color": "#f4f7ef", "text-halo-width": 1.2 } },
+      { id: "place-label", type: "symbol", source: "openmaptiles", "source-layer": "place", minzoom: 3, filter: ["in", ["get", "class"], ["literal", ["city", "town", "village", "suburb"]]], layout: { "text-field": ["coalesce", ["get", "name:de"], ["get", "name"]], "text-font": ["Noto Sans Regular"], "text-size": ["interpolate", ["linear"], ["zoom"], 4, 11, 10, 16] }, paint: { "text-color": "#2d3828", "text-halo-color": "#f4f7ef", "text-halo-width": 1.3 } },
+    ],
+  };
+}
+
 export function createE1Map(
   el: HTMLElement,
   center: LngLat,
@@ -157,10 +175,10 @@ export function createE1Map(
   const draw = Boolean(opts?.draw);
   return new ML.Map({
     container: el,
-    style: "https://tiles.openfreemap.org/styles/liberty",
+    style: schematic3dStyle(),
     center: [center.lng, center.lat],
     zoom,
-    pitch: 0,
+    pitch: draw ? 40 : 55,
     bearing: 0,
     maxPitch: draw ? 0 : 75,
     minZoom: 4,
