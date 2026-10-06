@@ -62,7 +62,7 @@ function Page() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>("uebersicht");
 
-  // Planen
+  // Manager
   const [step, setStep] = useState(1);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Place[]>([]);
@@ -293,7 +293,7 @@ function Page() {
       {tab === "planen" && (
         <div className="mt-6">
           <StreetManager />
-          {/* Step indicators */}
+          {false && (<>{/* Step indicators */}
           <div className="mb-5 flex flex-wrap gap-1">
             {["Ort", "Zone", "Straßen", "Team", "Aufspielen"].map((label, i) => {
               const n = i + 1;
@@ -858,6 +858,7 @@ function Page() {
             </section>
           )}
         </div>
+          </>)}
       )}
     </div>
   );
