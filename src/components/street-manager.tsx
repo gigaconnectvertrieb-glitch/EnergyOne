@@ -121,6 +121,15 @@ export function StreetManager() {
       const tags = el.tags || {};
       found.push({ street: tags["addr:street"] || near?.street || name || "Ohne Straße", house: tags["addr:housenumber"] || near?.house || "ohne Nr.", lat, lng, kind: tags.building === "apartments" || Number(tags["building:levels"] || 0) >= 3 || Number(tags["building:flats"] || 0) > 1 ? "mfh" : tags.building === "house" || tags.building === "detached" || tags.building === "semidetached_house" ? "efh" : "unsicher" });
     }
+    const geocoder = new (window.google?.maps as unknown as { Geocoder: new () => { geocode: (o: { location: Point }) => Promise<{ results: { address_components: { types: string[]; long_name: string }[] }[] }> } }).Geocoder();
+    for (const door of found.filter((d) => d.house === "ohne Nr.").slice(0, 40)) {
+      const hit = await geocoder.geocode({ location: door }).catch(() => null);
+      const parts = hit?.results?.[0]?.address_components || [];
+      const house = parts.find((p) => p.types.includes("street_number"))?.long_name;
+      const street = parts.find((p) => p.types.includes("route"))?.long_name;
+      if (house) door.house = house;
+      if (street) door.street = street;
+    }
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
     setDoors(found);
     setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
