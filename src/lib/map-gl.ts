@@ -151,9 +151,10 @@ export function schematic3dStyle() {
   return {
     version: 8,
     glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
-    sources: { openmaptiles: { type: "vector", url: "https://tiles.openfreemap.org/planet" } },
+    sources: { openmaptiles: { type: "vector", url: "https://tiles.openfreemap.org/planet" }, satellite: { type: "raster", tiles: [SATELLITE], tileSize: 256, attribution: SATELLITE_ATTR, maxzoom: 19 } },
     layers: [
       { id: "background", type: "background", paint: { "background-color": "#dcecc4" } },
+      { id: "satellite", type: "raster", source: "satellite", paint: { "raster-opacity": 0.82 } },
       { id: "landuse", type: "fill", source: "openmaptiles", "source-layer": "landuse", paint: { "fill-color": "#c9e2a4", "fill-opacity": 0.7 } },
       { id: "water", type: "fill", source: "openmaptiles", "source-layer": "water", paint: { "fill-color": "#b7d8ef" } },
       { id: "roads", type: "line", source: "openmaptiles", "source-layer": "transportation", paint: { "line-color": "#f7f7f4", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 16, 3] } },
