@@ -103,8 +103,8 @@ export function StreetManager() {
     clearOverlays();
   }
   async function readHouses() {
-    if (pointsRef.current.length < 3) return toast.error("Mindestens drei Punkte");
-    setBusy("Häuser");
+    if (pointsRef.current.length < 3) { setBusy("Mindestens drei Punkte auf die Karte tippen"); return; }
+    setBusy("Häuser werden gelesen");
     const pts = pointsRef.current;
     const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
     const query = `[out:json][timeout:25];way["building"](${Math.min(...lats)},${Math.min(...lngs)},${Math.max(...lats)},${Math.max(...lngs)});out center tags;`;
@@ -119,8 +119,7 @@ export function StreetManager() {
     }
     found.sort((a, b) => a.street.localeCompare(b.street, "de") || a.house.localeCompare(b.house, "de", { numeric: true }));
     setDoors(found);
-    setBusy("");
-    toast.success(`${found.length} Häuser gelesen`);
+    setBusy(found.length ? `${found.length} Häuser gelesen` : "Keine Häuser in der Fläche");
   }
   async function save() {
     if (!doors.length) return toast.error("Zuerst Häuser lesen");
@@ -141,10 +140,10 @@ export function StreetManager() {
       <input className="mt-4 min-h-12 w-full rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
       {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => choose(hit)}>{hit.display_name}</button>)}</div> : null}
       <div ref={host} className="mt-4 h-[28rem] overflow-hidden rounded-3xl border border-white/10" />
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="relative z-20 mt-3 flex flex-wrap gap-2">
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => setPoints((p) => p.slice(0, -1))}>Punkt zurück</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
-        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={readHouses}>Häuser lesen</button>
+        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy("Häuser konnten nicht gelesen werden"))}>Häuser lesen</button>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
       <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
