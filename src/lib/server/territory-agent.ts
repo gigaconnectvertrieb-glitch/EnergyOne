@@ -23,3 +23,17 @@ export const planTerritoryAgent = createServerFn({ method: "POST" })
     if (!hit) return { ok: false as const, reason: "Kein Treffer" };
     return { ok: true as const, display_name: hit.display_name, lat: hit.lat, lon: hit.lon, reason: answer };
   });
+
+export const readStreetHouses = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: { street: string; lat: number; lng: number }) => d)
+  .handler(async ({ context, data }) => {
+    await requireProfile(await sql(), context.userId);
+    const street = data.street.replace(/"/g, "");
+    const south = data.lat - 0.02, north = data.lat + 0.02, west = data.lng - 0.03, east = data.lng + 0.03;
+    const query = `[out:json][timeout:25];(node["addr:street"="${street}"]["addr:housenumber"](${south},${west},${north},${east});way["addr:street"="${street}"]["addr:housenumber"](${south},${west},${north},${east}););out center;`;
+    const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(query)}` });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.elements || []).map((el) => ({ street: el.tags?.["addr:street"] || street, house: el.tags?.["addr:housenumber"] || "", lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon })).filter((d) => d.lat && d.house);
+  });
