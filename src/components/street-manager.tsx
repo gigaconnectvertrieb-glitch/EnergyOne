@@ -25,6 +25,7 @@ function inside(door: Door, poly: Point[]) {
 
 export function StreetManager() {
   const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
   const [street, setStreet] = useState<Hit | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [doors, setDoors] = useState<Door[]>([]);
@@ -36,6 +37,16 @@ export function StreetManager() {
   const center = street ? { lat: Number(street.lat), lng: Number(street.lon) } : points[0] || { lat: 49.98, lng: 8.83 };
 
   useEffect(() => { listUsers().then((rows) => setUsers(rows as User[])).catch(() => setUsers([])); }, []);
+  useEffect(() => {
+    if (q.trim().length < 3) { setHits([]); return; }
+    const timer = setTimeout(() => {
+      fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&countrycodes=de&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`)
+        .then((res) => res.json())
+        .then((rows: Hit[]) => setHits(rows))
+        .catch(() => setHits([]));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   async function search(event: React.FormEvent) {
     event.preventDefault();
@@ -100,6 +111,7 @@ export function StreetManager() {
         <input className="min-h-12 flex-1 rounded-full border border-white/10 bg-black/30 px-4" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Waldstraße Rödermark" />
         <button className="min-h-12 rounded-full bg-gold px-5 font-medium text-bg" type="submit">Suchen</button>
       </form>
+      {hits.length ? <div className="mt-2 overflow-hidden rounded-2xl border border-white/10">{hits.map((hit) => <button key={`${hit.lat}-${hit.lon}`} className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm last:border-0" type="button" onClick={() => { setStreet(hit); setQ(hit.display_name); setHits([]); setName(hit.display_name.split(",")[0]); }}>{hit.display_name}</button>)}</div> : null}
       {street ? <p className="mt-3 text-sm text-gold">{line.length ? "Straße geladen" : "Ort geladen"} · {street.display_name}</p> : null}
       <div className="mt-4 h-96 overflow-hidden rounded-3xl border border-white/10">
         <FieldMap center={center} corners={points.length ? points : line.slice(0, 80)} stops={doors.map((d) => ({ id: `${d.street}-${d.house}`, street: d.street, house: d.house, lat: d.lat, lng: d.lng }))} draw onTap={addPoint} />
