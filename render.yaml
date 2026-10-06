@@ -20,6 +20,8 @@ services:
         value: "22"
       - key: NODE_ENV
         value: production
+      - key: VITE_GOOGLE_MAPS_KEY
+        value: AIzaSyBIlujIrecGRQUpllxMNgcpnaXNyvD4TDU
       - key: VITE_AUTH_ENABLED
         value: "true"
       - key: DATABASE_URL
