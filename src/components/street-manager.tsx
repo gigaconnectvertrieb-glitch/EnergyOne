@@ -242,6 +242,7 @@ export function StreetManager() /* deploy-marker: ganze-strasse */ {
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={clearMark}>Markierung löschen</button>
         <button className="min-h-11 rounded-full border border-white/10 px-4" type="button" onClick={() => void propose()}>Gebiet vorschlagen</button>
         <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().catch(() => setBusy(doors.length ? `${doors.length} Häuser bleiben sichtbar` : "Lesen nicht möglich"))}>Häuser lesen</button>
+        <button className="min-h-11 rounded-full bg-gold px-4 font-medium text-bg" type="button" onClick={() => void readHouses().then(() => setBusy("Route strukturiert: eine Seite hin, andere zurück"))}>Routenplanung starten</button>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{busy || `${points.length} Punkte · ${doors.length} Häuser · ${street ? "Straße markiert" : "keine Straße"}`}</p>
       <div className="mt-2 max-h-40 space-y-1 overflow-auto text-sm">
